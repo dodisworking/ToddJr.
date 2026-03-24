@@ -1,0 +1,4 @@
+# https://docs.railway.com/reference/config-as-code
+# Root directory must be this repo so `node server.js` exists.
+[deploy]
+startCommand = "npm start"

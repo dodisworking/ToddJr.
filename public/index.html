@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Gym / Isaac API calls use same-origin paths as Hunt (/api/...). Serve this app via server.js on Railway. -->
+  <meta name="todd-api-base" content="" />
   <title>Todd Jr. — Real Estate Document Hunter</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -33,15 +35,21 @@
               <polyline points="20,32 26,38 32,32" fill="none" stroke="#60A5FA" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
             </svg>
           </div>
-          <p class="drop-title">Drop folder or ZIP here</p>
-          <p class="drop-hint">or click to browse</p>
-          <button class="btn-browse" id="btn-browse">📂 Browse</button>
+          <p class="drop-title">Drop folder(s) or ZIP here</p>
+          <p class="drop-hint">Portfolio folder, one tenant folder, or several folders at once</p>
+          <div class="browse-row">
+            <button type="button" class="btn-browse" id="btn-browse">📂 Choose folder</button>
+            <button type="button" class="btn-browse-zip" id="btn-browse-zip">📦 Choose ZIP</button>
+          </div>
           <input type="file" id="file-input" webkitdirectory multiple style="display:none" />
-          <input type="file" id="file-input-zip" accept=".zip" style="display:none" />
+          <input type="file" id="file-input-zip" accept=".zip,.ZIP" style="display:none" />
         </div>
       </div>
 
-      <button class="btn-demo" id="btn-demo">🎮 Preview Animation (no API)</button>
+      <!-- Hidden Isaac — Gym Teacher logs (click) -->
+      <div class="isaac-easter" id="isaac-easter" title="Isaac — saved Gym notes">
+        <canvas id="isaac-canvas" width="36" height="52" style="image-rendering:pixelated"></canvas>
+      </div>
     </div>
   </div>
 
@@ -87,6 +95,16 @@
         </label>
         <span class="scan-mode-label">🎯 ACCURACY</span>
         <span class="scan-mode-hint" id="scan-mode-hint">One tenant at a time — safest, no rate limits</span>
+      </div>
+
+      <div class="scan-mode-wrap">
+        <span class="scan-mode-label">✨ SMART</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="cheap-mode-toggle" />
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="scan-mode-label">🪙 DUMB</span>
+        <span class="scan-mode-hint" id="cheap-mode-label">Claude Sonnet — full quality</span>
       </div>
 
       <button class="btn-hunt" id="btn-hunt">
@@ -415,7 +433,11 @@
       <!-- Bottom bar -->
       <div class="gym-bottom-bar">
         <span class="gym-review-status" id="gym-review-status">0 of 0 reviewed</span>
-        <button id="gym-submit-btn" class="btn-gym-submit">💪 Analysis Workout</button>
+        <div class="gym-bottom-actions">
+          <button type="button" id="gym-review-notes-btn" class="btn-gym-secondary">📋 Review notes</button>
+          <button type="button" id="gym-save-isaac-btn" class="btn-gym-isaac">💾 Save for Isaac</button>
+          <button id="gym-submit-btn" class="btn-gym-submit">💪 Analysis Workout</button>
+        </div>
       </div>
     </div>
 
@@ -459,8 +481,31 @@
       </div>
     </div>
 
+    <div id="gym-notes-review-modal" class="gym-modal hidden">
+      <div class="gym-modal-box gym-modal-wide">
+        <h4 class="gym-modal-title">📋 All notes (this workout)</h4>
+        <p class="gym-modal-hint">Finding verdicts, comments, and flag-area notes — before you run Analysis Workout.</p>
+        <div class="gym-notes-review-body" id="gym-notes-review-body"></div>
+        <div class="gym-modal-actions">
+          <button type="button" id="gym-notes-review-close" class="gym-modal-btn gym-modal-submit">Close</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
-  <script src="app.js?v=4"></script>
+  <!-- Isaac logs (home screen easter egg) -->
+  <div id="isaac-logs-modal" class="gym-modal hidden">
+    <div class="gym-modal-box gym-modal-wide">
+      <h4 class="gym-modal-title">🕶️ Isaac — Teacher Todd exports</h4>
+      <p class="gym-modal-hint">Each save is a compact Excel (.xlsx): same layout as the main report, plus <strong>Teacher Todd comments</strong> and flag <strong>screenshots</strong> in the last column. Files live under <code>outputs/isaac-saves</code> (or tmp if the disk isn’t writable).</p>
+      <div class="isaac-logs-body" id="isaac-logs-body"></div>
+      <div class="gym-modal-actions">
+        <button type="button" id="isaac-logs-close" class="gym-modal-btn gym-modal-submit">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=14"></script>
 </body>
 </html>

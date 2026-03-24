@@ -191,6 +191,73 @@ function drawFrame(canvas, frame, offsetY = 0) {
   }
 }
 
+/** 9×13 @ 4px = 36×52 — Isaac (kipah, shades, tzitzit) */
+const ISAAC_PS = 4
+const ISAAC_COL = {
+  '.': null,
+  k: '#141414',
+  h: '#5c4033',
+  s: '#f0c8a8',
+  v: '#0f172a',
+  l: '#334155',
+  g: '#e2e8f0',
+  w: '#f8fafc',
+  b: '#1d4ed8',
+  p: '#1e3a5f',
+  t: '#422006',
+  y: '#facc15',
+}
+const ISAAC_FRAME_STRS = [
+  [
+    '...kkk...',
+    '..kkkkk..',
+    '.hhssshh.',
+    '.hsvvvsh.',
+    '.svlglvs.',
+    '.svvvvvs.',
+    '..ss.ss..',
+    '..wwwww..',
+    'b.wwwww.b',
+    'b.wwwww.b',
+    'y.wwwww.y',
+    '..ppppp..',
+    '..p.p.p..',
+    '..t.t.t..',
+  ],
+  [
+    '...kkk...',
+    '..kkkkk..',
+    '.hhssshh.',
+    '.hsvvvsh.',
+    '.svgllgvs.',
+    '.svvvvvs.',
+    '..ss.ss..',
+    '..wwwww..',
+    'b.wwwww.b',
+    'b.wwwww.b',
+    'y.wwwww.y',
+    '..ppppp..',
+    '..p.p.p..',
+    '..t.t.t..',
+  ],
+]
+const ISAAC_CANVAS = document.getElementById('isaac-canvas')
+function drawIsaacFrame(strRows) {
+  if (!ISAAC_CANVAS) return
+  const ctx = ISAAC_CANVAS.getContext('2d')
+  ctx.clearRect(0, 0, ISAAC_CANVAS.width, ISAAC_CANVAS.height)
+  for (let r = 0; r < strRows.length; r++) {
+    const row = strRows[r]
+    for (let c = 0; c < row.length; c++) {
+      const col = ISAAC_COL[row[c]]
+      if (col) {
+        ctx.fillStyle = col
+        ctx.fillRect(c * ISAAC_PS, r * ISAAC_PS, ISAAC_PS, ISAAC_PS)
+      }
+    }
+  }
+}
+
 // ── Animation loop ────────────────────────────────────────────
 const animState = {
   heroFrame:    0,
@@ -201,6 +268,8 @@ const animState = {
   cookTimer:    0,
   reportFrame:  0,
   reportTimer:  0,
+  isaacFrame:   0,
+  isaacTimer:   0,
 }
 
 const HERO_CANVAS   = document.getElementById('hero-canvas')
@@ -218,6 +287,12 @@ function animLoop() {
     drawFrame(BTN_SPRITE,    animState.heroFrame === 0 ? IDLE1 : IDLE2)
     drawFrame(REPORT_CANVAS, animState.heroFrame === 0 ? VIC1 : IDLE1)
     animState.heroTimer = now + 500
+  }
+
+  if (state.screen === 'upload' && ISAAC_CANVAS && animState.isaacTimer < now) {
+    animState.isaacFrame = animState.isaacFrame === 0 ? 1 : 0
+    drawIsaacFrame(ISAAC_FRAME_STRS[animState.isaacFrame])
+    animState.isaacTimer = now + 450
   }
 
   // Cook canvas — show cooking animation using idle + attack alternating
@@ -249,8 +324,9 @@ const dropZone      = document.getElementById('drop-zone')
 const fileInput     = document.getElementById('file-input')
 const fileInputZip  = document.getElementById('file-input-zip')
 const btnBrowse     = document.getElementById('btn-browse')
+const btnBrowseZip  = document.getElementById('btn-browse-zip')
 
-// Single browse button — tries folder picker first, falls back to ZIP picker
+// Choose folder — modern picker, then legacy webkitdirectory (never auto-opens ZIP on cancel)
 btnBrowse.addEventListener('click', async () => {
   if ('showDirectoryPicker' in window) {
     try {
@@ -259,19 +335,30 @@ btnBrowse.addEventListener('click', async () => {
       return
     } catch (e) {
       if (e.name === 'AbortError') return
+      console.warn('[browse] showDirectoryPicker failed, trying legacy folder input:', e)
     }
   }
-  // Fallback: let user pick ZIP
-  fileInputZip.click()
+  fileInput.click()
 })
 
+btnBrowseZip?.addEventListener('click', () => fileInputZip.click())
+
 fileInput.addEventListener('change', () => {
-  if (fileInput.files.length > 0) startUpload(fileInput.files)
+  if (fileInput.files.length > 0) startUploadWithWebkitOrRaw(fileInput.files)
 })
 
 fileInputZip.addEventListener('change', () => {
   if (fileInputZip.files.length > 0) startUpload(fileInputZip.files)
 })
+
+/** File inputs often populate webkitRelativePath — normalize to relativePath for the server */
+function startUploadWithWebkitOrRaw(fileList) {
+  const arr = Array.from(fileList)
+  for (const f of arr) {
+    if (f.webkitRelativePath) f.relativePath = f.webkitRelativePath.replace(/^\/+/, '')
+  }
+  startUpload(arr)
+}
 
 dropZone.addEventListener('dragover', e => {
   e.preventDefault()
@@ -282,38 +369,152 @@ dropZone.addEventListener('drop', async e => {
   e.preventDefault()
   dropZone.classList.remove('drag-over')
 
-  // IMPORTANT: capture everything SYNCHRONOUSLY before any await —
-  // browsers clear the DataTransfer object after async operations.
   const dtFiles = Array.from(e.dataTransfer.files || [])
 
-  // Also grab a directory entry synchronously via webkitGetAsEntry (most reliable)
-  let dirEntry = null
+  // Every dropped *folder* as a DirectoryEntry (Chrome/Safari — supports multiple)
+  const dirEntries = []
   if (e.dataTransfer.items) {
     for (const item of e.dataTransfer.items) {
-      if (item.kind === 'file') {
-        const entry = item.webkitGetAsEntry?.()
-        if (entry?.isDirectory) { dirEntry = entry; break }
+      if (item.kind !== 'file') continue
+      const entry = item.webkitGetAsEntry?.()
+      if (entry?.isDirectory) dirEntries.push(entry)
+    }
+  }
+
+  const zipFiles = dtFiles.filter(f => f.name.toLowerCase().endsWith('.zip'))
+
+  if (zipFiles.length > 1) {
+    toast('Please drop one ZIP at a time.', 'error')
+    return
+  }
+
+  if (zipFiles.length === 1 && dirEntries.length > 0) {
+    toast('Drop either a ZIP or folder(s), not both.', 'error')
+    return
+  }
+
+  if (zipFiles.length === 1 && dirEntries.length === 0) {
+    console.log('[drop] ZIP only')
+    startUpload(zipFiles)
+    return
+  }
+
+  if (dirEntries.length > 0) {
+    console.log('[drop]', dirEntries.length, 'folder(s):', dirEntries.map(d => d.name).join(', '))
+    try {
+      if (dirEntries.length === 1) await uploadFolderFromEntry(dirEntries[0])
+      else await uploadMultipleFolderEntries(dirEntries)
+    } catch (err) {
+      console.error('[drop] Folder walk failed:', err)
+      toast('Could not read folder(s) — try a ZIP or Choose folder.', 'error')
+    }
+    return
+  }
+
+  if (dtFiles.length > 0 && tryStartUploadWithWebkitPaths(dtFiles)) return
+
+  if (dtFiles.length > 0) startUpload(dtFiles)
+})
+
+/** When browsers expose files with webkitRelativePath but no DirectoryEntry */
+function tryStartUploadWithWebkitPaths(dtFiles) {
+  const arr = Array.from(dtFiles)
+  if (arr.length === 0) return false
+  const withPath = arr.filter(f => f.webkitRelativePath)
+  if (withPath.length !== arr.length) return false
+  for (const f of withPath) {
+    f.relativePath = f.webkitRelativePath.replace(/^\/+/, '')
+  }
+  console.log('[drop] Using webkitRelativePath for', arr.length, 'files')
+  startUpload(withPath)
+  return true
+}
+
+// ── Drag-drop folder → webkit DirectoryEntry (not FileSystemDirectoryHandle) ──
+function readAllDirEntries(dirEntry) {
+  return new Promise((resolve, reject) => {
+    const reader = dirEntry.createReader()
+    const acc = []
+    const read = () => {
+      reader.readEntries(
+        entries => {
+          if (entries.length === 0) resolve(acc)
+          else {
+            acc.push(...entries)
+            read()
+          }
+        },
+        reject
+      )
+    }
+    read()
+  })
+}
+
+function fileEntryToFile(fileEntry) {
+  return new Promise((resolve, reject) => fileEntry.file(resolve, reject))
+}
+
+/**
+ * Collect files from one dropped directory (webkit DirectoryEntry).
+ * Same tenant/portfolio rules as uploadFolder (FileSystemDirectoryHandle).
+ */
+async function collectFilesFromDirEntry(dirEntry) {
+  const name = dirEntry.name
+  const topEntries = await readAllDirEntries(dirEntry)
+  const subfolders = topEntries.filter(e => e.isDirectory)
+
+  const droppedFolderIsTenant     = name.includes(' - ')
+  const subfoldersLookLikeTenants = subfolders.some(e => e.name.includes(' - '))
+  const isSingleTenant            = droppedFolderIsTenant || !subfoldersLookLikeTenants
+
+  const fileMap = new Map()
+
+  async function walk(entry, pathPrefix) {
+    const entries = await readAllDirEntries(entry)
+    for (const e of entries) {
+      if (e.name.startsWith('.')) continue
+      const childPath = pathPrefix ? `${pathPrefix}/${e.name}` : e.name
+      if (e.isFile) {
+        const file = await fileEntryToFile(e)
+        file.relativePath = childPath
+        fileMap.set(childPath, file)
+      } else if (e.isDirectory) {
+        await walk(e, childPath)
       }
     }
   }
 
-  // ZIP check
-  if (dtFiles.some(f => f.name.toLowerCase().endsWith('.zip'))) {
-    console.log('[drop] ZIP detected')
-    startUpload(dtFiles)
+  if (isSingleTenant) await walk(dirEntry, name)
+  else                await walk(dirEntry, '')
+
+  return { files: Array.from(fileMap.values()), isSingleTenant }
+}
+
+async function uploadFolderFromEntry(dirEntry) {
+  const { files, isSingleTenant } = await collectFilesFromDirEntry(dirEntry)
+  console.log('[uploadFolderFromEntry]', files.length, 'files, single-tenant:', isSingleTenant)
+  if (files.length === 0) {
+    toast('No files found in that folder.', 'error')
     return
   }
+  startUpload(files)
+}
 
-  // Folder drop — use entry API (captured synchronously above)
-  if (dirEntry) {
-    console.log('[drop] Folder entry found:', dirEntry.name)
-    await uploadFolderFromEntry(dirEntry)
+/** Several folders dropped at once (e.g. multiple tenant folders from Finder) */
+async function uploadMultipleFolderEntries(dirEntries) {
+  const all = []
+  for (const de of dirEntries) {
+    const { files } = await collectFilesFromDirEntry(de)
+    all.push(...files)
+  }
+  console.log('[uploadMultipleFolderEntries]', dirEntries.length, 'roots →', all.length, 'files')
+  if (all.length === 0) {
+    toast('No files found in those folders.', 'error')
     return
   }
-
-  // Fallback: plain file drop (dtFiles already captured before any await)
-  if (dtFiles.length > 0) startUpload(dtFiles)
-})
+  startUpload(all)
+}
 
 // Recursively collect files from a directory handle (File System Access API)
 async function uploadFolder(dirHandle) {
@@ -647,60 +848,38 @@ accuracyToggle.addEventListener('change', () => {
     : 'All tenants at once — faster but may hit rate limits'
 })
 
-// ── Demo mode: fake hunt animation with no API calls ─────────
-document.getElementById('btn-demo').addEventListener('click', () => {
-  const demoTenants = [
-    { id: 'demo-1', folderName: 'NR 6301 - Cash America',     property: 'NR', suite: '6301', tenantName: 'Cash America',     fileCount: 16, oversizedFiles: [] },
-    { id: 'demo-2', folderName: 'NR 6317 - Luv 2 Smoke',      property: 'NR', suite: '6317', tenantName: 'Luv 2 Smoke',      fileCount: 6,  oversizedFiles: [] },
-    { id: 'demo-3', folderName: 'RN 6419 - Freeway Insurance', property: 'RN', suite: '6419', tenantName: 'Freeway Insurance', fileCount: 11, oversizedFiles: [] },
-  ]
-  state.tenants  = demoTenants
-  state.findings = new Map()
+// ── Dumb mode (cheap Haiku) — same slide toggle as Speed/Accuracy ──
+const CHEAP_MODE_KEY = 'toddCheapMode'
+const cheapModeToggle = document.getElementById('cheap-mode-toggle')
+const cheapModeLabel  = document.getElementById('cheap-mode-label')
 
-  document.getElementById('tenant-grid-loading').innerHTML = ''
-  const huntGrid = document.getElementById('tenant-grid-hunt')
-  huntGrid.innerHTML = ''
-  demoTenants.forEach((t, i) => huntGrid.appendChild(makeTenantCard(t, i)))
+function isCheapModeActive() {
+  return cheapModeToggle?.checked === true
+}
 
-  goTo('hunt')
-  document.getElementById('cook-cta-wrap').classList.add('hidden')
-  startArena()
-  updateHuntSubtitle('🎮 Demo Mode — no API calls')
+function cheapQs() {
+  return isCheapModeActive() ? '&cheap=1' : ''
+}
 
-  // Simulate each tenant sequentially with fake progress
-  async function runDemo() {
-    for (const t of demoTenants) {
-      emit_demo('folder-start', t)
-      for (let pct = 0; pct <= 100; pct += 2) {
-        await sleep(40)
-        emit_demo('folder-progress', { tenantId: t.id, percent: pct, message: pct < 30 ? 'Reading documents...' : pct < 70 ? 'Analyzing clauses...' : 'Finalizing findings...' })
-      }
-      const allClear = Math.random() > 0.5
-      emit_demo('folder-done', { tenantId: t.id, findingCount: allClear ? 0 : Math.floor(Math.random() * 5) + 1, allClear, severity: allClear ? 'NONE' : 'HIGH' })
-      state.findings.set(t.id, { allClear, findings: [], severity: allClear ? 'NONE' : 'HIGH' })
-      await sleep(300)
-    }
-    animState.toddMode = 'victory'
-    updateHuntSubtitle('🦁 Demo complete! This is what the real hunt looks like.')
-    showCookCta()
-  }
+function cheapJsonExtra() {
+  return { cheapMode: isCheapModeActive() }
+}
 
-  // Wire up demo folder-start / progress / done to existing handlers
-  function emit_demo(event, data) {
-    if (event === 'folder-start') {
-      setCardActive(data.id)
-      setCardHunting(data.id)
-      updateHuntSubtitle(`🏹 Demo Hunting: ${data.tenantName}`)
-    } else if (event === 'folder-progress') {
-      const msg = document.getElementById(`pmsg-${data.tenantId}`)
-      if (msg) msg.textContent = data.message
-    } else if (event === 'folder-done') {
-      setCardDone(data.tenantId, data)
-    }
-  }
+function updateCheapModeLabel() {
+  if (!cheapModeLabel || !cheapModeToggle) return
+  cheapModeLabel.textContent = cheapModeToggle.checked
+    ? 'Haiku — cheap API, good for testing features'
+    : 'Claude Sonnet — full quality'
+}
 
-  runDemo()
-})
+if (cheapModeToggle) {
+  cheapModeToggle.checked = localStorage.getItem(CHEAP_MODE_KEY) === '1'
+  updateCheapModeLabel()
+  cheapModeToggle.addEventListener('change', () => {
+    localStorage.setItem(CHEAP_MODE_KEY, cheapModeToggle.checked ? '1' : '0')
+    updateCheapModeLabel()
+  })
+}
 
 function showOversizeWarnings(tenants) {
   const warn = document.getElementById('oversize-warning')
@@ -792,7 +971,7 @@ document.getElementById('btn-extract-learnings')?.addEventListener('click', asyn
     const res  = await fetch('/api/drtoddhunt/extract-learnings', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ sessionId: state.sessionId, reportText, tenantName })
+      body:    JSON.stringify({ sessionId: state.sessionId, reportText, tenantName, ...cheapJsonExtra() })
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Server error')
@@ -844,7 +1023,8 @@ function startSideBySide(tenantId = null) {
   document.getElementById('sbs-beefed-msg').textContent  = 'Waiting...'
 
   const url = `/api/sidebyside?sessionId=${encodeURIComponent(state.sessionId)}` +
-    (tenantId ? `&tenantId=${encodeURIComponent(tenantId)}` : '')
+    (tenantId ? `&tenantId=${encodeURIComponent(tenantId)}` : '') +
+    cheapQs()
 
   if (state.eventSource) { state.eventSource.close() }
   const es = new EventSource(url)
@@ -970,7 +1150,8 @@ document.getElementById('btn-run-verdict')?.addEventListener('click', async () =
         rawResult:       d.raw,
         beefedResult:    d.beefed,
         activeLearnings: d.activeLearnings,
-        tenantName:      d.tenantName
+        tenantName:      d.tenantName,
+        ...cheapJsonExtra()
       })
     })
     const data = await res.json()
@@ -1044,7 +1225,7 @@ function startHunt(testTenantId = null) {
   // Start SSE — pass accuracy mode (sequential=1, speed=parallel)
   const accuracyMode = document.getElementById('accuracy-toggle')?.checked !== false
   const base = `/api/hunt?sessionId=${encodeURIComponent(state.sessionId)}&concurrency=${accuracyMode ? 1 : 0}&tenantIds=${encodeURIComponent(activeTenantIds)}`
-  const url = testTenantId ? `${base}&testTenantId=${encodeURIComponent(testTenantId)}` : base
+  const url = (testTenantId ? `${base}&testTenantId=${encodeURIComponent(testTenantId)}` : base) + cheapQs()
   const es = new EventSource(url)
   state.eventSource = es
 
@@ -1112,7 +1293,7 @@ function startDrToddHunt() {
 
   goTo('drtoddhunt')
 
-  const url = `/api/drtoddhunt?sessionId=${encodeURIComponent(state.sessionId)}`
+  const url = `/api/drtoddhunt?sessionId=${encodeURIComponent(state.sessionId)}${cheapQs()}`
   const es = new EventSource(url)
   state.eventSource = es
 
@@ -1191,7 +1372,7 @@ function requestDrToddReport() {
   fetch('/api/drtoddhunt/synthesize', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionId: state.sessionId })
+    body: JSON.stringify({ sessionId: state.sessionId, ...cheapJsonExtra() })
   })
     .then(r => r.json())
     .then(d => {
@@ -1930,6 +2111,9 @@ const gymState = {
   feedbacks:        {},   // findingId -> {verdict, comment}
   annotations:      [],   // [{docName, pageNum, comment, docIdx}]
   files:            [],
+  tenantId:         null,
+  tenantName:       '',
+  folderName:       '',
   activeFindingId:  null,
   currentDocIdx:    0,
   currentPage:      1,
@@ -1989,6 +2173,9 @@ function gymReset() {
   gymState.feedbacks = {}
   gymState.annotations = []
   gymState.files = []
+  gymState.tenantId = null
+  gymState.tenantName = ''
+  gymState.folderName = ''
   gymState.activeFindingId = null
   gymState.pdfDoc = null
   gymState.pdfCache = {}
@@ -2029,7 +2216,7 @@ document.getElementById('gym-start-btn').addEventListener('click', () => {
   document.getElementById('gym-progress-fill').style.width = '0%'
   document.getElementById('gym-loading-msg').textContent = 'Starting analysis...'
 
-  const url = `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenantId)}`
+  const url = `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenantId)}${cheapQs()}`
   const es = new EventSource(url)
   state.eventSource = es
 
@@ -2063,6 +2250,9 @@ function gymLaunchWorkout(data) {
   gymState.files    = data.files    || []
   gymState.feedbacks = {}
   gymState.annotations = []
+  gymState.tenantId   = data.tenantId || null
+  gymState.tenantName = data.tenantName || ''
+  gymState.folderName = data.folderName || ''
 
   gymShowPanel('workout')
   document.getElementById('gym-skip-btn').classList.remove('hidden')
@@ -2221,6 +2411,206 @@ function gymUpdateReviewStatus() {
   const el = document.getElementById('gym-review-status')
   if (el) el.textContent = `${reviewed} of ${total} findings reviewed`
 }
+
+const GYM_VERDICT_LABEL = { correct: '✅ Confirmed correct', wrong: '❌ Wrong', partial: '◐ Partially right' }
+
+function gymFeedbacksArray() {
+  return Object.entries(gymState.feedbacks).map(([findingId, fb]) => ({
+    findingId,
+    verdict: fb.verdict,
+    comment: fb.comment || ''
+  }))
+}
+
+/** Omit base64 crops from POST bodies — keeps Save for Isaac / Workout under JSON limits; AI only needs text fields. */
+function gymAnnotationsForPayload() {
+  return (gymState.annotations || []).map(a => ({
+    docIdx: a.docIdx,
+    docName: a.docName,
+    pageNum: a.pageNum,
+    comment: a.comment,
+    normRect: a.normRect,
+    hasCrop: !!a.cropDataUrl
+  }))
+}
+
+/** Annotations for Save for Isaac Excel — includes crop PNG for embedding in the Screenshot column. */
+function gymAnnotationsForIsaacExcel() {
+  return (gymState.annotations || []).map(a => ({
+    docName: a.docName,
+    pageNum: a.pageNum,
+    comment: a.comment,
+    cropDataUrl: a.cropDataUrl || null
+  }))
+}
+
+const ISAAC_CLIENT_EVIDENCE_CAP = 32000
+
+/** Slim findings for Save for Isaac — avoids 413 / huge JSON (gym evidence strings can be massive). */
+function gymFindingsForIsaacPayload() {
+  return (gymState.findings || []).map(f => {
+    const ev = f.evidence
+    let evidence = ev
+    if (typeof ev === 'string' && ev.length > ISAAC_CLIENT_EVIDENCE_CAP) {
+      evidence = ev.slice(0, ISAAC_CLIENT_EVIDENCE_CAP) + '…'
+    }
+    return {
+      id: f.id,
+      checkType: f.checkType,
+      severity: f.severity,
+      missingDocument: f.missingDocument,
+      comment: f.comment,
+      evidence,
+      confidence: f.confidence,
+      reasoning: typeof f.reasoning === 'string' && f.reasoning.length > 16000
+        ? f.reasoning.slice(0, 16000) + '…'
+        : f.reasoning,
+      triggerQuote: f.triggerQuote,
+      checkedAndEliminated: f.checkedAndEliminated,
+      howIFoundThis: typeof f.howIFoundThis === 'string' && f.howIFoundThis.length > 16000
+        ? f.howIFoundThis.slice(0, 16000) + '…'
+        : f.howIFoundThis
+    }
+  })
+}
+
+function buildGymNotesReviewHtml() {
+  const parts = []
+
+  if (gymState.findings.length === 0) {
+    parts.push('<p>No findings in this workout. You can still add flag annotations and save for Isaac.</p>')
+  } else {
+    gymState.findings.forEach(f => {
+      const fb = gymState.feedbacks[f.id]
+      const verdictKey = fb?.verdict
+      const verdictLine = verdictKey
+        ? (GYM_VERDICT_LABEL[verdictKey] || verdictKey)
+        : '<em>Not reviewed yet</em>'
+      const com = fb?.comment ? escHtml(fb.comment) : ''
+      const loc = gymParseEvidenceLocation(f.evidence)
+      const locFile = gymState.files[loc.docIdx]
+      const locLabel = locFile ? `${escHtml(locFile.name.replace(/\.pdf$/i, ''))}, p.${loc.pageNum}` : ''
+
+      parts.push(`<div class="gym-note-block">
+        <div class="gym-note-label">${escHtml(CHECK_LABELS[f.checkType] || f.checkType || 'Finding')}</div>
+        <div><strong>Issue:</strong> ${escHtml(f.missingDocument || '')}</div>
+        ${locLabel ? `<div><strong>Location:</strong> ${locLabel}</div>` : ''}
+        <div><strong>Verdict:</strong> ${verdictLine}</div>
+        ${com ? `<div><strong>Your note:</strong> ${com}</div>` : ''}
+      </div>`)
+    })
+  }
+
+  if (gymState.annotations.length > 0) {
+    parts.push('<div class="gym-note-label" style="margin-top:16px">📌 Flag-area annotations</div>')
+    gymState.annotations.forEach((a, i) => {
+      parts.push(`<div class="gym-note-block">
+        <div class="gym-note-label">Annotation ${i + 1}</div>
+        <div>${escHtml(a.docName || '')} · page ${a.pageNum}</div>
+        <div>${escHtml(a.comment || '')}</div>
+      </div>`)
+    })
+  } else if (gymState.findings.length > 0) {
+    parts.push('<p style="margin-top:12px;opacity:0.85">No flag-area annotations yet.</p>')
+  }
+
+  return parts.join('')
+}
+
+function gymOpenNotesReviewModal() {
+  const body = document.getElementById('gym-notes-review-body')
+  const modal = document.getElementById('gym-notes-review-modal')
+  if (!body || !modal) return
+  body.innerHTML = buildGymNotesReviewHtml()
+  modal.classList.remove('hidden')
+}
+
+document.getElementById('gym-review-notes-btn')?.addEventListener('click', () => gymOpenNotesReviewModal())
+document.getElementById('gym-notes-review-close')?.addEventListener('click', () => {
+  document.getElementById('gym-notes-review-modal')?.classList.add('hidden')
+})
+
+document.getElementById('gym-save-isaac-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('gym-save-isaac-btn')
+  if (!btn) return
+  btn.disabled = true
+  const tenantId = gymState.tenantId || document.getElementById('gym-select')?.value || ''
+  try {
+    const payload = {
+      tenantName: gymState.tenantName,
+      folderName: gymState.folderName,
+      findings: gymFindingsForIsaacPayload(),
+      feedbacks: gymFeedbacksArray(),
+      annotations: gymAnnotationsForIsaacExcel()
+    }
+    let body
+    try {
+      body = JSON.stringify(payload)
+    } catch (serErr) {
+      throw new Error('Could not serialize save data — try fewer annotations or refresh.')
+    }
+    const res = await fetch('/api/gym/save-for-isaac', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body
+    })
+    const raw = await res.text()
+    let data = {}
+    try { data = raw ? JSON.parse(raw) : {} } catch { /* non-JSON e.g. proxy error page */ }
+    if (!res.ok) {
+      const hint = data.error || (res.status === 413 ? 'Request too large — fewer/lighter screenshots or refresh.' : raw.slice(0, 200))
+      throw new Error(hint || `Save failed (${res.status})`)
+    }
+    toast('Teacher Todd Excel saved ✓', 'success')
+    if (data.downloadUrl) {
+      const a = document.createElement('a')
+      a.href = data.downloadUrl.startsWith('http') ? data.downloadUrl : data.downloadUrl
+      a.rel = 'noopener'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+    }
+  } catch (e) {
+    toast(e.message || 'Could not save', 'error')
+  } finally {
+    btn.disabled = false
+  }
+})
+
+function renderIsaacLogsHtml(entries) {
+  if (!entries || entries.length === 0) {
+    return '<p>No exports yet. In Gym Teacher Mode use <strong>Save for Isaac</strong> — you get a compact Excel file (same columns as the main report + Teacher Todd comments + flag screenshots).</p>'
+  }
+  return entries.map(entry => {
+    const dt = new Date(entry.savedAt).toLocaleString()
+    const id = entry.id || ''
+    const href = id ? `/api/gym/isaac-download/${encodeURIComponent(id)}` : '#'
+    return `<div class="isaac-log-card">
+      <div class="isaac-log-meta">${escHtml(dt)} · ${escHtml(entry.tenantName || '')} · ${escHtml(entry.folderName || '')}</div>
+      <a class="isaac-download-link" href="${href}" download>⬇ Download Teacher Todd .xlsx</a>
+    </div>`
+  }).join('')
+}
+
+document.getElementById('isaac-easter')?.addEventListener('click', async () => {
+  const modal = document.getElementById('isaac-logs-modal')
+  const body = document.getElementById('isaac-logs-body')
+  if (!modal || !body) return
+  body.innerHTML = '<p>Loading…</p>'
+  modal.classList.remove('hidden')
+  try {
+    const res = await fetch('/api/gym/isaac-logs')
+    const logs = await res.json()
+    if (!res.ok) throw new Error(logs.error || 'Failed to load')
+    body.innerHTML = renderIsaacLogsHtml(Array.isArray(logs) ? logs : [])
+  } catch (e) {
+    body.innerHTML = `<p>Could not load logs: ${escHtml(e.message)}</p>`
+  }
+})
+
+document.getElementById('isaac-logs-close')?.addEventListener('click', () => {
+  document.getElementById('isaac-logs-modal')?.classList.add('hidden')
+})
 
 // ── Jump to finding (load relevant doc + page) ─────────────
 function gymJumpToFinding(idx) {
@@ -2706,11 +3096,7 @@ document.getElementById('gym-submit-btn').addEventListener('click', async () => 
   btn.disabled = true
   btn.textContent = '⏳ Compiling...'
 
-  const feedbacksArr = Object.entries(gymState.feedbacks).map(([findingId, fb]) => ({
-    findingId,
-    verdict: fb.verdict,
-    comment: fb.comment || ''
-  }))
+  const feedbacksArr = gymFeedbacksArray()
 
   try {
     const res = await fetch('/api/gym/workout-feedback', {
@@ -2718,10 +3104,11 @@ document.getElementById('gym-submit-btn').addEventListener('click', async () => 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         sessionId:   state.sessionId,
-        tenantId:    document.getElementById('gym-select').value,
+        tenantId:    gymState.tenantId || document.getElementById('gym-select').value,
         findings:    gymState.findings,
         feedbacks:   feedbacksArr,
-        annotations: gymState.annotations
+        annotations: gymAnnotationsForPayload(),
+        ...cheapJsonExtra()
       })
     })
     const data = await res.json()

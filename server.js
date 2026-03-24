@@ -7,12 +7,18 @@ import fs from 'fs'
 import unzipper from 'unzipper'
 import { analyzeTenant, gymAnalyzeTenant, beefedUpAnalyzeTenant } from './lib/analyzer.js'
 import { generateReport } from './lib/reporter.js'
+import { mountIsaacRoutes } from './lib/isaac-routes.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname  = path.dirname(__filename)
 
 const app  = express()
 const PORT = process.env.PORT || 3000
+
+/** UI "Dumb mode" — Haiku instead of Sonnet (query: cheap=1 or JSON cheapMode: true) */
+function isCheapMode(req) {
+  return req.query?.cheap === '1' || req.body?.cheapMode === true
+}
 
 // In-memory session store: sessionId -> SessionData
 const sessions = new Map()
@@ -22,8 +28,28 @@ const OUTPUTS_DIR = path.join(__dirname, 'outputs')
 fs.mkdirSync(UPLOADS_DIR, { recursive: true })
 fs.mkdirSync(OUTPUTS_DIR, { recursive: true })
 
-app.use(express.json())
-app.use(express.static(path.join(__dirname, 'public')))
+function parseFolderName(name) {
+  const s = name || ''
+  const dashIdx = s.indexOf(' - ')
+  if (dashIdx === -1) {
+    return { property: 'UNKNOWN', suite: 'N/A', tenantName: s.trim() || 'Unknown' }
+  }
+  const prefix = s.substring(0, dashIdx).trim()
+  const tenantName = s.substring(dashIdx + 3).trim()
+  const parts = prefix.split(/\s+/)
+  const property = parts[0] || 'UNKNOWN'
+  const suite = parts.slice(1).join(' ') || 'N/A'
+  return { property, suite, tenantName }
+}
+
+app.use(express.json({ limit: '50mb' }))
+
+// Isaac / Teacher Excel — registered immediately after body parser (must not depend on later server.js code)
+mountIsaacRoutes(app, { outputsDir: OUTPUTS_DIR, parseFolderName })
+
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true, service: 'todd-jr', isaacRoutes: true, time: new Date().toISOString() })
+})
 
 // ═══════════════════════════════════════════════════════════
 // MULTER — FILE UPLOAD
@@ -337,7 +363,7 @@ app.get('/api/hunt', async (req, res) => {
         if (!aborted) emit('folder-progress', { tenantId: tenant.id, percent, message })
       }
       try {
-        const result = await analyzeTenant(tenant, tenant.files, onProgress)
+        const result = await analyzeTenant(tenant, tenant.files, onProgress, { cheapMode: isCheapMode(req) })
         session.findings.set(tenant.id, result)
         emit('folder-done', {
           tenantId:     tenant.id,
@@ -422,7 +448,7 @@ app.get('/api/drtoddhunt', async (req, res) => {
         if (!aborted) emit('drtoddhunt-run-progress', { runNumber: run, percent, message })
       }
       try {
-        const result = await analyzeTenant(tenant, tenant.files, onProgress)
+        const result = await analyzeTenant(tenant, tenant.files, onProgress, { cheapMode: isCheapMode(req) })
         runs.push(result)
         emit('drtoddhunt-run-done', { runNumber: run, findingCount: result.findings?.length || 0, allClear: result.allClear })
       } catch (err) {
@@ -459,7 +485,7 @@ app.get('/api/drtoddhunt', async (req, res) => {
 
 app.post('/api/drtoddhunt/synthesize', async (req, res) => {
   try {
-    const { sessionId } = req.body
+    const { sessionId, cheapMode } = req.body
     const session = sessions.get(sessionId)
     if (!session) return res.status(404).json({ error: 'Session not found' })
 
@@ -472,7 +498,7 @@ app.post('/api/drtoddhunt/synthesize', async (req, res) => {
     const pad = n => runs[n] || { findings: [], allClear: false, error: 'Run not completed' }
 
     const { synthesizeDrTodd } = await import('./lib/claude.js')
-    const report = await synthesizeDrTodd(tenant, pad(0), pad(1), pad(2))
+    const report = await synthesizeDrTodd(tenant, pad(0), pad(1), pad(2), { cheapMode: !!cheapMode })
 
     res.json({ report, tenantName: tenant.tenantName })
   } catch (err) {
@@ -488,11 +514,11 @@ app.post('/api/drtoddhunt/synthesize', async (req, res) => {
 
 app.post('/api/drtoddhunt/extract-learnings', async (req, res) => {
   try {
-    const { sessionId, reportText, tenantName } = req.body
+    const { sessionId, reportText, tenantName, cheapMode } = req.body
     if (!reportText) return res.status(400).json({ error: 'reportText is required' })
 
     const { extractLearningsFromDrTodd } = await import('./lib/gym-trainer.js')
-    const result = await extractLearningsFromDrTodd(reportText, tenantName || 'Unknown')
+    const result = await extractLearningsFromDrTodd(reportText, tenantName || 'Unknown', !!cheapMode)
 
     // Enrich with IDs, timestamps, source tag, and save
     const newLearnings = (result.learnings || []).map(l => ({
@@ -547,6 +573,7 @@ app.get('/api/sidebyside', async (req, res) => {
   try {
     const learnings = readLearnings()
     const activeLearnings = learnings.filter(l => l.active)
+    const cheapOpts = { cheapMode: isCheapMode(req) }
 
     emit('sbs-start', {
       tenantName: tenant.tenantName,
@@ -557,10 +584,10 @@ app.get('/api/sidebyside', async (req, res) => {
     const [rawResult, beefedResult] = await Promise.all([
       analyzeTenant(tenant, tenant.files, ({ percent, message }) => {
         if (!aborted) emit('sbs-progress', { side: 'raw', percent, message })
-      }),
+      }, cheapOpts),
       beefedUpAnalyzeTenant(tenant, tenant.files, ({ percent, message }) => {
         if (!aborted) emit('sbs-progress', { side: 'beefed', percent, message })
-      }, learnings)
+      }, learnings, cheapOpts)
     ])
 
     if (!aborted) {
@@ -586,11 +613,11 @@ app.get('/api/sidebyside', async (req, res) => {
 
 app.post('/api/sidebyside/verdict', async (req, res) => {
   try {
-    const { rawResult, beefedResult, activeLearnings, tenantName } = req.body
+    const { rawResult, beefedResult, activeLearnings, tenantName, cheapMode } = req.body
     if (!rawResult || !beefedResult) return res.status(400).json({ error: 'rawResult and beefedResult are required' })
 
     const { evaluateSideBySide } = await import('./lib/gym-trainer.js')
-    const verdict = await evaluateSideBySide({ rawResult, beefedResult, activeLearnings, tenantName })
+    const verdict = await evaluateSideBySide({ rawResult, beefedResult, activeLearnings, tenantName, cheapMode: !!cheapMode })
 
     res.json({ verdict })
   } catch (err) {
@@ -725,7 +752,7 @@ app.get('/api/gym/analyze', async (req, res) => {
       if (!aborted) emit('gym-progress', { percent, message })
     }
     // Gym mode uses the extended reasoning schema
-    const result = await gymAnalyzeTenant(tenant, tenant.files, onProgress)
+    const result = await gymAnalyzeTenant(tenant, tenant.files, onProgress, { cheapMode: isCheapMode(req) })
 
     // Attach stable IDs to findings for feedback tracking
     const findingsWithIds = (result.findings || []).map((f, i) => ({ ...f, id: `finding-${i}` }))
@@ -745,7 +772,8 @@ app.get('/api/gym/analyze', async (req, res) => {
         tenantNameInDocuments: result.tenantNameInDocuments,
         files,
         tenantId: tenant.id,
-        tenantName: tenant.tenantName
+        tenantName: tenant.tenantName,
+        folderName: tenant.folderName
       })
     }
   } catch (err) {
@@ -796,7 +824,7 @@ app.delete('/api/gym/learnings/:id', (req, res) => {
 
 app.post('/api/gym/workout-feedback', async (req, res) => {
   try {
-    const { sessionId, tenantId, findings, feedbacks, annotations } = req.body
+    const { sessionId, tenantId, findings, feedbacks, annotations, cheapMode } = req.body
     const session = sessions.get(sessionId)
     const tenant = session?.tenants.find(t => t.id === tenantId)
       || { tenantName: 'Unknown', folderName: 'Unknown' }
@@ -806,7 +834,8 @@ app.post('/api/gym/workout-feedback', async (req, res) => {
       tenant,
       findings:    findings    || [],
       feedbacks:   feedbacks   || [],
-      annotations: annotations || []
+      annotations: annotations || [],
+      cheapMode:   !!cheapMode
     })
 
     const newLearnings = (result.learnings || []).map(l => ({
@@ -829,24 +858,6 @@ app.post('/api/gym/workout-feedback', async (req, res) => {
 // ═══════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════
-
-function parseFolderName(name) {
-  // Expected format: "PROPERTY SUITE - Tenant Name"
-  // Examples: "RN 6419 - Freeway Insurance"
-  //           "OAK 101A - Joe's Pizza LLC"
-  const dashIdx = name.indexOf(' - ')
-  if (dashIdx === -1) {
-    return { property: 'UNKNOWN', suite: 'N/A', tenantName: name.trim() }
-  }
-
-  const prefix     = name.substring(0, dashIdx).trim()
-  const tenantName = name.substring(dashIdx + 3).trim()
-  const parts      = prefix.split(/\s+/)
-  const property   = parts[0] || 'UNKNOWN'
-  const suite      = parts.slice(1).join(' ') || 'N/A'
-
-  return { property, suite, tenantName }
-}
 
 // Run tasks with a max concurrency limit to avoid API rate limits
 async function runConcurrent(items, limit, fn) {
@@ -887,11 +898,33 @@ setInterval(() => {
 // START
 // ═══════════════════════════════════════════════════════════
 
+if (!process.env.ANTHROPIC_API_KEY?.trim()) {
+  console.error(`
+⚠️  ANTHROPIC_API_KEY is missing or empty — Claude analysis will fail with connection/auth errors.
+   Railway: Service → Variables (or Project → Shared Variables), add ANTHROPIC_API_KEY, then redeploy.
+`)
+}
+
+// Optional: UI on another origin — set CORS_ORIGIN to that site’s URL (e.g. https://app.pages.dev)
+if (process.env.CORS_ORIGIN?.trim()) {
+  const origin = process.env.CORS_ORIGIN.trim()
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Session-Id')
+    if (req.method === 'OPTIONS') return res.sendStatus(204)
+    next()
+  })
+}
+
+// Static assets LAST so every /api/* route is registered first
+app.use(express.static(path.join(__dirname, 'public')))
+
 app.listen(PORT, () => {
   console.log(`
 ╔══════════════════════════════════════════════╗
 ║         Todd Jr. is ready to hunt 🏹         ║
-║         http://localhost:${PORT}                  ║
+║         Port ${PORT}                              ║
 ╚══════════════════════════════════════════════╝
 `)
 })
