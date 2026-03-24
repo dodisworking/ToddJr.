@@ -48,7 +48,14 @@ app.use(express.json({ limit: '50mb' }))
 mountIsaacRoutes(app, { outputsDir: OUTPUTS_DIR, parseFolderName })
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, service: 'todd-jr', isaacRoutes: true, time: new Date().toISOString() })
+  res.json({
+    ok: true,
+    service: 'todd-jr',
+    isaacRoutes: true,
+    /** Set by Railway on deploy — compare to GitHub to confirm the live build */
+    gitCommit: process.env.RAILWAY_GIT_COMMIT_SHA || null,
+    time: new Date().toISOString()
+  })
 })
 
 // ═══════════════════════════════════════════════════════════

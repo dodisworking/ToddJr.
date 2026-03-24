@@ -14,6 +14,13 @@ const state = {
   singleTenantMode: false,     // if true, auto-run test mode after upload
 }
 
+/** Same-origin API URL (avoids edge cases with relative resolution). */
+function sameOriginApi(path) {
+  const p = path.startsWith('/') ? path : `/${path}`
+  if (typeof window === 'undefined') return p
+  return new URL(p, window.location.origin).href
+}
+
 // ── DOM refs ─────────────────────────────────────────────────
 const screens = {
   upload:      document.getElementById('screen-upload'),
@@ -2549,7 +2556,7 @@ document.getElementById('gym-save-isaac-btn')?.addEventListener('click', async (
     } catch (serErr) {
       throw new Error('Could not serialize save data — try fewer annotations or refresh.')
     }
-    const res = await fetch('/api/gym/save-for-isaac', {
+    const res = await fetch(sameOriginApi('/api/gym/save-for-isaac'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body
@@ -2558,6 +2565,13 @@ document.getElementById('gym-save-isaac-btn')?.addEventListener('click', async (
     let data = {}
     try { data = raw ? JSON.parse(raw) : {} } catch { /* non-JSON e.g. proxy error page */ }
     if (!res.ok) {
+      if (res.status === 404 || /Cannot POST\s+\/api\/gym\/save-for-isaac/i.test(raw)) {
+        throw new Error(
+          'This URL is not running Todd’s Node server (no Save-for-Isaac route). Open ' +
+            sameOriginApi('/api/health') +
+            ' — you should see JSON with isaacRoutes. On Railway: one Web service, Root = repo with server.js, Start = npm start, redeploy from GitHub.'
+        )
+      }
       const hint = data.error || (res.status === 413 ? 'Request too large — fewer/lighter screenshots or refresh.' : raw.slice(0, 200))
       throw new Error(hint || `Save failed (${res.status})`)
     }
@@ -2599,7 +2613,7 @@ document.getElementById('isaac-easter')?.addEventListener('click', async () => {
   body.innerHTML = '<p>Loading…</p>'
   modal.classList.remove('hidden')
   try {
-    const res = await fetch('/api/gym/isaac-logs')
+    const res = await fetch(sameOriginApi('/api/gym/isaac-logs'))
     const logs = await res.json()
     if (!res.ok) throw new Error(logs.error || 'Failed to load')
     body.innerHTML = renderIsaacLogsHtml(Array.isArray(logs) ? logs : [])
