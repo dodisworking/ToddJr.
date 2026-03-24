@@ -868,7 +868,7 @@ function cheapJsonExtra() {
 function updateCheapModeLabel() {
   if (!cheapModeLabel || !cheapModeToggle) return
   cheapModeLabel.textContent = cheapModeToggle.checked
-    ? 'Haiku — cheap API, good for testing features'
+    ? 'Haiku 4.5 — cheap API, good for testing features'
     : 'Claude Sonnet — full quality'
 }
 
