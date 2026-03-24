@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Todd Jr. — Real Estate Document Hunter</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css?v=3" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════
+       SCREEN: UPLOAD
+  ═══════════════════════════════════════ -->
+  <div id="screen-upload" class="screen active">
+    <div class="upload-hero">
+      <div class="logo-area">
+        <canvas id="hero-canvas" width="60" height="84" title="Todd Jr."></canvas>
+        <h1 class="logo-title">Todd Jr.</h1>
+        <p class="logo-sub">Real Estate Document Hunter</p>
+      </div>
+
+      <div class="drop-zone" id="drop-zone">
+        <div class="drop-inner">
+          <div class="drop-icon-wrap">
+            <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
+              <rect x="2" y="12" width="36" height="30" rx="4" fill="#1E3A5F" stroke="#3B82F6" stroke-width="2"/>
+              <rect x="10" y="6"  width="20" height="8"  rx="2" fill="#1D4ED8" stroke="#3B82F6" stroke-width="2"/>
+              <line x1="26" y1="22" x2="26" y2="38" stroke="#60A5FA" stroke-width="2" stroke-linecap="round"/>
+              <polyline points="20,32 26,38 32,32" fill="none" stroke="#60A5FA" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <p class="drop-title">Drop folder or ZIP here</p>
+          <p class="drop-hint">or click to browse</p>
+          <button class="btn-browse" id="btn-browse">📂 Browse</button>
+          <input type="file" id="file-input" webkitdirectory multiple style="display:none" />
+          <input type="file" id="file-input-zip" accept=".zip" style="display:none" />
+        </div>
+      </div>
+
+      <button class="btn-demo" id="btn-demo">🎮 Preview Animation (no API)</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       SCREEN: LOADING (folders parsed)
+  ═══════════════════════════════════════ -->
+  <div id="screen-loading" class="screen">
+    <div class="top-bar">
+      <h2 class="screen-title">Loading Tenant Folders</h2>
+      <div class="global-progress-wrap">
+        <div class="global-progress-bar">
+          <div class="global-progress-fill" id="upload-progress-fill"></div>
+        </div>
+        <span class="progress-label" id="upload-progress-label">Uploading...</span>
+      </div>
+    </div>
+
+    <!-- 8-bit tenant count + toolbar -->
+    <div class="tenant-hud" id="tenant-hud">
+      <div class="hud-left">
+        <span class="hud-pixel-label">TENANTS LOADED:</span>
+        <span class="hud-count" id="hud-count">0</span>
+      </div>
+      <div class="hud-right">
+        <button class="hud-btn hud-add" id="btn-add-tenant" title="Add tenant folder">＋ Add Folder</button>
+        <button class="hud-btn hud-clear" id="btn-clear-all" title="Clear all">✕ Clear All</button>
+        <input type="file" id="file-input-add" webkitdirectory multiple style="display:none" />
+        <input type="file" id="file-input-add-zip" accept=".zip" style="display:none" />
+      </div>
+    </div>
+
+    <div id="oversize-warning" class="oversize-warning hidden"></div>
+    <div class="tenant-grid" id="tenant-grid-loading"></div>
+
+    <div class="hunt-cta-wrap" id="hunt-cta-wrap">
+
+      <!-- Speed vs Accuracy toggle -->
+      <div class="scan-mode-wrap">
+        <span class="scan-mode-label">⚡ SPEED</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="accuracy-toggle" checked />
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="scan-mode-label">🎯 ACCURACY</span>
+        <span class="scan-mode-hint" id="scan-mode-hint">One tenant at a time — safest, no rate limits</span>
+      </div>
+
+      <button class="btn-hunt" id="btn-hunt">
+        <canvas class="btn-sprite" id="btn-sprite" width="24" height="28"></canvas>
+        <span>Send Todd Junior Hunting</span>
+      </button>
+      <button class="btn-test-mode" id="btn-test-mode">🎲 Test Mode — Scan 1 Random Tenant</button>
+      <button class="btn-drtoddhunt" id="btn-drtoddhunt">🔬 Send Dr. Todd to Hunt</button>
+      <button class="btn-workout" id="btn-workout">🏋️ Todd Gym Teacher</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       SCREEN: HUNT (SSE active)
+  ═══════════════════════════════════════ -->
+  <div id="screen-hunt" class="screen">
+    <div class="top-bar">
+      <h2 class="screen-title">Todd Jr. is on the Hunt</h2>
+      <p class="screen-subtitle" id="hunt-subtitle">Scanning tenant documents for issues...</p>
+    </div>
+
+    <button class="btn-kill-hunt hidden" id="btn-kill-hunt">⛔ Kill Hunt</button>
+
+    <div class="hunt-layout">
+      <div class="hunt-arena" id="hunt-arena">
+        <canvas id="arena-canvas"></canvas>
+      </div>
+      <div class="tenant-grid" id="tenant-grid-hunt"></div>
+    </div>
+
+    <div class="cook-cta-wrap hidden" id="cook-cta-wrap">
+      <p class="prey-caught-msg">🦁 Prey has been caught! Ready to cook?</p>
+      <button class="btn-cook" id="btn-cook">
+        <span class="cook-fire">🔥</span>
+        <span>Cook the Prey</span>
+        <span class="cook-fire">🔥</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       SCREEN: COOKING
+  ═══════════════════════════════════════ -->
+  <div id="screen-cooking" class="screen">
+    <div class="cooking-center">
+      <div class="campfire-wrap">
+        <canvas id="cook-canvas" width="100" height="100"></canvas>
+        <div class="fire-anim" aria-hidden="true">
+          <span class="flame f1">🔥</span>
+          <span class="flame f2">🔥</span>
+          <span class="flame f3">🔥</span>
+        </div>
+      </div>
+      <h2 class="cooking-title">Cooking the prey...</h2>
+      <p class="cooking-sub">Organizing all findings into your report</p>
+      <div class="cook-bar-wrap">
+        <div class="cook-bar">
+          <div class="cook-bar-fill" id="cook-bar-fill"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       SCREEN: REPORT
+  ═══════════════════════════════════════ -->
+  <div id="screen-report" class="screen">
+    <div class="report-hero">
+      <canvas id="report-canvas" width="60" height="84"></canvas>
+      <div>
+        <h2 class="report-title">Hunt Complete!</h2>
+        <p class="report-sub">Your missing documents report is ready</p>
+      </div>
+    </div>
+
+    <div class="stats-row" id="stats-row"></div>
+
+    <div class="findings-table-wrap" id="findings-table-wrap"></div>
+
+    <div class="report-actions">
+      <button class="btn-download" id="btn-download">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="margin-right:8px;vertical-align:middle">
+          <path d="M10 2v10M6 8l4 4 4-4M3 14v2a1 1 0 001 1h12a1 1 0 001-1v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Download Excel Report
+      </button>
+      <button class="btn-restart" id="btn-restart">Hunt Again</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SCREEN: DR. TODD REPORT
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="screen-drtoddhunt" class="screen">
+    <div class="drtoddhunt-header">
+      <h2 class="drtoddhunt-title">🔬 Dr. Todd Diagnostic</h2>
+      <p class="drtoddhunt-sub" id="drtoddhunt-sub">Running 3 independent analyses...</p>
+    </div>
+
+    <div class="drtoddhunt-runs" id="drtoddhunt-runs">
+      <div class="drtodd-run" id="drtodd-run-1">
+        <div class="drtodd-run-label">Run 1 <span class="drtodd-run-status" id="drtodd-status-1">Waiting...</span></div>
+        <div class="drtodd-bar-wrap"><div class="drtodd-bar-fill" id="drtodd-fill-1" style="width:0%"></div></div>
+        <div class="drtodd-run-msg" id="drtodd-msg-1"></div>
+      </div>
+      <div class="drtodd-run" id="drtodd-run-2">
+        <div class="drtodd-run-label">Run 2 <span class="drtodd-run-status" id="drtodd-status-2">Waiting...</span></div>
+        <div class="drtodd-bar-wrap"><div class="drtodd-bar-fill" id="drtodd-fill-2" style="width:0%"></div></div>
+        <div class="drtodd-run-msg" id="drtodd-msg-2"></div>
+      </div>
+      <div class="drtodd-run" id="drtodd-run-3">
+        <div class="drtodd-run-label">Run 3 <span class="drtodd-run-status" id="drtodd-status-3">Waiting...</span></div>
+        <div class="drtodd-bar-wrap"><div class="drtodd-bar-fill" id="drtodd-fill-3" style="width:0%"></div></div>
+        <div class="drtodd-run-msg" id="drtodd-msg-3"></div>
+      </div>
+    </div>
+
+    <!-- appears after all 3 runs finish, triggers synthesis -->
+    <div class="drtoddhunt-cta hidden" id="drtoddhunt-cta">
+      <button class="btn-generate-report" id="btn-generate-report">📊 Generate Analysis Report</button>
+      <p class="drtoddhunt-cta-hint">All 3 runs complete — click to synthesize findings</p>
+    </div>
+
+    <div class="drtoddhunt-synthesis hidden" id="drtoddhunt-synthesis">
+      <div class="synthesis-spinner"></div>
+      <p>Dr. Todd is synthesizing findings across all 3 runs...</p>
+    </div>
+
+    <div class="drtoddhunt-report hidden" id="drtoddhunt-report">
+      <div class="report-copy-header">
+        <h3>📊 Analysis Report</h3>
+        <button class="btn-copy-report" id="btn-copy-report">📋 Copy Report</button>
+      </div>
+      <pre class="report-text" id="drtoddhunt-report-text"></pre>
+
+      <!-- Extract learnings CTA -->
+      <div class="drtodd-learnings-cta" id="drtodd-learnings-cta">
+        <div class="drtodd-learnings-cta-text">
+          <strong>💡 Save learnings from this report</strong>
+          <span>Let the AI extract training rules from the diagnostic — no manual review needed</span>
+        </div>
+        <button class="btn-extract-learnings" id="btn-extract-learnings">🧠 Extract &amp; Save Learnings</button>
+      </div>
+
+      <!-- Extracted learnings result -->
+      <div class="drtodd-learnings-result hidden" id="drtodd-learnings-result">
+        <p class="drtodd-learnings-summary" id="drtodd-learnings-summary"></p>
+        <div class="drtodd-learnings-list" id="drtodd-learnings-list"></div>
+        <button class="btn-sidebyside" id="btn-sidebyside">🥊 Side-by-Side Comparison →</button>
+      </div>
+
+      <button class="btn-restart" id="btn-drtoddhunt-restart" style="margin-top:24px">← Back</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SCREEN: SIDE-BY-SIDE (Raw Todd vs Beefed-Up Todd)
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="screen-sidebyside" class="screen">
+    <div class="sbs-header">
+      <button class="sbs-back-btn" id="sbs-back">← Back</button>
+      <h2 class="sbs-title">🥊 Side-by-Side Comparison</h2>
+      <span class="sbs-subtitle" id="sbs-subtitle"></span>
+    </div>
+
+    <!-- Loading state -->
+    <div class="sbs-loading" id="sbs-loading">
+      <div class="sbs-loading-cols">
+        <div class="sbs-loading-col">
+          <div class="sbs-col-badge raw">RAW TODD</div>
+          <p class="sbs-loading-label" id="sbs-raw-msg">Waiting...</p>
+          <div class="sbs-bar-wrap"><div class="sbs-bar-fill" id="sbs-raw-fill" style="width:0%"></div></div>
+        </div>
+        <div class="sbs-loading-divider">VS</div>
+        <div class="sbs-loading-col">
+          <div class="sbs-col-badge beefed">BEEFED-UP TODD</div>
+          <p class="sbs-loading-label" id="sbs-beefed-msg">Waiting...</p>
+          <div class="sbs-bar-wrap"><div class="sbs-bar-fill beefed" id="sbs-beefed-fill" style="width:0%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results state -->
+    <div class="sbs-results hidden" id="sbs-results">
+      <div class="sbs-learnings-bar" id="sbs-learnings-bar"></div>
+      <div class="sbs-cols">
+        <!-- Raw Todd column -->
+        <div class="sbs-col">
+          <div class="sbs-col-header">
+            <span class="sbs-col-badge raw">RAW TODD</span>
+            <span class="sbs-col-count" id="sbs-raw-count"></span>
+          </div>
+          <div class="sbs-findings-list" id="sbs-raw-findings"></div>
+        </div>
+
+        <!-- Beefed-Up Todd column -->
+        <div class="sbs-col">
+          <div class="sbs-col-header">
+            <span class="sbs-col-badge beefed">BEEFED-UP TODD</span>
+            <span class="sbs-col-count" id="sbs-beefed-count"></span>
+          </div>
+          <div class="sbs-findings-list" id="sbs-beefed-findings"></div>
+        </div>
+      </div>
+
+      <!-- Dr. Verdict CTA -->
+      <div class="sbs-verdict-cta" id="sbs-verdict-cta">
+        <div class="sbs-verdict-cta-text">
+          <strong>🔬 Run Dr. Verdict</strong>
+          <span>Let Dr. Todd compare both results and tell you if the learnings helped, hurt, or need revision</span>
+        </div>
+        <button class="btn-run-verdict" id="btn-run-verdict">🔬 Generate Verdict</button>
+      </div>
+
+      <!-- Verdict synthesizing -->
+      <div class="sbs-verdict-loading hidden" id="sbs-verdict-loading">
+        <div class="synthesis-spinner"></div>
+        <p>Dr. Todd is evaluating the results...</p>
+      </div>
+
+      <!-- Verdict report -->
+      <div class="sbs-verdict-report hidden" id="sbs-verdict-report">
+        <div class="sbs-verdict-header">
+          <h3>🔬 Dr. Verdict</h3>
+          <button class="btn-copy-report" id="btn-copy-verdict">📋 Copy</button>
+        </div>
+        <pre class="report-text" id="sbs-verdict-text"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SCREEN: GYM TEACHER MODE (completely isolated — kill by removing this block)
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="screen-gym" class="screen">
+
+    <!-- Top bar -->
+    <div class="gym-topbar">
+      <button id="gym-back" class="gym-back-btn">← Back</button>
+      <div class="gym-topbar-center">
+        <canvas id="gym-todd-canvas" width="60" height="84"></canvas>
+        <div>
+          <div class="gym-title">🏋️ Gym Teacher</div>
+          <div class="gym-subtitle" id="gym-subtitle">Pick a tenant to train on</div>
+        </div>
+      </div>
+      <button id="gym-skip-btn" class="gym-skip-btn hidden">⏭ Next Finding</button>
+    </div>
+
+    <!-- PANEL: Tenant picker -->
+    <div id="gym-panel-picker" class="gym-panel gym-panel-center">
+      <div class="gym-picker-box">
+        <p class="gym-picker-hint">Select a tenant folder to workout on:</p>
+        <select id="gym-select" class="gym-select"></select>
+        <button id="gym-start-btn" class="btn-gym-start">🏃 Start Workout</button>
+      </div>
+    </div>
+
+    <!-- PANEL: Loading / analyzing -->
+    <div id="gym-panel-loading" class="gym-panel gym-panel-center hidden">
+      <div class="gym-loading-box">
+        <div class="gym-run-wrap">
+          <canvas id="gym-run-canvas" width="80" height="84"></canvas>
+          <div class="gym-sweat-container" id="gym-sweat-container"></div>
+        </div>
+        <p class="gym-loading-label">Todd is working out...</p>
+        <div class="gym-progress-bar"><div class="gym-progress-fill" id="gym-progress-fill" style="width:0%"></div></div>
+        <p class="gym-loading-msg" id="gym-loading-msg">Reading documents...</p>
+      </div>
+    </div>
+
+    <!-- PANEL: Workout (two columns) -->
+    <div id="gym-panel-workout" class="gym-panel gym-panel-workout hidden">
+
+      <!-- Two-column layout -->
+      <div class="gym-cols">
+
+        <!-- LEFT: Findings + annotations -->
+        <div class="gym-left-col">
+          <div class="gym-col-header">
+            <span>Findings</span>
+            <span class="gym-findings-count" id="gym-findings-count">0 findings</span>
+          </div>
+          <div class="gym-findings-scroll" id="gym-findings-scroll">
+            <!-- Finding cards injected here -->
+          </div>
+          <div class="gym-col-header" style="margin-top:16px">
+            <span>Your Annotations</span>
+            <button id="gym-flag-btn" class="gym-flag-btn">✏️ Flag Area</button>
+          </div>
+          <div class="gym-annotations-scroll" id="gym-annotations-scroll">
+            <p class="gym-anno-empty" id="gym-anno-empty">No annotations yet. Use "Flag Area" to highlight something Todd missed.</p>
+          </div>
+        </div>
+
+        <!-- RIGHT: PDF viewer -->
+        <div class="gym-right-col">
+          <div class="gym-pdf-header">
+            <button id="gym-folder-btn" class="gym-folder-btn" title="Browse all documents">📁 <span id="gym-folder-btn-label">Docs</span></button>
+            <span class="gym-pdf-docname" id="gym-pdf-docname">No document</span>
+            <div class="gym-pdf-nav">
+              <button id="gym-pdf-prev" class="gym-nav-btn">◀</button>
+              <span id="gym-pdf-pageinfo">—</span>
+              <button id="gym-pdf-next" class="gym-nav-btn">▶</button>
+            </div>
+          </div>
+
+          <!-- Document browser drawer (slides down under the header) -->
+          <div id="gym-doc-drawer" class="gym-doc-drawer hidden">
+            <div class="gym-doc-drawer-inner" id="gym-doc-drawer-inner">
+              <!-- doc tiles injected by JS -->
+            </div>
+          </div>
+
+          <div class="gym-pdf-viewport" id="gym-pdf-viewport">
+            <canvas id="gym-pdf-canvas"></canvas>
+            <!-- annotation overlay — rect is INSIDE so coords share the same space -->
+            <div id="gym-anno-overlay" class="gym-anno-overlay">
+              <div id="gym-anno-rect" class="gym-anno-rect hidden"></div>
+            </div>
+          </div>
+          <div class="gym-pdf-hint" id="gym-pdf-hint">Click a finding to jump to its document</div>
+        </div>
+      </div>
+
+      <!-- Bottom bar -->
+      <div class="gym-bottom-bar">
+        <span class="gym-review-status" id="gym-review-status">0 of 0 reviewed</span>
+        <button id="gym-submit-btn" class="btn-gym-submit">💪 Analysis Workout</button>
+      </div>
+    </div>
+
+    <!-- PANEL: Results / learnings -->
+    <div id="gym-panel-results" class="gym-panel gym-panel-center hidden">
+      <div class="gym-results-box">
+        <canvas id="gym-result-canvas" width="60" height="84" style="image-rendering:pixelated;margin-bottom:12px"></canvas>
+        <h3 class="gym-results-title">💡 Workout Complete!</h3>
+        <p class="gym-results-summary" id="gym-results-summary"></p>
+        <div class="gym-learnings-list" id="gym-learnings-list"></div>
+        <div class="gym-results-actions">
+          <button id="gym-results-back" class="btn-restart">← New Workout</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="gym-feedback-modal" class="gym-modal hidden">
+      <div class="gym-modal-box">
+        <h4 class="gym-modal-title">What's wrong with this finding?</h4>
+        <p class="gym-modal-hint" id="gym-feedback-finding-text"></p>
+        <textarea id="gym-feedback-comment" class="gym-textarea" placeholder="This is wrong because... / This isn't actually an issue because... / The correct interpretation is..."></textarea>
+        <div class="gym-modal-actions">
+          <button id="gym-feedback-cancel" class="gym-modal-btn gym-modal-cancel">Cancel</button>
+          <button id="gym-feedback-submit" class="gym-modal-btn gym-modal-submit">Submit ❌</button>
+          <button id="gym-feedback-partial" class="gym-modal-btn gym-modal-partial">Partial ⚠️</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="gym-annotation-modal" class="gym-modal hidden">
+      <div class="gym-modal-box">
+        <h4 class="gym-modal-title">📌 What did Todd miss here?</h4>
+        <img id="gym-anno-crop-preview" class="gym-anno-crop-preview hidden" alt="flagged area">
+        <p class="gym-modal-hint">Describe what's in the highlighted area and why it matters:</p>
+        <textarea id="gym-annotation-comment" class="gym-textarea" placeholder="This shows... / Todd missed this because... / This is evidence of..."></textarea>
+        <div class="gym-modal-actions">
+          <button id="gym-annotation-cancel" class="gym-modal-btn gym-modal-cancel">Cancel</button>
+          <button id="gym-annotation-submit" class="gym-modal-btn gym-modal-submit">Add Annotation 📌</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="app.js?v=4"></script>
+</body>
+</html>

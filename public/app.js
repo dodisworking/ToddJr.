@@ -1,0 +1,2793 @@
+// ═══════════════════════════════════════════════════════════
+// TODD JR. — Frontend State Machine
+// ═══════════════════════════════════════════════════════════
+
+// ── State ────────────────────────────────────────────────────
+const state = {
+  screen:           'upload',
+  sessionId:        crypto.randomUUID(),
+  tenants:          [],        // [{ id, folderName, property, suite, tenantName, fileCount }]
+  findings:         new Map(), // tenantId -> { findingCount, allClear, severity }
+  eventSource:      null,
+  downloadUrl:      null,
+  allResults:       [],        // final compiled results for preview table
+  singleTenantMode: false,     // if true, auto-run test mode after upload
+}
+
+// ── DOM refs ─────────────────────────────────────────────────
+const screens = {
+  upload:      document.getElementById('screen-upload'),
+  loading:     document.getElementById('screen-loading'),
+  hunt:        document.getElementById('screen-hunt'),
+  cooking:     document.getElementById('screen-cooking'),
+  report:      document.getElementById('screen-report'),
+  drtoddhunt:  document.getElementById('screen-drtoddhunt'),
+  gym:         document.getElementById('screen-gym'),
+  sidebyside:  document.getElementById('screen-sidebyside'),
+}
+
+// ═══════════════════════════════════════════════════════════
+// PIXEL ART SPRITE ENGINE
+// Colors
+// ═══════════════════════════════════════════════════════════
+const C = {
+  _: null,
+  H: '#4A2C0A', // hair
+  S: '#F5C5A3', // skin
+  E: '#111111', // eyes
+  M: '#8B0000', // mouth/detail
+  B: '#1D4ED8', // blue shirt
+  A: '#1565C0', // shirt arm
+  P: '#1E3A5F', // pants
+  T: '#3B1A09', // boots
+  W: '#FFFFFF', // sword blade (bright white)
+  G: '#FCD34D', // sword handle/gold (bright yellow)
+  R: '#DC2626', // red accent
+  N: '#6B7280', // neutral/gray
+}
+const _ = null
+
+// Each frame: 15 columns × 21 rows, pixel size = 4
+const PS = 4 // pixel size
+
+// Idle frame 1 (standing)
+const IDLE1 = [
+  [_,_,_,_,_,C.H,C.H,C.H,C.H,_,_,_,_,_,_],
+  [_,_,_,_,C.H,C.H,C.H,C.H,C.H,C.H,_,_,_,_,_],
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_],
+  [_,_,_,_,C.S,C.S,C.E,C.S,C.E,C.S,C.S,_,_,_,_],
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_],
+  [_,_,_,_,C.S,C.S,C.M,C.M,C.S,C.S,_,_,_,_,_],
+  [_,_,_,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,_,_,_,_],
+  [_,_,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.A,_,_,_],
+  [_,_,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.A,_,_,_],
+  [_,_,C.A,C.S,C.B,C.B,C.B,C.B,C.B,C.B,C.S,C.A,_,_,_],
+  [_,_,_,C.S,C.B,C.B,C.B,C.B,C.B,C.B,C.S,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,_,_,C.T,C.T,_,_,C.T,C.T,_,_,_,_,_],
+  [_,_,_,C.T,C.T,C.T,_,_,C.T,C.T,C.T,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+]
+
+// Idle frame 2 (slight bob — same but body row shifted 1 down)
+const IDLE2 = [
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,C.H,C.H,C.H,C.H,_,_,_,_,_,_],
+  [_,_,_,_,C.H,C.H,C.H,C.H,C.H,C.H,_,_,_,_,_],
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_],
+  [_,_,_,_,C.S,C.S,C.E,C.S,C.E,C.S,C.S,_,_,_,_],
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_],
+  [_,_,_,_,C.S,C.S,C.M,C.M,C.S,C.S,_,_,_,_,_],
+  [_,_,_,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,_,_,_,_],
+  [_,_,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.A,_,_,_],
+  [_,_,C.A,C.S,C.B,C.B,C.B,C.B,C.B,C.B,C.S,C.A,_,_,_],
+  [_,_,_,C.S,C.B,C.B,C.B,C.B,C.B,C.B,C.S,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,_,_,C.T,C.T,_,_,C.T,C.T,_,_,_,_,_],
+  [_,_,_,C.T,C.T,C.T,_,_,C.T,C.T,C.T,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+]
+
+// Attack frame 1 — sword raised HIGH above head (windup)
+// Right arm path: shoulder col10 row8 → neck col10 row7 → arm col9 row3 → guard row2
+const ATK1 = [
+  [_,_,_,_,_,_,_,_,_,_,_,C.W,C.W,_,_], // blade tip
+  [_,_,_,_,_,_,_,_,_,_,C.W,C.W,_,_,_], // blade
+  [_,_,_,_,_,C.H,C.H,C.H,C.H,C.G,C.W,_,_,_,_], // guard(gold) + blade
+  [_,_,_,_,C.H,C.H,C.H,C.H,C.H,C.S,_,_,_,_,_], // hair + SKIN HAND col9 (fist raised up, visible!)
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_],
+  [_,_,_,_,C.S,C.S,C.E,C.S,C.E,C.S,C.S,_,_,_,_],
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_],
+  [_,_,_,_,C.S,C.S,C.M,C.M,C.S,C.S,C.A,_,_,_,_], // RIGHT ARM at neck col10
+  [_,_,_,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.A,_,_,_,_], // body + RIGHT ARM at shoulder col10
+  [_,_,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.B,_,_,_,_,_],
+  [_,_,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.B,_,_,_,_,_],
+  [_,_,C.A,C.S,C.B,C.B,C.B,C.B,C.B,C.B,_,_,_,_,_], // LEFT hand only — right arm is UP
+  [_,_,_,C.S,C.B,C.B,C.B,C.B,C.B,C.B,_,_,_,_,_],   // left hand only
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,_,_,C.T,C.T,_,_,C.T,C.T,_,_,_,_,_],
+  [_,_,_,C.T,C.T,C.T,_,_,C.T,C.T,C.T,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+]
+
+// Attack frame 2 — sword thrust at shoulder height (Minecraft strike)
+const ATK2 = [
+  [_,_,_,_,_,C.H,C.H,C.H,C.H,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,C.H,C.H,C.H,C.H,C.H,C.H,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,C.S,C.S,C.E,C.S,C.E,C.S,C.S,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,C.S,C.S,C.M,C.M,C.S,C.S,_,_,_,_,_,_,_,_,_,_,_],
+  // shoulder row — right arm extends RIGHT: arm(C.A) + SKIN HAND(C.S) + guard + blade
+  [_,_,_,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.A,C.S,C.G,C.W,C.W,C.W,C.W,C.W,_,_,_],
+  [_,_,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,_,_,_,_,_,_,_,_,_,_],
+  [_,_,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.A,_,_,_,_,_,_,_,_,_],
+  [_,_,C.A,C.S,C.B,C.B,C.B,C.B,C.B,C.B,C.S,C.A,_,_,_,_,_,_,_,_,_],
+  [_,_,_,C.S,C.B,C.B,C.B,C.B,C.B,C.B,C.S,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,C.T,C.T,_,_,C.T,C.T,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,C.T,C.T,C.T,_,_,C.T,C.T,C.T,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+]
+
+// Victory — sword raised high
+const VIC1 = [
+  [_,_,_,_,_,_,_,_,_,C.W,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,C.W,_,_,_,_,_,_],
+  [_,_,_,_,_,C.H,C.H,C.H,C.G,_,_,_,_,_,_],
+  [_,_,_,_,C.H,C.H,C.H,C.H,C.H,C.H,_,_,_,_,_],
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_],
+  [_,_,_,_,C.S,C.S,C.E,C.S,C.E,C.S,C.S,_,_,_,_],
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_],
+  [_,_,_,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,_,_,_,_],
+  [_,_,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.A,_,_,_],
+  [_,_,C.A,C.S,C.B,C.B,C.B,C.B,C.B,C.B,C.S,C.A,_,_,_],
+  [_,_,_,C.S,C.B,C.B,C.B,C.B,C.B,C.B,C.S,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,_,C.P,C.P,_,_,_,_,C.P,C.P,_,_,_,_],
+  [_,_,_,C.P,C.P,_,_,_,_,C.P,C.P,_,_,_,_],
+  [_,_,_,C.P,C.P,_,_,_,_,C.P,C.P,_,_,_,_],
+  [_,_,_,_,C.T,C.T,_,_,C.T,C.T,_,_,_,_,_],
+  [_,_,_,C.T,C.T,C.T,_,_,C.T,C.T,C.T,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+]
+
+function drawFrame(canvas, frame, offsetY = 0) {
+  const ctx = canvas.getContext('2d')
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  for (let row = 0; row < frame.length; row++) {
+    for (let col = 0; col < frame[row].length; col++) {
+      const color = frame[row][col]
+      if (color) {
+        ctx.fillStyle = color
+        ctx.fillRect(col * PS, row * PS + offsetY, PS, PS)
+      }
+    }
+  }
+}
+
+// ── Animation loop ────────────────────────────────────────────
+const animState = {
+  heroFrame:    0,
+  heroTimer:    0,
+  btnFrame:     0,
+  btnTimer:     0,
+  cookFrame:    0,
+  cookTimer:    0,
+  reportFrame:  0,
+  reportTimer:  0,
+}
+
+const HERO_CANVAS   = document.getElementById('hero-canvas')
+const BTN_SPRITE    = document.getElementById('btn-sprite')
+const COOK_CANVAS   = document.getElementById('cook-canvas')
+const REPORT_CANVAS = document.getElementById('report-canvas')
+
+function animLoop() {
+  const now = performance.now()
+
+  // Hero sprite (upload screen)
+  if (animState.heroTimer < now) {
+    animState.heroFrame = animState.heroFrame === 0 ? 1 : 0
+    drawFrame(HERO_CANVAS,   animState.heroFrame === 0 ? IDLE1 : IDLE2)
+    drawFrame(BTN_SPRITE,    animState.heroFrame === 0 ? IDLE1 : IDLE2)
+    drawFrame(REPORT_CANVAS, animState.heroFrame === 0 ? VIC1 : IDLE1)
+    animState.heroTimer = now + 500
+  }
+
+  // Cook canvas — show cooking animation using idle + attack alternating
+  if (animState.cookTimer < now) {
+    animState.cookFrame = animState.cookFrame === 0 ? 1 : 0
+    drawFrame(COOK_CANVAS, animState.cookFrame === 0 ? ATK1 : ATK2)
+    animState.cookTimer = now + 180
+  }
+
+  requestAnimationFrame(animLoop)
+}
+requestAnimationFrame(animLoop)
+
+// ═══════════════════════════════════════════════════════════
+// SCREEN TRANSITIONS
+// ═══════════════════════════════════════════════════════════
+
+function goTo(screenName) {
+  Object.values(screens).forEach(s => s.classList.remove('active'))
+  screens[screenName].classList.add('active')
+  state.screen = screenName
+}
+
+// ═══════════════════════════════════════════════════════════
+// UPLOAD SCREEN
+// ═══════════════════════════════════════════════════════════
+
+const dropZone      = document.getElementById('drop-zone')
+const fileInput     = document.getElementById('file-input')
+const fileInputZip  = document.getElementById('file-input-zip')
+const btnBrowse     = document.getElementById('btn-browse')
+
+// Single browse button — tries folder picker first, falls back to ZIP picker
+btnBrowse.addEventListener('click', async () => {
+  if ('showDirectoryPicker' in window) {
+    try {
+      const handle = await window.showDirectoryPicker()
+      await uploadFolder(handle)
+      return
+    } catch (e) {
+      if (e.name === 'AbortError') return
+    }
+  }
+  // Fallback: let user pick ZIP
+  fileInputZip.click()
+})
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length > 0) startUpload(fileInput.files)
+})
+
+fileInputZip.addEventListener('change', () => {
+  if (fileInputZip.files.length > 0) startUpload(fileInputZip.files)
+})
+
+dropZone.addEventListener('dragover', e => {
+  e.preventDefault()
+  dropZone.classList.add('drag-over')
+})
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'))
+dropZone.addEventListener('drop', async e => {
+  e.preventDefault()
+  dropZone.classList.remove('drag-over')
+
+  // IMPORTANT: capture everything SYNCHRONOUSLY before any await —
+  // browsers clear the DataTransfer object after async operations.
+  const dtFiles = Array.from(e.dataTransfer.files || [])
+
+  // Also grab a directory entry synchronously via webkitGetAsEntry (most reliable)
+  let dirEntry = null
+  if (e.dataTransfer.items) {
+    for (const item of e.dataTransfer.items) {
+      if (item.kind === 'file') {
+        const entry = item.webkitGetAsEntry?.()
+        if (entry?.isDirectory) { dirEntry = entry; break }
+      }
+    }
+  }
+
+  // ZIP check
+  if (dtFiles.some(f => f.name.toLowerCase().endsWith('.zip'))) {
+    console.log('[drop] ZIP detected')
+    startUpload(dtFiles)
+    return
+  }
+
+  // Folder drop — use entry API (captured synchronously above)
+  if (dirEntry) {
+    console.log('[drop] Folder entry found:', dirEntry.name)
+    await uploadFolderFromEntry(dirEntry)
+    return
+  }
+
+  // Fallback: plain file drop (dtFiles already captured before any await)
+  if (dtFiles.length > 0) startUpload(dtFiles)
+})
+
+// Recursively collect files from a directory handle (File System Access API)
+async function uploadFolder(dirHandle) {
+  const fileMap = new Map() // path -> File
+
+  async function walk(handle, path = '') {
+    for await (const [name, childHandle] of handle.entries()) {
+      if (name.startsWith('.')) continue
+      const childPath = path ? `${path}/${name}` : name
+
+      if (childHandle.kind === 'file') {
+        const file = await childHandle.getFile()
+        file.relativePath = childPath
+        fileMap.set(childPath, file)
+      } else if (childHandle.kind === 'directory') {
+        await walk(childHandle, childPath)
+      }
+    }
+  }
+
+  // Smart detection: is this a single tenant folder or a root folder of multiple tenants?
+  const topEntries = []
+  for await (const [name, entry] of dirHandle.entries()) {
+    if (!name.startsWith('.')) topEntries.push({ name, entry })
+  }
+
+  const subfolders = topEntries.filter(e => e.entry.kind === 'directory')
+
+  // A folder name like "RN 6419 - Freeway Insurance" contains " - " → it IS a tenant
+  const droppedFolderIsTenant = dirHandle.name.includes(' - ')
+  // Subfolders that look like tenant names (contain " - ") → this is a multi-tenant root
+  const subfoldersLookLikeTenants = subfolders.some(e => e.name.includes(' - '))
+
+  const isSingleTenant = droppedFolderIsTenant || !subfoldersLookLikeTenants
+
+  if (isSingleTenant) {
+    // Use the dropped folder name as the tenant — walk with it as prefix
+    await walk(dirHandle, dirHandle.name)
+  } else {
+    // Multi-tenant root: subfolders are the individual tenants
+    await walk(dirHandle)
+  }
+
+  const files = Array.from(fileMap.values())
+  console.log('[uploadFolder] Collected', files.length, 'files, single-tenant:', isSingleTenant)
+  startUpload(files)
+}
+
+async function startUpload(files) {
+  goTo('loading')
+
+  // Accept all files — server will validate structure
+  // On macOS, webkitRelativePath might not be populated, so we accept files with or without it
+  const allFiles = Array.from(files)
+  if (allFiles.length === 0) {
+    toast('No files selected.', 'error')
+    goTo('upload')
+    return
+  }
+
+  // Fresh session ID for each hunt
+  state.sessionId = crypto.randomUUID()
+
+  // Show progress
+  setProgress(0, `Uploading ${allFiles.length} files...`)
+
+  const formData = new FormData()
+  for (const file of allFiles) {
+    // Use relativePath (File System Access API), then webkitRelativePath, then filename
+    const rawPath = file.relativePath || file.webkitRelativePath || file.name
+    // Encode "/" as "__SEP__" so server can split folder structure reliably
+    const encodedPath = rawPath.replace(/\//g, '__SEP__')
+    console.log('[upload] File:', file.name, '→ path:', encodedPath)
+    formData.append('files', file, encodedPath)
+  }
+
+  try {
+    // Simulate incremental upload progress via XHR
+    const result = await uploadWithProgress(formData, pct => setProgress(pct, `Uploading... ${pct}%`))
+
+    state.tenants = result.tenants
+    setProgress(100, `${result.tenants.length} tenant folders loaded`)
+    renderTenantCards(result.tenants)
+    showOversizeWarnings(result.tenants)
+    showHuntCta()
+
+    // Single tenant mode: auto-run on the only/first tenant
+    if (state.singleTenantMode && result.tenants.length > 0) {
+      state.singleTenantMode = false
+      setTimeout(() => startHunt(result.tenants[0].id), 400)
+    }
+  } catch (err) {
+    const msg = err.message || 'Upload failed'
+    toast(msg.includes('tenant folders')
+      ? '💡 Tip: Try drag-and-drop instead! It works better on macOS. Drag your folder directly onto the drop zone.'
+      : msg, 'error')
+    goTo('upload')
+  }
+}
+
+function uploadWithProgress(formData, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', '/api/upload')
+    xhr.setRequestHeader('X-Session-Id', state.sessionId)
+
+    xhr.upload.addEventListener('progress', e => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 90))
+    })
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const result = JSON.parse(xhr.responseText)
+          console.log('[upload] Success:', result.tenants.length, 'tenants detected')
+          resolve(result)
+        }
+        catch (e) {
+          console.error('[upload] Parse error:', e)
+          reject(new Error('Invalid server response'))
+        }
+      } else {
+        try {
+          const err = JSON.parse(xhr.responseText)
+          console.error('[upload] Server error:', err.error)
+          reject(new Error(err.error || `Server error ${xhr.status}`))
+        } catch {
+          console.error('[upload] HTTP error:', xhr.status, xhr.responseText)
+          reject(new Error(`Server error ${xhr.status}: ${xhr.responseText.substring(0, 100)}`))
+        }
+      }
+    })
+
+    xhr.addEventListener('error', (e) => {
+      console.error('[upload] Network error:', e)
+      reject(new Error('Network error'))
+    })
+    xhr.send(formData)
+  })
+}
+
+function setProgress(pct, label) {
+  const fill = document.getElementById('upload-progress-fill')
+  const lbl  = document.getElementById('upload-progress-label')
+  if (fill) fill.style.width = pct + '%'
+  if (lbl)  lbl.textContent  = label
+}
+
+function renderTenantCards(tenants) {
+  const grid = document.getElementById('tenant-grid-loading')
+  grid.innerHTML = ''
+  tenants.forEach((t, i) => {
+    const card = makeTenantCard(t, i, true)
+    grid.appendChild(card)
+  })
+  updateHud()
+}
+
+function updateHud() {
+  const el = document.getElementById('hud-count')
+  if (el) el.textContent = state.tenants.length
+}
+
+function makeTenantCard(t, animDelay = 0, removable = false) {
+  const card = document.createElement('div')
+  card.className = 'tenant-card'
+  card.id = `card-${t.id}`
+  card.style.animationDelay = (animDelay * 60) + 'ms'
+  card.innerHTML = `
+    ${removable ? `<button class="card-remove" title="Remove tenant">−</button>` : ''}
+    <div class="card-badges">
+      <span class="badge badge-prop">${escHtml(t.property)}</span>
+      <span class="badge badge-suite">${escHtml(String(t.suite))}</span>
+      <span class="badge badge-files">${t.fileCount} file${t.fileCount !== 1 ? 's' : ''}</span>
+    </div>
+    <div class="card-tenant-name" title="${escHtml(t.tenantName)}">${escHtml(t.tenantName)}</div>
+    ${t.files && t.files.length > 0 ? `
+    <button class="card-preview-btn" id="preview-btn-${t.id}">📄 Preview Documents</button>
+    <div class="card-preview-list" id="preview-list-${t.id}">
+      ${t.files.map(f => `
+        <div class="preview-file-row">
+          <span class="preview-file-name">${escHtml(f.name)}</span>
+          <span class="preview-file-size">${fmtBytes(f.sizeBytes)}</span>
+        </div>`).join('')}
+    </div>` : ''}
+    <div class="card-progress-wrap">
+      <div class="card-progress-msg" id="pmsg-${t.id}"></div>
+    </div>
+    <div class="card-result" id="cresult-${t.id}">
+      <div class="card-result-dot"></div>
+      <span class="card-result-text" id="cresult-text-${t.id}"></span>
+    </div>
+  `
+  // Wire remove button
+  const removeBtn = card.querySelector('.card-remove')
+  if (removeBtn) {
+    removeBtn.addEventListener('click', e => {
+      e.stopPropagation()
+      state.tenants = state.tenants.filter(x => x.id !== t.id)
+      card.remove()
+      updateHud()
+    })
+  }
+
+  // Wire preview button
+  const previewBtn = card.querySelector(`#preview-btn-${t.id}`)
+  if (previewBtn) {
+    previewBtn.addEventListener('click', e => {
+      e.stopPropagation()
+      const list = card.querySelector(`#preview-list-${t.id}`)
+      const open = list.classList.toggle('open')
+      previewBtn.textContent = open ? '📄 Hide Documents' : '📄 Preview Documents'
+    })
+  }
+
+  return card
+}
+
+function fmtBytes(bytes) {
+  if (!bytes) return '—'
+  if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  if (bytes >= 1024) return Math.round(bytes / 1024) + ' KB'
+  return bytes + ' B'
+}
+
+// ── HUD buttons ───────────────────────────────────────────────
+document.getElementById('btn-clear-all').addEventListener('click', () => {
+  state.tenants    = []
+  state.findings   = new Map()
+  state.sessionId  = crypto.randomUUID()
+  state.downloadUrl = null
+  document.getElementById('tenant-grid-loading').innerHTML = ''
+  document.getElementById('hunt-cta-wrap').classList.remove('ready')
+  updateHud()
+  goTo('upload')
+})
+
+// Add folder button — accepts folder or ZIP
+document.getElementById('btn-add-tenant').addEventListener('click', async () => {
+  if ('showDirectoryPicker' in window) {
+    try {
+      const handle = await window.showDirectoryPicker()
+      await uploadFolderAdd(handle)
+      return
+    } catch (e) {
+      if (e.name === 'AbortError') return
+    }
+  }
+  document.getElementById('file-input-add-zip').click()
+})
+document.getElementById('file-input-add').addEventListener('change', e => {
+  if (e.target.files.length > 0) addUpload(e.target.files)
+})
+document.getElementById('file-input-add-zip').addEventListener('change', e => {
+  if (e.target.files.length > 0) addUpload(e.target.files)
+})
+
+async function addUpload(files) {
+  const tempSession = crypto.randomUUID()
+  const formData = new FormData()
+  const allFiles = Array.from(files)
+  for (const file of allFiles) {
+    const rel = file.webkitRelativePath || file.name
+    const encodedPath = rel.replace(/\//g, '__SEP__')
+    formData.append('files', file, encodedPath)
+  }
+  try {
+    // Must send session ID as header — multer reads it before body is parsed
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'X-Session-Id': tempSession },
+      body: formData
+    })
+    if (!res.ok) { toast('Add failed: server error ' + res.status, 'error'); return }
+    const data = await res.json()
+    if (!data.tenants) return
+    const grid = document.getElementById('tenant-grid-loading')
+    for (const t of data.tenants) {
+      if (!state.tenants.find(x => x.tenantName === t.tenantName)) {
+        state.tenants.push(t)
+        grid.appendChild(makeTenantCard(t, state.tenants.length - 1, true))
+      }
+    }
+    updateHud()
+  } catch (err) { toast('Add failed: ' + err.message, 'error') }
+}
+
+async function uploadFolderAdd(dirHandle) {
+  const files = []
+  async function walk(handle, parentPath) {
+    for await (const [name, entry] of handle.entries()) {
+      if (name.startsWith('.')) continue
+      const p = parentPath ? `${parentPath}/${name}` : name
+      if (entry.kind === 'file') files.push({ file: await entry.getFile(), path: p })
+      else await walk(entry, p)
+    }
+  }
+
+  // Smart detection: same logic as main upload
+  const topEntries = []
+  for await (const [name, entry] of dirHandle.entries()) {
+    if (!name.startsWith('.')) topEntries.push({ name, entry })
+  }
+
+  const subfolders = topEntries.filter(e => e.entry.kind === 'directory')
+  const droppedFolderIsTenant    = dirHandle.name.includes(' - ')
+  const subfoldersLookLikeTenants = subfolders.some(e => e.name.includes(' - '))
+  const isSingleTenant = droppedFolderIsTenant || !subfoldersLookLikeTenants
+
+  if (isSingleTenant) {
+    await walk(dirHandle, dirHandle.name)
+  } else {
+    // Multi-tenant root: each subfolder is a tenant
+    for (const { name, entry } of topEntries) {
+      if (entry.kind === 'directory') await walk(entry, name)
+    }
+  }
+
+  const fileList = files.map(({ file, path }) =>
+    new File([file], path.replace(/\//g, '__SEP__'), { type: file.type })
+  )
+  await addUpload(fileList)
+}
+
+// ── Speed vs Accuracy toggle ──────────────────────────────────
+const accuracyToggle = document.getElementById('accuracy-toggle')
+const scanModeHint   = document.getElementById('scan-mode-hint')
+accuracyToggle.addEventListener('change', () => {
+  scanModeHint.textContent = accuracyToggle.checked
+    ? 'One tenant at a time — safest, no rate limits'
+    : 'All tenants at once — faster but may hit rate limits'
+})
+
+// ── Demo mode: fake hunt animation with no API calls ─────────
+document.getElementById('btn-demo').addEventListener('click', () => {
+  const demoTenants = [
+    { id: 'demo-1', folderName: 'NR 6301 - Cash America',     property: 'NR', suite: '6301', tenantName: 'Cash America',     fileCount: 16, oversizedFiles: [] },
+    { id: 'demo-2', folderName: 'NR 6317 - Luv 2 Smoke',      property: 'NR', suite: '6317', tenantName: 'Luv 2 Smoke',      fileCount: 6,  oversizedFiles: [] },
+    { id: 'demo-3', folderName: 'RN 6419 - Freeway Insurance', property: 'RN', suite: '6419', tenantName: 'Freeway Insurance', fileCount: 11, oversizedFiles: [] },
+  ]
+  state.tenants  = demoTenants
+  state.findings = new Map()
+
+  document.getElementById('tenant-grid-loading').innerHTML = ''
+  const huntGrid = document.getElementById('tenant-grid-hunt')
+  huntGrid.innerHTML = ''
+  demoTenants.forEach((t, i) => huntGrid.appendChild(makeTenantCard(t, i)))
+
+  goTo('hunt')
+  document.getElementById('cook-cta-wrap').classList.add('hidden')
+  startArena()
+  updateHuntSubtitle('🎮 Demo Mode — no API calls')
+
+  // Simulate each tenant sequentially with fake progress
+  async function runDemo() {
+    for (const t of demoTenants) {
+      emit_demo('folder-start', t)
+      for (let pct = 0; pct <= 100; pct += 2) {
+        await sleep(40)
+        emit_demo('folder-progress', { tenantId: t.id, percent: pct, message: pct < 30 ? 'Reading documents...' : pct < 70 ? 'Analyzing clauses...' : 'Finalizing findings...' })
+      }
+      const allClear = Math.random() > 0.5
+      emit_demo('folder-done', { tenantId: t.id, findingCount: allClear ? 0 : Math.floor(Math.random() * 5) + 1, allClear, severity: allClear ? 'NONE' : 'HIGH' })
+      state.findings.set(t.id, { allClear, findings: [], severity: allClear ? 'NONE' : 'HIGH' })
+      await sleep(300)
+    }
+    animState.toddMode = 'victory'
+    updateHuntSubtitle('🦁 Demo complete! This is what the real hunt looks like.')
+    showCookCta()
+  }
+
+  // Wire up demo folder-start / progress / done to existing handlers
+  function emit_demo(event, data) {
+    if (event === 'folder-start') {
+      setCardActive(data.id)
+      setCardHunting(data.id)
+      updateHuntSubtitle(`🏹 Demo Hunting: ${data.tenantName}`)
+    } else if (event === 'folder-progress') {
+      const msg = document.getElementById(`pmsg-${data.tenantId}`)
+      if (msg) msg.textContent = data.message
+    } else if (event === 'folder-done') {
+      setCardDone(data.tenantId, data)
+    }
+  }
+
+  runDemo()
+})
+
+function showOversizeWarnings(tenants) {
+  const warn = document.getElementById('oversize-warning')
+  if (!warn) return
+  const all = tenants.flatMap(t =>
+    (t.oversizedFiles || []).map(f => `${t.tenantName}: ${f}`)
+  )
+  if (all.length === 0) { warn.classList.add('hidden'); return }
+  warn.classList.remove('hidden')
+  warn.innerHTML = `<strong>⚠️ ${all.length} file${all.length !== 1 ? 's' : ''} exceed 32MB — will use text extraction (may miss scanned content):</strong>` +
+    all.map(f => `• ${f}`).join('<br/>')
+}
+
+function showHuntCta() {
+  const wrap = document.getElementById('hunt-cta-wrap')
+  wrap.classList.add('ready')
+}
+
+// ═══════════════════════════════════════════════════════════
+// HUNT SCREEN
+// ═══════════════════════════════════════════════════════════
+
+document.getElementById('btn-hunt').addEventListener('click', () => startHunt())
+
+document.getElementById('btn-kill-hunt').addEventListener('click', () => {
+  // Close SSE — server sees req.close → sets aborted=true → stops launching new API calls
+  if (state.eventSource) { state.eventSource.close(); state.eventSource = null }
+  stopArena()
+
+  // Full state reset
+  state.tenants     = []
+  state.findings    = new Map()
+  state.downloadUrl = null
+  state.sessionId   = crypto.randomUUID()
+
+  // Reset UI
+  animState.toddMode = 'idle'
+  document.getElementById('btn-kill-hunt').classList.add('hidden')
+  document.getElementById('cook-cta-wrap').classList.add('hidden')
+  document.getElementById('tenant-grid-loading').innerHTML = ''
+  document.getElementById('tenant-grid-hunt').innerHTML = ''
+  document.getElementById('hunt-cta-wrap').classList.remove('ready')
+  document.getElementById('upload-progress-fill').style.width = '0%'
+
+  goTo('upload')
+  toast('Hunt stopped — ready for a new session', 'info')
+})
+document.getElementById('btn-test-mode').addEventListener('click', () => {
+  const random = state.tenants[Math.floor(Math.random() * state.tenants.length)]
+  if (random) startHunt(random.id)
+})
+
+document.getElementById('btn-drtoddhunt').addEventListener('click', () => {
+  startDrToddHunt()
+})
+
+document.getElementById('btn-generate-report').addEventListener('click', () => {
+  requestDrToddReport()
+})
+
+document.getElementById('btn-copy-report').addEventListener('click', () => {
+  const text = document.getElementById('drtoddhunt-report-text').textContent
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('btn-copy-report')
+    btn.textContent = '✅ Copied!'
+    btn.classList.add('copied')
+    setTimeout(() => {
+      btn.textContent = '📋 Copy Report'
+      btn.classList.remove('copied')
+    }, 2000)
+  }).catch(() => toast('Copy failed — please select and copy manually', 'error'))
+})
+
+document.getElementById('btn-drtoddhunt-restart').addEventListener('click', () => {
+  if (state.eventSource) { state.eventSource.close(); state.eventSource = null }
+  goTo('loading')
+})
+
+// ── Dr. Todd → Extract Learnings ──────────────────────────
+document.getElementById('btn-extract-learnings')?.addEventListener('click', async () => {
+  const btn        = document.getElementById('btn-extract-learnings')
+  const reportText = document.getElementById('drtoddhunt-report-text').textContent
+  const tenantName = document.getElementById('drtoddhunt-sub').textContent.replace(/^.*?:/, '').trim()
+
+  btn.disabled    = true
+  btn.textContent = '⏳ Extracting...'
+
+  try {
+    const res  = await fetch('/api/drtoddhunt/extract-learnings', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ sessionId: state.sessionId, reportText, tenantName })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Server error')
+
+    // Show summary
+    document.getElementById('drtodd-learnings-summary').textContent = data.summary || ''
+
+    // Render learning cards
+    const list = document.getElementById('drtodd-learnings-list')
+    list.innerHTML = (data.learnings || []).map(l => `
+      <div class="drtodd-learning-item">
+        <div class="drtodd-learning-item-top">
+          <span class="drtodd-learning-badge">${escHtml(l.checkType || 'GENERAL')}</span>
+          <span class="sev-pill sev-${(l.confidence||'low').toLowerCase()}">${escHtml(l.confidence || 'LOW')}</span>
+          <span class="drtodd-learning-saved">✓ Saved</span>
+        </div>
+        <div class="drtodd-learning-suggestion">${escHtml(l.suggestion || '')}</div>
+        ${l.rationale ? `<div class="drtodd-learning-rationale">${escHtml(l.rationale)}</div>` : ''}
+      </div>`).join('')
+
+    document.getElementById('drtodd-learnings-result').classList.remove('hidden')
+    btn.textContent = '✅ Learnings Saved!'
+    toast(`${data.learnings.length} learning${data.learnings.length !== 1 ? 's' : ''} saved from Dr. Todd`, 'success')
+  } catch (err) {
+    btn.disabled    = false
+    btn.textContent = '🧠 Extract & Save Learnings'
+    toast('Error: ' + err.message, 'error')
+  }
+})
+
+// ── Side-by-Side button (from Dr. Todd results) ────────────
+document.getElementById('btn-sidebyside')?.addEventListener('click', () => {
+  // Use first tenant in session (or whichever Dr. Todd just ran on)
+  startSideBySide()
+})
+
+// ── Back from side-by-side ─────────────────────────────────
+document.getElementById('sbs-back')?.addEventListener('click', () => goTo('drtoddhunt'))
+
+// ── Side-by-Side logic ─────────────────────────────────────
+function startSideBySide(tenantId = null) {
+  goTo('sidebyside')
+  document.getElementById('sbs-subtitle').textContent = ''
+  document.getElementById('sbs-loading').classList.remove('hidden')
+  document.getElementById('sbs-results').classList.add('hidden')
+  document.getElementById('sbs-raw-fill').style.width    = '0%'
+  document.getElementById('sbs-beefed-fill').style.width = '0%'
+  document.getElementById('sbs-raw-msg').textContent     = 'Waiting...'
+  document.getElementById('sbs-beefed-msg').textContent  = 'Waiting...'
+
+  const url = `/api/sidebyside?sessionId=${encodeURIComponent(state.sessionId)}` +
+    (tenantId ? `&tenantId=${encodeURIComponent(tenantId)}` : '')
+
+  if (state.eventSource) { state.eventSource.close() }
+  const es = new EventSource(url)
+  state.eventSource = es
+
+  es.addEventListener('sbs-start', e => {
+    const d = JSON.parse(e.data)
+    document.getElementById('sbs-subtitle').textContent =
+      `${d.tenantName} — ${d.activeLearningCount} active learning${d.activeLearningCount !== 1 ? 's' : ''} applied`
+  })
+
+  es.addEventListener('sbs-progress', e => {
+    const d    = JSON.parse(e.data)
+    const fill = document.getElementById(`sbs-${d.side}-fill`)
+    const msg  = document.getElementById(`sbs-${d.side}-msg`)
+    if (fill) fill.style.width = d.percent + '%'
+    if (msg)  msg.textContent  = d.message || ''
+  })
+
+  es.addEventListener('sbs-complete', e => {
+    es.close()
+    state.eventSource = null
+    const d = JSON.parse(e.data)
+    // Store for verdict call
+    state.sbsLastResult = d
+    document.getElementById('sbs-loading').classList.add('hidden')
+    document.getElementById('sbs-results').classList.remove('hidden')
+    // Reset verdict panel
+    document.getElementById('sbs-verdict-cta').classList.remove('hidden')
+    document.getElementById('sbs-verdict-loading').classList.add('hidden')
+    document.getElementById('sbs-verdict-report').classList.add('hidden')
+    document.getElementById('btn-run-verdict').disabled = false
+    document.getElementById('btn-run-verdict').textContent = '🔬 Generate Verdict'
+    renderSideBySide(d)
+  })
+
+  es.addEventListener('sbs-error', e => {
+    es.close()
+    state.eventSource = null
+    const d = JSON.parse(e.data)
+    toast('Side-by-side error: ' + (d.error || 'Unknown'), 'error')
+    goTo('drtoddhunt')
+  })
+}
+
+const CHECK_LABELS_SBS = {
+  EXECUTION:'Execution', EXHIBIT:'Missing Exhibit', CURRENCY:'Lease Currency',
+  REFERENCED_DOC:'Missing Doc', AMENDMENT_GAP:'Amendment Gap', MISSING_PAGE:'Missing Pages',
+  LEGIBILITY:'Legibility', SPECIAL_AGREEMENT:'Special Agreement', GUARANTY:'Guaranty',
+  NAME_MISMATCH:'Name Mismatch'
+}
+
+function renderSideBySide(data) {
+  const raw    = data.raw    || {}
+  const beefed = data.beefed || {}
+  const rawF   = raw.findings    || []
+  const beefedF = beefed.findings || []
+
+  // Learnings bar
+  const bar = document.getElementById('sbs-learnings-bar')
+  if (data.activeLearnings && data.activeLearnings.length > 0) {
+    bar.textContent = `🧠 ${data.activeLearnings.length} active learning${data.activeLearnings.length !== 1 ? 's' : ''} applied to Beefed-Up Todd: ` +
+      data.activeLearnings.map(l => l.checkType).join(' · ')
+    bar.classList.remove('hidden')
+  } else {
+    bar.textContent = '⚠️ No active learnings — activate some in the Learnings panel to see the difference'
+  }
+
+  // Build sets for uniqueness highlighting
+  const rawKeys    = new Set(rawF.map(f    => `${f.checkType}||${(f.missingDocument||'').toLowerCase().trim()}`))
+  const beefedKeys = new Set(beefedF.map(f => `${f.checkType}||${(f.missingDocument||'').toLowerCase().trim()}`))
+
+  const renderFindings = (findings, otherKeys, isBeefed) => {
+    if (!findings || findings.length === 0) {
+      return '<div class="sbs-finding-card all-clear"><span class="sbs-card-doc">✅ All Clear — no findings</span></div>'
+    }
+    return findings.map(f => {
+      const key       = `${f.checkType}||${(f.missingDocument||'').toLowerCase().trim()}`
+      const isUnique  = !otherKeys.has(key)
+      const sevClass  = (f.severity || 'low').toLowerCase()
+      const uniqueTag = isUnique
+        ? `<span class="sbs-unique-badge ${isBeefed ? 'only-beefed' : 'only-raw'}">${isBeefed ? '🆕 New find' : '⚠️ Raw only'}</span>`
+        : ''
+      return `
+        <div class="sbs-finding-card sev-${sevClass}">
+          <div class="sbs-card-top">
+            <span class="sbs-card-check">${escHtml(CHECK_LABELS_SBS[f.checkType] || f.checkType || '')}</span>
+            <span class="sev-pill sev-${sevClass}">${escHtml(f.severity || 'LOW')}</span>
+            ${uniqueTag}
+          </div>
+          <div class="sbs-card-doc">${escHtml(f.missingDocument || 'N/A')}</div>
+          <div class="sbs-card-comment">${escHtml(f.comment || '')}</div>
+        </div>`
+    }).join('')
+  }
+
+  document.getElementById('sbs-raw-count').textContent =
+    rawF.length + ' finding' + (rawF.length !== 1 ? 's' : '')
+  document.getElementById('sbs-beefed-count').textContent =
+    beefedF.length + ' finding' + (beefedF.length !== 1 ? 's' : '')
+
+  document.getElementById('sbs-raw-findings').innerHTML    = renderFindings(rawF,    beefedKeys, false)
+  document.getElementById('sbs-beefed-findings').innerHTML = renderFindings(beefedF, rawKeys,    true)
+}
+
+// ── Dr. Verdict ────────────────────────────────────────────
+document.getElementById('btn-run-verdict')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btn-run-verdict')
+  const d   = state.sbsLastResult
+  if (!d) { toast('No side-by-side results to evaluate', 'error'); return }
+
+  btn.disabled    = true
+  btn.textContent = '⏳ Evaluating...'
+  document.getElementById('sbs-verdict-cta').classList.add('hidden')
+  document.getElementById('sbs-verdict-loading').classList.remove('hidden')
+  document.getElementById('sbs-verdict-report').classList.add('hidden')
+
+  try {
+    const res = await fetch('/api/sidebyside/verdict', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        rawResult:       d.raw,
+        beefedResult:    d.beefed,
+        activeLearnings: d.activeLearnings,
+        tenantName:      d.tenantName
+      })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Server error')
+
+    document.getElementById('sbs-verdict-loading').classList.add('hidden')
+    document.getElementById('sbs-verdict-text').textContent = data.verdict || ''
+    document.getElementById('sbs-verdict-report').classList.remove('hidden')
+    toast('Dr. Verdict complete', 'success')
+  } catch (err) {
+    document.getElementById('sbs-verdict-loading').classList.add('hidden')
+    document.getElementById('sbs-verdict-cta').classList.remove('hidden')
+    btn.disabled    = false
+    btn.textContent = '🔬 Generate Verdict'
+    toast('Verdict error: ' + err.message, 'error')
+  }
+})
+
+document.getElementById('btn-copy-verdict')?.addEventListener('click', () => {
+  const text = document.getElementById('sbs-verdict-text').textContent
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('btn-copy-verdict')
+    btn.textContent = '✅ Copied!'
+    setTimeout(() => { btn.textContent = '📋 Copy' }, 2000)
+  }).catch(() => toast('Copy failed', 'error'))
+})
+
+function startHunt(testTenantId = null) {
+  // Pre-hunt: warn about oversized files before executing
+  const tenantsToCheck = testTenantId
+    ? state.tenants.filter(t => t.id === testTenantId)
+    : state.tenants
+  const oversized = tenantsToCheck.flatMap(t =>
+    (t.oversizedFiles || []).map(f => `• ${t.tenantName}: ${f}`)
+  )
+  if (oversized.length > 0) {
+    const msg = `⚠️ ${oversized.length} file${oversized.length !== 1 ? 's' : ''} exceed 32MB and will use text extraction instead of visual analysis (scanned pages may be missed):\n\n${oversized.join('\n')}\n\nContinue anyway?`
+    if (!confirm(msg)) return
+  }
+
+  goTo('hunt')
+  startArena()
+
+  // Always hide cook button at start of hunt
+  document.getElementById('cook-cta-wrap').classList.add('hidden')
+
+  // In test mode, only show the selected tenant card
+  const tenantsToShow = testTenantId
+    ? state.tenants.filter(t => t.id === testTenantId)
+    : state.tenants
+
+  if (testTenantId) {
+    const t = state.tenants.find(t => t.id === testTenantId)
+    updateHuntSubtitle(`🎲 Test Mode — scanning: ${t?.tenantName || ''}`)
+  }
+
+  // Clear loading grid to avoid duplicate IDs before creating hunt cards
+  document.getElementById('tenant-grid-loading').innerHTML = ''
+  const huntGrid = document.getElementById('tenant-grid-hunt')
+  huntGrid.innerHTML = ''
+  tenantsToShow.forEach((t, i) => {
+    huntGrid.appendChild(makeTenantCard(t, i))
+  })
+
+  // Show kill switch
+  document.getElementById('btn-kill-hunt').classList.remove('hidden')
+
+  // Pass only the active tenant IDs so server skips deleted ones
+  const activeTenantIds = tenantsToShow.map(t => t.id).join(',')
+
+  // Start SSE — pass accuracy mode (sequential=1, speed=parallel)
+  const accuracyMode = document.getElementById('accuracy-toggle')?.checked !== false
+  const base = `/api/hunt?sessionId=${encodeURIComponent(state.sessionId)}&concurrency=${accuracyMode ? 1 : 0}&tenantIds=${encodeURIComponent(activeTenantIds)}`
+  const url = testTenantId ? `${base}&testTenantId=${encodeURIComponent(testTenantId)}` : base
+  const es = new EventSource(url)
+  state.eventSource = es
+
+  es.addEventListener('folder-start', e => {
+    const d = JSON.parse(e.data)
+    setCardActive(d.tenantId)
+    setCardHunting(d.tenantId)
+    updateHuntSubtitle(`🏹 Hunting: ${d.tenantName}`)
+  })
+
+  es.addEventListener('folder-progress', e => {
+    const d = JSON.parse(e.data)
+    const msg = document.getElementById(`pmsg-${d.tenantId}`)
+    if (msg) msg.textContent = d.message || ''
+  })
+
+  es.addEventListener('folder-done', e => {
+    const d = JSON.parse(e.data)
+    state.findings.set(d.tenantId, d)
+    setCardDone(d.tenantId, d)
+    // Show cook button as soon as all expected tenants are done
+    if (state.findings.size >= tenantsToShow.length) {
+      document.getElementById('btn-kill-hunt').classList.add('hidden')
+      showCookCta()
+      updateHuntSubtitle(`🦁 Prey caught! ${tenantsToShow.length} tenant${tenantsToShow.length !== 1 ? 's' : ''} scanned.`)
+    }
+  })
+
+  es.addEventListener('hunt-complete', () => {
+    es.close()
+    document.getElementById('btn-kill-hunt').classList.add('hidden')
+    showCookCta()
+  })
+
+  es.addEventListener('hunt-error', e => {
+    const d = JSON.parse(e.data)
+    es.close()
+    toast('Hunt error: ' + d.error, 'error')
+    // Still show cook button so user can get whatever results came in
+    showCookCta()
+  })
+
+  es.onerror = () => {
+    // SSE closed normally after hunt-complete — ignore
+  }
+}
+
+function startDrToddHunt() {
+  // Reset the Dr. Todd screen UI
+  for (let i = 1; i <= 3; i++) {
+    const status = document.getElementById(`drtodd-status-${i}`)
+    const fill   = document.getElementById(`drtodd-fill-${i}`)
+    const msg    = document.getElementById(`drtodd-msg-${i}`)
+    if (status) { status.textContent = 'Waiting...'; status.className = 'drtodd-run-status' }
+    if (fill)   fill.style.width = '0%'
+    if (msg)    msg.textContent = ''
+  }
+  document.getElementById('drtoddhunt-synthesis').classList.add('hidden')
+  document.getElementById('drtoddhunt-report').classList.add('hidden')
+  document.getElementById('drtoddhunt-report-text').textContent = ''
+  document.getElementById('drtoddhunt-cta').classList.add('hidden')
+  const genBtn = document.getElementById('btn-generate-report')
+  if (genBtn) { genBtn.disabled = false; genBtn.textContent = '📊 Generate Analysis Report' }
+  document.getElementById('drtoddhunt-sub').textContent = 'Running 3 independent analyses...'
+
+  goTo('drtoddhunt')
+
+  const url = `/api/drtoddhunt?sessionId=${encodeURIComponent(state.sessionId)}`
+  const es = new EventSource(url)
+  state.eventSource = es
+
+  es.addEventListener('drtoddhunt-start', e => {
+    const d = JSON.parse(e.data)
+    document.getElementById('drtoddhunt-sub').textContent =
+      `Analyzing: ${d.tenantName} — 3 independent runs`
+  })
+
+  es.addEventListener('drtoddhunt-run-start', e => {
+    const d = JSON.parse(e.data)
+    const n = d.runNumber
+    const status = document.getElementById(`drtodd-status-${n}`)
+    if (status) { status.textContent = 'Running...'; status.className = 'drtodd-run-status running' }
+    const msg = document.getElementById(`drtodd-msg-${n}`)
+    if (msg) msg.textContent = 'Starting analysis...'
+  })
+
+  es.addEventListener('drtoddhunt-run-progress', e => {
+    const d = JSON.parse(e.data)
+    const n = d.runNumber
+    const fill = document.getElementById(`drtodd-fill-${n}`)
+    const msg  = document.getElementById(`drtodd-msg-${n}`)
+    if (fill) fill.style.width = (d.percent || 0) + '%'
+    if (msg)  msg.textContent  = d.message || ''
+  })
+
+  es.addEventListener('drtoddhunt-run-done', e => {
+    const d = JSON.parse(e.data)
+    const n = d.runNumber
+    const status = document.getElementById(`drtodd-status-${n}`)
+    const fill   = document.getElementById(`drtodd-fill-${n}`)
+    const msg    = document.getElementById(`drtodd-msg-${n}`)
+    if (fill) fill.style.width = '100%'
+    if (d.error) {
+      if (status) { status.textContent = 'Error'; status.className = 'drtodd-run-status error' }
+      if (msg) msg.textContent = d.error
+    } else {
+      if (status) { status.textContent = d.allClear ? 'All Clear' : `${d.findingCount} finding${d.findingCount !== 1 ? 's' : ''}`; status.className = 'drtodd-run-status done' }
+      if (msg) msg.textContent = ''
+    }
+  })
+
+  es.addEventListener('drtoddhunt-runs-complete', e => {
+    const d = JSON.parse(e.data)
+    es.close()
+    state.eventSource = null
+    const hint = d.errorCount > 0
+      ? `${d.errorCount} run(s) had errors — report will use available data`
+      : 'All 3 runs complete'
+    document.getElementById('drtoddhunt-sub').textContent = hint
+    document.getElementById('drtoddhunt-cta').classList.remove('hidden')
+  })
+
+  es.addEventListener('drtoddhunt-error', e => {
+    const d = JSON.parse(e.data)
+    es.close()
+    state.eventSource = null
+    document.getElementById('drtoddhunt-synthesis').classList.add('hidden')
+    document.getElementById('drtoddhunt-sub').textContent = 'Analysis encountered an error'
+    // Still show the report button in case partial data was saved
+    document.getElementById('drtoddhunt-cta').classList.remove('hidden')
+    toast('Dr. Todd error: ' + d.error, 'error')
+  })
+
+  es.onerror = () => { /* SSE closed normally — ignore */ }
+}
+
+function requestDrToddReport() {
+  const btn = document.getElementById('btn-generate-report')
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Generating...' }
+  document.getElementById('drtoddhunt-cta').classList.add('hidden')
+  document.getElementById('drtoddhunt-synthesis').classList.remove('hidden')
+  document.getElementById('drtoddhunt-sub').textContent = 'Synthesizing findings across all 3 runs...'
+
+  fetch('/api/drtoddhunt/synthesize', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: state.sessionId })
+  })
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById('drtoddhunt-synthesis').classList.add('hidden')
+      if (d.error) {
+        document.getElementById('drtoddhunt-sub').textContent = 'Report generation failed'
+        document.getElementById('drtoddhunt-cta').classList.remove('hidden')
+        if (btn) { btn.disabled = false; btn.textContent = '📊 Retry Report' }
+        toast('Report error: ' + d.error, 'error')
+        return
+      }
+      document.getElementById('drtoddhunt-sub').textContent = `Report ready — ${d.tenantName}`
+      document.getElementById('drtoddhunt-report-text').textContent = d.report
+      document.getElementById('drtoddhunt-report').classList.remove('hidden')
+    })
+    .catch(err => {
+      document.getElementById('drtoddhunt-synthesis').classList.add('hidden')
+      document.getElementById('drtoddhunt-cta').classList.remove('hidden')
+      if (btn) { btn.disabled = false; btn.textContent = '📊 Retry Report' }
+      toast('Network error: ' + err.message, 'error')
+    })
+}
+
+function setCardActive(tenantId) {
+  document.querySelectorAll('.tenant-card.active').forEach(c => c.classList.remove('active'))
+  const card = document.getElementById(`card-${tenantId}`)
+  if (card) card.classList.add('active')
+}
+
+function setCardHunting(tenantId) {
+  const msg = document.getElementById(`pmsg-${tenantId}`)
+  if (msg) msg.innerHTML = '<span class="hunting-pulse">🏹 Scanning...</span>'
+  // Show the progress wrap for active card
+  const wrap = msg?.closest('.card-progress-wrap')
+  if (wrap) wrap.style.display = 'flex'
+}
+
+function setCardDone(tenantId, data) {
+  const card = document.getElementById(`card-${tenantId}`)
+  if (!card) return
+
+  card.classList.remove('active')
+  card.classList.add('done')
+  card.classList.add(data.allClear ? 'done-clear' : 'done-issues')
+
+  const fill = document.getElementById(`pfill-${tenantId}`)
+  const msg  = document.getElementById(`pmsg-${tenantId}`)
+  if (fill) fill.style.width = '100%'
+  if (msg)  msg.textContent  = ''
+
+  const resultDiv  = document.getElementById(`cresult-${tenantId}`)
+  const resultText = document.getElementById(`cresult-text-${tenantId}`)
+  if (resultDiv) resultDiv.classList.add(data.allClear ? 'clear' : 'issues')
+  if (resultText) {
+    if (data.allClear) {
+      resultText.textContent = 'All Clear'
+    } else {
+      const sevLabel = data.severity || 'LOW'
+      resultText.innerHTML = `${data.findingCount} issue${data.findingCount !== 1 ? 's' : ''} &nbsp;<span class="sev-pill sev-${sevLabel.toLowerCase()}">${sevLabel}</span>`
+    }
+  }
+}
+
+
+function updateHuntSubtitle(text) {
+  const el = document.getElementById('hunt-subtitle')
+  if (el) el.textContent = text
+}
+
+function showCookCta() {
+  const wrap = document.getElementById('cook-cta-wrap')
+  if (wrap) wrap.classList.remove('hidden')
+  // Trigger victory animation — all enemies die, Todd celebrates
+  if (!arenaAnim.victory) {
+    arenaAnim.victory = true
+    arenaAnim.victoryCelebTick = 0
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// COOK
+// ═══════════════════════════════════════════════════════════
+
+document.getElementById('btn-cook').addEventListener('click', startCook)
+
+async function startCook() {
+  stopArena()
+  goTo('cooking')
+
+  // Fake progress animation while real API call happens
+  const fill = document.getElementById('cook-bar-fill')
+  let pct = 0
+  const fakeProgress = setInterval(() => {
+    pct = Math.min(90, pct + Math.random() * 8)
+    if (fill) fill.style.width = pct + '%'
+  }, 400)
+
+  try {
+    const res = await fetch('/api/cook', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: state.sessionId })
+    })
+
+    const data = await res.json()
+    clearInterval(fakeProgress)
+    if (fill) fill.style.width = '100%'
+
+    if (!res.ok) throw new Error(data.error || 'Cook failed')
+
+    state.downloadUrl = data.downloadUrl
+
+    // Brief delay for satisfying animation
+    await sleep(700)
+    goTo('report')
+    buildReportScreen(data)
+
+  } catch (err) {
+    clearInterval(fakeProgress)
+    toast('Cook failed: ' + err.message, 'error')
+    goTo('hunt')
+    showCookCta()
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// REPORT SCREEN
+// ═══════════════════════════════════════════════════════════
+
+function buildReportScreen(data) {
+  // Stats row
+  const statsRow = document.getElementById('stats-row')
+  const total       = state.tenants.length
+  const allClearCnt = Array.from(state.findings.values()).filter(f => f.allClear).length
+  const issuesCnt   = Array.from(state.findings.values()).filter(f => !f.allClear).length
+  const totalIssues = data.findingCount || 0
+  const highCnt = Array.from(state.findings.values()).filter(f => f.severity === 'HIGH').length
+
+  statsRow.innerHTML = `
+    <div class="stat-card">
+      <span class="stat-label">Tenants Reviewed</span>
+      <span class="stat-value blue">${total}</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">All Clear</span>
+      <span class="stat-value green">${allClearCnt}</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">With Issues</span>
+      <span class="stat-value amber">${issuesCnt}</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Total Findings</span>
+      <span class="stat-value red">${totalIssues}</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">High Severity</span>
+      <span class="stat-value red">${highCnt}</span>
+    </div>
+  `
+
+  // Build findings table
+  buildFindingsTable()
+}
+
+function buildFindingsTable() {
+  const wrap = document.getElementById('findings-table-wrap')
+
+  // Build from findings Map using tenant order
+  const rows = []
+  for (const tenant of state.tenants) {
+    const finding = state.findings.get(tenant.id)
+    if (!finding) continue
+
+    if (finding.allClear || finding.findingCount === 0) {
+      rows.push({
+        property: tenant.property,
+        tenant:   tenant.tenantName,
+        suite:    String(tenant.suite),
+        doc:      'None',
+        comment:  'All clear',
+        sev:      'ok'
+      })
+    } else {
+      // Placeholder rows — actual document names come from Excel
+      const sevClass = (finding.severity || 'low').toLowerCase()
+      rows.push({
+        property: tenant.property,
+        tenant:   tenant.tenantName,
+        suite:    String(tenant.suite),
+        doc:      `${finding.findingCount} issue${finding.findingCount !== 1 ? 's' : ''} found`,
+        comment:  `Severity: ${finding.severity || 'LOW'} — see Excel report for full details`,
+        sev:      sevClass
+      })
+    }
+  }
+
+  if (rows.length === 0) {
+    wrap.innerHTML = '<p style="padding:20px;color:#94A3B8;font-size:13px">No results to display.</p>'
+    return
+  }
+
+  wrap.innerHTML = `
+    <table class="findings-table">
+      <thead>
+        <tr>
+          <th>Property</th>
+          <th>Tenant Name</th>
+          <th>Suite</th>
+          <th>Missing Document</th>
+          <th>Comment / Status</th>
+          <th>Severity</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(r => `
+          <tr>
+            <td class="td-prop">${escHtml(r.property)}</td>
+            <td class="td-name">${escHtml(r.tenant)}</td>
+            <td class="td-suite">${escHtml(r.suite)}</td>
+            <td class="td-doc">${escHtml(r.doc)}</td>
+            <td class="td-comment">${escHtml(r.comment)}</td>
+            <td class="td-sev"><span class="sev-pill sev-${r.sev}">${r.sev.toUpperCase()}</span></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `
+}
+
+// Download
+document.getElementById('btn-download').addEventListener('click', () => {
+  if (state.downloadUrl) {
+    window.location.href = state.downloadUrl
+  } else {
+    toast('No report available. Please cook first.', 'error')
+  }
+})
+
+// Restart
+document.getElementById('btn-restart').addEventListener('click', () => {
+  if (state.eventSource) {
+    state.eventSource.close()
+    state.eventSource = null
+  }
+  stopArena()
+  state.tenants  = []
+  state.findings = new Map()
+  state.downloadUrl = null
+  state.sessionId = crypto.randomUUID()
+
+  document.getElementById('tenant-grid-loading').innerHTML = ''
+  document.getElementById('tenant-grid-hunt').innerHTML    = ''
+  document.getElementById('hunt-cta-wrap').classList.remove('ready')
+  document.getElementById('cook-cta-wrap').classList.add('hidden')
+  document.getElementById('upload-progress-fill').style.width = '0%'
+  document.getElementById('cook-bar-fill').style.width = '0%'
+
+  goTo('upload')
+})
+
+// ═══════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════
+
+const toastEl = (() => {
+  const el = document.createElement('div')
+  el.id = 'toast'
+  document.body.appendChild(el)
+  return el
+})()
+
+let toastTimer = null
+function toast(message, type = 'info') {
+  toastEl.textContent  = message
+  toastEl.className    = `show${type === 'error' ? ' error' : type === 'success' ? ' success' : ''}`
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 4000)
+}
+
+// ═══════════════════════════════════════════════════════════
+// HUNT ARENA — continuous 8-bit battle animation
+// ═══════════════════════════════════════════════════════════
+
+// ── Sprite color palette ──────────────────────────────────
+const N_ = null
+const G = '#22C55E'; const Gd = '#15803D'
+const Or = '#F97316'; const Br = '#92400E'; const BrD = '#78350F'
+const Wh = '#FDE68A'; const Bl = '#1C1917'
+const Rd = '#DC2626'; const Gy = '#6B7280'
+const Pu = '#7C3AED'; const Pk = '#EC4899'
+const Db = '#6B21A8'; const Lp = '#A855F7'
+const Sk = '#E5E7EB'; const Cy = '#22D3EE'
+const Yw = '#FACC15'; const Lm = '#84CC16'
+
+// ── Enemy sprites ─────────────────────────────────────────
+
+// 🐍 Snake (5×9)
+const SNAKE_S = [[N_,G,G,N_,N_],[N_,G,Gd,G,N_],[N_,N_,G,Gd,G],[N_,N_,Gd,G,G],[G,Gd,G,N_,N_],[G,G,N_,N_,N_],[N_,G,Gd,G,N_],[N_,N_,G,Gd,N_],[N_,N_,G,N_,N_]]
+const SNAKE_D = [[N_,G,G,N_,N_],[N_,Gy,Gy,Gy,N_],[N_,N_,Gy,Gy,Gy],[N_,N_,Gy,Gy,Gy],[Gy,Gy,Gy,N_,N_],[Gy,Gy,N_,N_,N_],[N_,Gy,Gy,Gy,N_],[N_,N_,Gy,Gy,N_],[N_,N_,Gy,N_,N_]]
+
+// 🐯 Tiger (6×9)
+const TIGER_S = [[N_,Or,Or,Or,Or,N_],[Or,Bl,Or,Or,Bl,Or],[Or,Or,Or,Or,Or,Or],[Wh,Wh,Or,Or,Wh,Wh],[N_,Bl,N_,N_,Bl,N_],[N_,Or,Or,Or,Or,N_],[N_,Or,N_,N_,Or,N_],[N_,Or,Or,Or,Or,N_],[N_,BrD,N_,N_,BrD,N_]]
+const TIGER_D = [[N_,Gy,Gy,Gy,Gy,N_],[Gy,Bl,Gy,Gy,Bl,Gy],[Gy,Gy,Gy,Gy,Gy,Gy],[Gy,Gy,Gy,Gy,Gy,Gy],[N_,Rd,N_,N_,Rd,N_],[N_,Gy,Rd,Rd,Gy,N_],[N_,Gy,N_,N_,Gy,N_],[N_,Gy,Gy,Gy,Gy,N_],[N_,Gy,N_,N_,Gy,N_]]
+
+// 🐻 Bear (7×9)
+const BEAR_S = [[Br,N_,Br,N_,Br,N_,N_],[Br,Br,Br,Br,Br,Br,N_],[Br,Wh,Br,Br,Wh,Br,N_],[Br,Br,Rd,Br,Br,Br,N_],[N_,Br,Br,Br,Br,N_,N_],[N_,Br,BrD,BrD,Br,N_,N_],[N_,Br,N_,N_,Br,N_,N_],[N_,BrD,N_,N_,BrD,N_,N_],[N_,N_,N_,N_,N_,N_,N_]]
+const BEAR_D = [[Gy,N_,Gy,N_,Gy,N_,N_],[Gy,Gy,Gy,Gy,Gy,Gy,N_],[Gy,Wh,Gy,Gy,Wh,Gy,N_],[Gy,Gy,Gy,Gy,Gy,Gy,N_],[N_,Rd,Gy,Gy,Rd,N_,N_],[N_,Gy,Rd,Rd,Gy,N_,N_],[N_,Gy,N_,N_,Gy,N_,N_],[N_,Gy,N_,N_,Gy,N_,N_],[N_,N_,N_,N_,N_,N_,N_]]
+
+// 🦇 Bat (6×6)
+const BAT_S = [[N_,Pu,N_,N_,Pu,N_],[Pu,Pu,Pk,Pk,Pu,Pu],[Pu,Pk,Pk,Pk,Pk,Pu],[N_,Pu,Pk,Pk,Pu,N_],[N_,N_,Pu,Pu,N_,N_],[N_,N_,N_,N_,N_,N_]]
+const BAT_D  = [[N_,Gy,N_,N_,Gy,N_],[Gy,Gy,Gy,Gy,Gy,Gy],[Gy,Gy,Gy,Gy,Gy,Gy],[N_,Gy,Rd,Rd,Gy,N_],[N_,N_,Gy,Gy,N_,N_],[N_,N_,N_,N_,N_,N_]]
+
+// 👺 Goblin (5×9)
+const GOBLIN_S = [[N_,Lm,Lm,Lm,N_],[Lm,Lm,Gd,Lm,Lm],[N_,Bl,Lm,Bl,N_],[Lm,Gd,Lm,Gd,Lm],[N_,Lm,Lm,Lm,N_],[Rd,Lm,Lm,Lm,Rd],[N_,Lm,N_,Lm,N_],[N_,Lm,N_,Lm,N_],[N_,Br,N_,Br,N_]]
+const GOBLIN_D = [[N_,Gy,Gy,Gy,N_],[Gy,Gy,Gy,Gy,Gy],[N_,Bl,Gy,Bl,N_],[Gy,Gy,Gy,Gy,Gy],[N_,Rd,Gy,Rd,N_],[N_,Gy,Gy,Gy,N_],[N_,Gy,N_,Gy,N_],[N_,Gy,N_,Gy,N_],[N_,Gy,N_,Gy,N_]]
+
+// 💀 Skeleton (5×9)
+const SKEL_S = [[N_,Sk,Sk,Sk,N_],[Sk,Bl,Sk,Bl,Sk],[Sk,Sk,Sk,Sk,Sk],[N_,Sk,Bl,Sk,N_],[Sk,Sk,Sk,Sk,Sk],[N_,Sk,N_,Sk,N_],[Sk,N_,N_,N_,Sk],[Sk,N_,N_,N_,Sk],[Bl,N_,N_,N_,Bl]]
+const SKEL_D  = [[N_,Gy,Gy,Gy,N_],[Gy,Bl,Gy,Bl,Gy],[Gy,Gy,Gy,Gy,Gy],[N_,Gy,Bl,Gy,N_],[N_,Gy,N_,Gy,N_],[N_,Rd,N_,Rd,N_],[N_,N_,N_,N_,N_],[N_,N_,N_,N_,N_],[N_,N_,N_,N_,N_]]
+
+// 🧙 Wizard (5×9)
+const WIZ_S = [[N_,Db,Db,N_,N_],[N_,Db,Lp,Lp,N_],[Lp,Lp,Lp,Lp,Lp],[N_,Sk,Sk,Sk,N_],[N_,Bl,Sk,Bl,N_],[Lp,Lp,Lp,Lp,Lp],[Lp,Yw,Lp,Yw,Lp],[N_,Lp,N_,Lp,N_],[N_,Db,N_,Db,N_]]
+const WIZ_D  = [[N_,Gy,Gy,N_,N_],[N_,Gy,Gy,Gy,N_],[Gy,Gy,Gy,Gy,Gy],[N_,Gy,Gy,Gy,N_],[N_,Bl,Gy,Bl,N_],[N_,Gy,Rd,Gy,N_],[N_,Gy,Gy,Gy,N_],[N_,Gy,N_,Gy,N_],[N_,Gy,N_,Gy,N_]]
+
+// 🌊 Slime (6×6)
+const SLIME_S = [[N_,Cy,Cy,Cy,Cy,N_],[Cy,Cy,Bl,Cy,Bl,Cy],[Cy,Cy,Cy,Cy,Cy,Cy],[Cy,Cy,Gd,Cy,Cy,Cy],[N_,Cy,Cy,Cy,Cy,N_],[N_,N_,Cy,Cy,N_,N_]]
+const SLIME_D = [[N_,Gy,Gy,Gy,Gy,N_],[Gy,Gy,Bl,Gy,Bl,Gy],[Gy,Gy,Gy,Gy,Gy,Gy],[N_,Gy,Rd,Gy,Gy,N_],[N_,N_,Gy,Gy,N_,N_],[N_,N_,N_,N_,N_,N_]]
+
+// ── Todd arena-specific attack frames (TPS=4) ─────────────
+// Uses the same C.* color constants as main sprites
+
+// AK2_ARN — mid-swing: sword at ~45° upper-right, right arm visible at shoulder
+// Arm path: col10 shoulder → col10 neck → col9 head-level → guard col10 → blade
+const AK2_ARN = [
+  [_,_,_,_,_,_,_,_,_,_,_,_,C.W,_,_],   // blade tip col12
+  [_,_,_,_,_,_,_,_,_,_,_,C.W,C.W,_,_], // blade 2px
+  [_,_,_,_,_,C.H,C.H,C.H,C.H,_,C.G,C.W,_,_,_], // guard(gold) + blade
+  [_,_,_,_,C.H,C.H,C.H,C.H,C.H,C.S,_,_,_,_,_], // SKIN HAND col9 (mid-swing, fist visible!)
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_],
+  [_,_,_,_,C.S,C.S,C.E,C.S,C.E,C.S,C.S,_,_,_,_],
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_],
+  [_,_,_,_,C.S,C.S,C.M,C.M,C.S,C.S,C.A,_,_,_,_], // RIGHT ARM col10 at neck
+  [_,_,_,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.A,_,_,_,_], // body + RIGHT ARM at shoulder
+  [_,_,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.B,_,_,_,_,_],
+  [_,_,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.B,_,_,_,_,_],
+  [_,_,C.A,C.S,C.B,C.B,C.B,C.B,C.B,C.B,_,_,_,_,_], // LEFT hand only — right arm swinging
+  [_,_,_,C.S,C.B,C.B,C.B,C.B,C.B,C.B,_,_,_,_,_],   // left hand only
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,_,_,C.T,C.T,_,_,C.T,C.T,_,_,_,_,_],
+  [_,_,_,C.T,C.T,C.T,_,_,C.T,C.T,C.T,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+]
+
+// AK3_ARN — follow-through: sword diagonal down-right after horizontal strike
+const AK3_ARN = [
+  [_,_,_,_,_,C.H,C.H,C.H,C.H,_,_,_,_,_,_],
+  [_,_,_,_,C.H,C.H,C.H,C.H,C.H,C.H,_,_,_,_,_],
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_],
+  [_,_,_,_,C.S,C.S,C.E,C.S,C.E,C.S,C.S,_,_,_,_],
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_],
+  [_,_,_,_,C.S,C.S,C.M,C.M,C.S,C.S,_,_,_,_,_],
+  [_,_,_,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.A,C.A,C.G,_,_],
+  [_,_,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,_,C.W,C.W,_],
+  [_,_,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.A,_,C.W,C.W],
+  [_,_,C.A,C.S,C.B,C.B,C.B,C.B,C.B,C.B,C.S,C.A,_,_,_],
+  [_,_,_,C.S,C.B,C.B,C.B,C.B,C.B,C.B,C.S,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,_,_,C.T,C.T,_,_,C.T,C.T,_,_,_,_,_],
+  [_,_,_,C.T,C.T,C.T,_,_,C.T,C.T,C.T,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+]
+
+const ARENA_ATTACKS = [ATK1, AK2_ARN, ATK2, AK3_ARN]
+const ARENA_TPS = 4
+const ARENA_TODD_X = 8
+const ARENA_TODD_REACH = ARENA_TODD_X + 14 * ARENA_TPS  // = 64px — sword hit zone
+
+// ── Arena enemy roster ────────────────────────────────────
+const ARENA_DEFS = [
+  { s: SNAKE_S, d: SNAKE_D, w: 5, h: 9, speed: 1.0, ps: 3, fy: 0  },
+  { s: BAT_S,   d: BAT_D,   w: 6, h: 6, speed: 1.5, ps: 3, fy: -14 },
+  { s: TIGER_S, d: TIGER_D, w: 6, h: 9, speed: 1.2, ps: 3, fy: 0  },
+  { s: BEAR_S,  d: BEAR_D,  w: 7, h: 9, speed: 0.8, ps: 3, fy: 0  },
+  { s: GOBLIN_S,d: GOBLIN_D,w: 5, h: 9, speed: 1.4, ps: 3, fy: 0  },
+  { s: SKEL_S,  d: SKEL_D,  w: 5, h: 9, speed: 1.1, ps: 3, fy: 0  },
+  { s: WIZ_S,   d: WIZ_D,   w: 5, h: 9, speed: 1.3, ps: 3, fy: 0  },
+  { s: SLIME_S, d: SLIME_D, w: 6, h: 6, speed: 0.6, ps: 3, fy: 3  },
+]
+
+// ── Arena state ────────────────────────────────────────────
+let arenaRaf = null
+const arenaAnim = {
+  animals: [],         // [{ def, x, bob, bobDir, dying, deathTick, moveTick }]
+  toddF:    0,         // 0-3 cycling through ARENA_ATTACKS
+  toddTick: 0,
+  spawnIn:  15,
+  tick:     0,
+  running:  false,
+  victory:  false,     // set true when hunt completes
+  victoryCelebTick: 0, // frames since victory triggered
+}
+
+// Draw a sprite at pixel-size ps
+function drawSpriteAt(ctx, pixels, x, y, ps) {
+  for (let ry = 0; ry < pixels.length; ry++) {
+    const row = pixels[ry]
+    for (let rx = 0; rx < row.length; rx++) {
+      if (!row[rx]) continue
+      ctx.fillStyle = row[rx]
+      ctx.fillRect(x + rx * ps, y + ry * ps, ps, ps)
+    }
+  }
+}
+
+function drawArena() {
+  const canvas = document.getElementById('arena-canvas')
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  const W = canvas.width, H = canvas.height
+  const GY = H - 18          // ground line y (more room with H=120)
+  const TPS = ARENA_TPS      // 4 — bigger Todd
+  const TODD_X = ARENA_TODD_X
+  const TODD_REACH = ARENA_TODD_REACH
+
+  // Sky
+  ctx.fillStyle = '#07091A'
+  ctx.fillRect(0, 0, W, H)
+
+  // Pixel grid
+  ctx.fillStyle = '#0C1124'
+  for (let x = 0; x < W; x += 12) ctx.fillRect(x, 0, 1, GY)
+  for (let y = 0; y < GY; y += 12) ctx.fillRect(0, y, W, 1)
+
+  // Twinkling stars
+  const STAR_POS = [50,7,140,13,270,4,400,10,530,6,660,15,780,3,900,11,1020,8,1140,5]
+  for (let i = 0; i < STAR_POS.length - 1; i += 2) {
+    const sx = STAR_POS[i], sy = STAR_POS[i+1]
+    if (sx >= W) continue
+    ctx.fillStyle = Math.sin(arenaAnim.tick * 0.04 + i) > 0 ? '#FFFFFF' : '#1E3A5F'
+    ctx.fillRect(sx, sy, 1, 1)
+  }
+
+  // Scrolling ground
+  ctx.fillStyle = '#1E3A5F'
+  ctx.fillRect(0, GY, W, 2)
+  ctx.fillStyle = '#0F1B2D'
+  ctx.fillRect(0, GY + 2, W, H - GY - 2)
+  ctx.fillStyle = '#243B55'
+  const gScroll = (arenaAnim.tick * 1.5) % 24
+  for (let x = -(24 - gScroll % 24); x < W; x += 24) ctx.fillRect(Math.round(x), GY, 1, 2)
+
+  // Status label — "HUNTING..." normally, "★ PREY CAUGHT! ★" on victory
+  if (!arenaAnim.victory) {
+    const dots = '.'.repeat((Math.floor(arenaAnim.tick / 18) % 4))
+    const alpha = 0.6 + 0.4 * Math.sin(arenaAnim.tick * 0.05)
+    ctx.globalAlpha = alpha
+    ctx.fillStyle = '#3B82F6'
+    ctx.font = '8px "Press Start 2P", monospace'
+    ctx.textBaseline = 'top'
+    ctx.textAlign = 'left'
+    ctx.fillText('HUNTING' + dots, W / 2 - 40, 4)
+    ctx.globalAlpha = 1
+  }
+
+  // Draw enemies
+  for (const a of arenaAnim.animals) {
+    const ax = Math.round(a.x)
+    const ay = GY - a.def.h * a.def.ps + (a.def.fy || 0) + a.bob
+    if (a.dying) {
+      ctx.globalAlpha = Math.max(0, 1 - a.deathTick / 14)
+      if (a.deathTick % 4 < 2) {
+        ctx.fillStyle = '#FCD34D'
+        ctx.fillRect(ax - 2, ay - 2, a.def.w * a.def.ps + 4, a.def.h * a.def.ps + 4)
+      }
+      drawSpriteAt(ctx, a.def.d, ax, ay, a.def.ps)
+      ctx.globalAlpha = 1
+    } else {
+      drawSpriteAt(ctx, a.def.s, ax, ay, a.def.ps)
+    }
+  }
+
+  // Draw Todd — victory pose or 4-frame attack cycle
+  if (arenaAnim.victory) {
+    const toddY = GY - VIC1.length * TPS
+    drawSpriteAt(ctx, VIC1, TODD_X, toddY, TPS)
+
+    // Sparkles orbiting Todd
+    const t = arenaAnim.victoryCelebTick
+    const sparkColors = ['#FCD34D','#F59E0B','#FFFFFF','#3B82F6','#22C55E','#EC4899','#F97316','#A855F7']
+    const cx = TODD_X + 5 * TPS      // Todd center-ish x
+    const cy = toddY + 8 * TPS       // Todd center-ish y
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2 + t * 0.09
+      const r = 26 + 7 * Math.sin(t * 0.11 + i * 1.3)
+      const sx = cx + Math.cos(angle) * r
+      const sy = cy + Math.sin(angle) * r * 0.55
+      ctx.fillStyle = sparkColors[i]
+      const sz = Math.floor(t / 5) % 2 === 0 ? 3 : 2
+      ctx.fillRect(Math.round(sx), Math.round(sy), sz, sz)
+    }
+
+    // "★ PREY CAUGHT! ★" text fading in
+    const fadeIn = Math.min(1, arenaAnim.victoryCelebTick / 18)
+    ctx.globalAlpha = fadeIn
+    ctx.fillStyle = '#FCD34D'
+    ctx.font = '8px "Press Start 2P", monospace'
+    ctx.textBaseline = 'top'
+    ctx.textAlign = 'center'
+    ctx.fillText('\u2605 PREY CAUGHT! \u2605', W / 2, 4)
+    ctx.textAlign = 'left'
+    ctx.globalAlpha = 1
+  } else {
+    // Per-frame Y-bounce: Todd leans into the swing (-4px up on windup, +3px down on follow-through)
+    const FRAME_BOB = [0, -4, 0, 3]
+    const toddSprite = ARENA_ATTACKS[arenaAnim.toddF]
+    const toddY = GY - toddSprite.length * TPS + FRAME_BOB[arenaAnim.toddF]
+    drawSpriteAt(ctx, toddSprite, TODD_X, toddY, TPS)
+
+    // Per-frame sword swing trail — makes animation visually obvious each frame
+    const tf = arenaAnim.toddF
+    const P = TPS  // 4px
+    if (tf === 1) {
+      // Mid-swing windup → diagonal: gold arc trailing from upper position
+      ctx.globalAlpha = 0.6
+      ctx.fillStyle = '#FCD34D'
+      ctx.fillRect(TODD_X + 10*P, toddY + 1*P, P, P)
+      ctx.fillRect(TODD_X + 11*P, toddY + 2*P, P, P)
+      ctx.fillStyle = '#FFFFFF'
+      ctx.fillRect(TODD_X + 11*P, toddY + 1*P, P, P)
+      ctx.globalAlpha = 1
+    } else if (tf === 2) {
+      // STRIKE FRAME: dramatic bright horizontal slash line
+      ctx.globalAlpha = 0.85
+      ctx.fillStyle = '#FFFFFF'
+      ctx.fillRect(TODD_X + 11*P, toddY + 5*P, 7*P, 2)   // bright white slash
+      ctx.fillStyle = '#FCD34D'
+      ctx.fillRect(TODD_X + 11*P, toddY + 5*P + 2, 6*P, 2) // gold shadow line
+      ctx.fillRect(TODD_X + 11*P, toddY + 4*P, 3*P, 2)     // leading gold
+      ctx.globalAlpha = 1
+    } else if (tf === 3) {
+      // Follow-through: downward diagonal trail
+      ctx.globalAlpha = 0.45
+      ctx.fillStyle = '#FCD34D'
+      ctx.fillRect(TODD_X + 11*P, toddY + 7*P, P, P)
+      ctx.fillRect(TODD_X + 12*P, toddY + 8*P, P, P)
+      ctx.fillRect(TODD_X + 13*P, toddY + 9*P, P, P)
+      ctx.globalAlpha = 1
+    }
+
+    // Sword slash impact effect when enemy is within strike range
+    const close = arenaAnim.animals.some(a => !a.dying && a.x < TODD_REACH + 20)
+    if (close && arenaAnim.tick % 6 < 3) {
+      ctx.fillStyle = '#FCD34D'
+      ctx.fillRect(TODD_REACH - 2, GY - 20, 10, 3)
+      ctx.fillStyle = '#FFFFFF'
+      ctx.fillRect(TODD_REACH + 3, GY - 20, 5, 3)
+    }
+  }
+}
+
+function updateArena() {
+  const a = arenaAnim
+  a.tick++
+
+  // Victory state — force-kill remaining enemies, no new spawns, no Todd update
+  if (a.victory) {
+    a.victoryCelebTick++
+    for (const en of a.animals) {
+      if (!en.dying) en.dying = true
+      en.deathTick++
+    }
+    a.animals = a.animals.filter(en => en.deathTick < 20)
+    return
+  }
+
+  // Todd 4-frame attack cycle (8 ticks per frame = ~8fps at 60fps raf)
+  if (++a.toddTick >= 8) { a.toddTick = 0; a.toddF = (a.toddF + 1) % 4 }
+
+  // Spawn enemies
+  if (--a.spawnIn <= 0 && a.animals.filter(x => !x.dying).length < 7) {
+    const def = ARENA_DEFS[Math.floor(Math.random() * ARENA_DEFS.length)]
+    const canvas = document.getElementById('arena-canvas')
+    const W = canvas ? canvas.width : 800
+    a.animals.push({ def, x: W + def.w * def.ps, bob: 0, bobDir: 1, dying: false, deathTick: 0, moveTick: 0 })
+    a.spawnIn = 20 + Math.floor(Math.random() * 40)
+  }
+
+  for (const en of a.animals) {
+    if (en.dying) { en.deathTick++; continue }
+    en.x -= en.def.speed
+    en.moveTick++
+    if (en.moveTick % 10 === 0) { en.bob += en.bobDir; if (en.bob >= 1 || en.bob <= 0) en.bobDir *= -1 }
+    if (en.x <= ARENA_TODD_REACH + 4) { en.dying = true }
+  }
+
+  // Reap fully-faded dead enemies
+  a.animals = a.animals.filter(en => !en.dying || en.deathTick < 16)
+}
+
+let arenaLoopId = null
+function arenaLoop() {
+  if (!arenaAnim.running) { arenaLoopId = null; return }
+  updateArena()
+  drawArena()
+  arenaLoopId = requestAnimationFrame(arenaLoop)
+}
+
+function startArena() {
+  const canvas = document.getElementById('arena-canvas')
+  if (!canvas) return
+  // Size canvas to its rendered width
+  const w = canvas.parentElement?.getBoundingClientRect().width || 800
+  canvas.width  = Math.round(w)
+  canvas.height = 120
+  arenaAnim.animals = []
+  arenaAnim.tick = 0; arenaAnim.toddF = 0; arenaAnim.toddTick = 0; arenaAnim.spawnIn = 10
+  arenaAnim.victory = false; arenaAnim.victoryCelebTick = 0
+  arenaAnim.running = true
+  if (!arenaLoopId) arenaLoopId = requestAnimationFrame(arenaLoop)
+}
+
+function stopArena() {
+  arenaAnim.running = false
+  if (arenaLoopId) { cancelAnimationFrame(arenaLoopId); arenaLoopId = null }
+}
+
+// ═══════════════════════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════════════════════
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms))
+}
+
+// ── Initial draw ─────────────────────────────────────────────
+drawFrame(HERO_CANVAS,   IDLE1)
+drawFrame(BTN_SPRITE,    IDLE1)
+drawFrame(COOK_CANVAS,   ATK1)
+drawFrame(REPORT_CANVAS, VIC1)
+
+// ═══════════════════════════════════════════════════════════
+// GYM TEACHER MODE
+// ═══════════════════════════════════════════════════════════
+
+// ── PDF.js worker setup ────────────────────────────────────
+if (typeof pdfjsLib !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+}
+
+// ── Running Todd sprites (headband 🏋️) ─────────────────────
+const GYM_RUN1 = [
+  [_,_,_,_,_,C.H,C.H,C.H,C.H,_,_,_,_,_,_],
+  [_,_,_,_,C.H,C.H,C.H,C.H,C.H,C.H,_,_,_,_,_],
+  [_,_,_,_,C.R,C.R,C.R,C.R,C.R,C.R,_,_,_,_,_],  // red headband
+  [_,_,_,_,C.S,C.S,C.E,C.S,C.E,C.S,C.S,_,_,_,_],
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_],
+  [_,_,_,_,C.S,C.S,C.M,C.M,C.S,C.S,_,_,_,_,_],
+  [_,_,_,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,_,_,_,_],
+  [C.A,_,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,_,_,_,_],
+  [_,_,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.A,_,_,_],
+  [_,_,C.A,C.S,C.B,C.B,C.B,C.B,C.B,C.B,C.S,C.A,_,_,_],
+  [_,_,_,C.S,C.B,C.B,C.B,C.B,C.B,C.B,C.S,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,_,_,C.P,_,_,_,_],  // left leg back, right forward
+  [_,_,_,_,C.P,C.P,_,_,_,C.P,_,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,_,_,_,_,_,_],
+  [_,_,_,_,C.T,C.T,_,C.T,_,_,_,_,_,_,_],
+  [_,_,_,C.T,C.T,C.T,C.T,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+]
+const GYM_RUN2 = [
+  [_,_,_,_,_,C.H,C.H,C.H,C.H,_,_,_,_,_,_],
+  [_,_,_,_,C.H,C.H,C.H,C.H,C.H,C.H,_,_,_,_,_],
+  [_,_,_,_,C.R,C.R,C.R,C.R,C.R,C.R,_,_,_,_,_],  // red headband
+  [_,_,_,_,C.S,C.S,C.E,C.S,C.E,C.S,C.S,_,_,_,_],
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_],
+  [_,_,_,_,C.S,C.S,C.M,C.M,C.S,C.S,_,_,_,_,_],
+  [_,_,_,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,_,_,_,_],
+  [_,_,_,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.A,C.A,_,_],
+  [_,_,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.A,_,_,_],
+  [_,_,C.A,C.S,C.B,C.B,C.B,C.B,C.B,C.B,C.S,C.A,_,_,_],
+  [_,_,_,C.S,C.B,C.B,C.B,C.B,C.B,C.B,C.S,_,_,_,_],
+  [_,_,_,_,_,_,_,_,C.P,C.P,_,_,_,_,_],  // right leg back, left forward
+  [_,_,_,_,_,_,_,C.P,C.P,_,_,_,_,_,_],
+  [_,_,_,_,_,_,C.P,C.P,_,_,_,_,_,_,_],
+  [_,_,_,_,_,C.T,C.T,_,_,_,C.T,C.T,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,C.T,C.T,C.T,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+]
+
+// ── Check type labels — mirror reporter.js ──────────────────
+const CHECK_LABELS = {
+  EXECUTION:         'Execution',
+  EXHIBIT:           'Missing Exhibit',
+  CURRENCY:          'Lease Currency',
+  REFERENCED_DOC:    'Missing Document',
+  AMENDMENT_GAP:     'Amendment Gap',
+  MISSING_PAGE:      'Missing Pages',
+  LEGIBILITY:        'Legibility',
+  SPECIAL_AGREEMENT: 'Special Agreement',
+  GUARANTY:          'Guaranty',
+  NAME_MISMATCH:     'Name Mismatch',
+}
+
+// ── Gym state ──────────────────────────────────────────────
+const gymState = {
+  findings:         [],
+  feedbacks:        {},   // findingId -> {verdict, comment}
+  annotations:      [],   // [{docName, pageNum, comment, docIdx}]
+  files:            [],
+  activeFindingId:  null,
+  currentDocIdx:    0,
+  currentPage:      1,
+  totalPages:       0,
+  pdfDoc:           null,
+  pdfCache:         {},   // fileIndex -> PDFDocumentProxy  (prevents re-fetching)
+  annotating:       false,
+  annoStart:        null,
+  pendingAnno:      null, // {docIdx, pageNum}
+  gymRunFrame:      0,
+  gymRunTimer:      0,
+  sweatDrops:       [],
+}
+
+// ── Running animation loop ─────────────────────────────────
+const GYM_RUN_CANVAS = document.getElementById('gym-run-canvas')
+function gymAnimLoop(now) {
+  if (state.screen !== 'gym') { requestAnimationFrame(gymAnimLoop); return }
+  if (gymState.gymRunTimer < now) {
+    gymState.gymRunFrame = gymState.gymRunFrame === 0 ? 1 : 0
+    if (GYM_RUN_CANVAS) drawFrame(GYM_RUN_CANVAS, gymState.gymRunFrame === 0 ? GYM_RUN1 : GYM_RUN2)
+    gymState.gymRunTimer = now + 200
+
+    // spawn sweat drop
+    if (Math.random() > 0.5) {
+      gymState.sweatDrops.push({ x: 52 + Math.random() * 12, y: 8, vx: 1 + Math.random(), vy: -1, life: 18 })
+    }
+  }
+  // animate sweat drops
+  const cont = document.getElementById('gym-sweat-container')
+  if (cont) {
+    gymState.sweatDrops = gymState.sweatDrops.filter(d => d.life > 0)
+    gymState.sweatDrops.forEach(d => { d.x += d.vx; d.y += d.vy; d.vy += 0.2; d.life-- })
+    cont.innerHTML = gymState.sweatDrops.map(d => {
+      const op = (d.life / 18).toFixed(2)
+      return `<div style="position:absolute;left:${d.x}px;top:${d.y}px;width:3px;height:3px;background:#60A5FA;border-radius:50%;opacity:${op}"></div>`
+    }).join('')
+  }
+  requestAnimationFrame(gymAnimLoop)
+}
+requestAnimationFrame(gymAnimLoop)
+
+// ── Open gym screen ────────────────────────────────────────
+document.getElementById('btn-workout').addEventListener('click', () => {
+  if (state.tenants.length === 0) { toast('Upload files first', 'error'); return }
+  gymOpenPicker()
+})
+
+document.getElementById('gym-back').addEventListener('click', () => {
+  if (state.eventSource) { state.eventSource.close(); state.eventSource = null }
+  gymReset()
+  goTo('loading')
+})
+
+function gymReset() {
+  gymState.findings = []
+  gymState.feedbacks = {}
+  gymState.annotations = []
+  gymState.files = []
+  gymState.activeFindingId = null
+  gymState.pdfDoc = null
+  gymState.pdfCache = {}
+  gymState.annotating = false
+  gymState.pendingAnno = null
+  gymState.sweatDrops = []
+  // reset panels
+  gymShowPanel('picker')
+  document.getElementById('gym-skip-btn').classList.add('hidden')
+  document.getElementById('gym-flag-btn')?.classList.remove('active')
+  document.getElementById('gym-anno-overlay')?.classList.remove('active')
+}
+
+function gymOpenPicker() {
+  gymReset()
+  goTo('gym')
+  const sel = document.getElementById('gym-select')
+  sel.innerHTML = state.tenants.map(t =>
+    `<option value="${t.id}">${escHtml(t.tenantName)} (${t.fileCount} files)</option>`
+  ).join('')
+  document.getElementById('gym-subtitle').textContent = 'Pick a tenant to train on'
+}
+
+function gymShowPanel(name) {
+  document.getElementById('gym-panel-picker').classList.toggle('hidden', name !== 'picker')
+  document.getElementById('gym-panel-loading').classList.toggle('hidden', name !== 'loading')
+  document.getElementById('gym-panel-workout').classList.toggle('hidden', name !== 'workout')
+  document.getElementById('gym-panel-results').classList.toggle('hidden', name !== 'results')
+}
+
+// ── Start workout ──────────────────────────────────────────
+document.getElementById('gym-start-btn').addEventListener('click', () => {
+  const tenantId = document.getElementById('gym-select').value
+  if (!tenantId) return
+  const tenant = state.tenants.find(t => t.id === tenantId)
+  gymShowPanel('loading')
+  document.getElementById('gym-subtitle').textContent = `Analyzing ${tenant?.tenantName || ''}...`
+  document.getElementById('gym-progress-fill').style.width = '0%'
+  document.getElementById('gym-loading-msg').textContent = 'Starting analysis...'
+
+  const url = `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenantId)}`
+  const es = new EventSource(url)
+  state.eventSource = es
+
+  es.addEventListener('gym-start', e => {
+    const d = JSON.parse(e.data)
+    document.getElementById('gym-subtitle').textContent = `Analyzing: ${d.tenantName}`
+  })
+  es.addEventListener('gym-progress', e => {
+    const d = JSON.parse(e.data)
+    document.getElementById('gym-progress-fill').style.width = (d.percent || 0) + '%'
+    document.getElementById('gym-loading-msg').textContent = d.message || ''
+  })
+  es.addEventListener('gym-complete', e => {
+    es.close(); state.eventSource = null
+    const d = JSON.parse(e.data)
+    document.getElementById('gym-progress-fill').style.width = '100%'
+    gymLaunchWorkout(d)
+  })
+  es.addEventListener('gym-error', e => {
+    es.close(); state.eventSource = null
+    const d = JSON.parse(e.data)
+    toast('Gym error: ' + d.error, 'error')
+    gymShowPanel('picker')
+  })
+  es.onerror = () => {}
+})
+
+// ── Launch workout view ────────────────────────────────────
+function gymLaunchWorkout(data) {
+  gymState.findings = data.findings || []
+  gymState.files    = data.files    || []
+  gymState.feedbacks = {}
+  gymState.annotations = []
+
+  gymShowPanel('workout')
+  document.getElementById('gym-skip-btn').classList.remove('hidden')
+  document.getElementById('gym-subtitle').textContent = data.tenantName || ''
+
+  // Update folder button label with doc count
+  const folderLabel = document.getElementById('gym-folder-btn-label')
+  if (folderLabel) folderLabel.textContent = `${gymState.files.length} doc${gymState.files.length !== 1 ? 's' : ''}`
+
+  renderGymFindingCards()
+  gymUpdateReviewStatus()
+
+  // Load first PDF
+  const firstPDF = gymState.files.find(f => f.isPDF)
+  if (firstPDF) gymLoadDoc(firstPDF.index)
+  else document.getElementById('gym-pdf-hint').textContent = 'No PDF files in this folder'
+}
+
+// ── Finding cards ──────────────────────────────────────────
+function renderGymFindingCards() {
+  const scroll = document.getElementById('gym-findings-scroll')
+  const count  = document.getElementById('gym-findings-count')
+  count.textContent = gymState.findings.length + ' finding' + (gymState.findings.length !== 1 ? 's' : '')
+
+  if (gymState.findings.length === 0) {
+    scroll.innerHTML = '<p style="font-size:12px;color:#10B981;text-align:center;padding:20px">✅ All Clear — no findings to review!</p>'
+    return
+  }
+
+  scroll.innerHTML = gymState.findings.map((f, i) => {
+    const sevClass = (f.severity || 'low').toLowerCase()
+    const loc      = gymParseEvidenceLocation(f.evidence)
+    const locFile  = gymState.files[loc.docIdx]
+    const locLabel = locFile ? `📄 ${locFile.name.replace(/\.pdf$/i,'')}, p.${loc.pageNum}` : ''
+
+    // Confidence badge colour
+    const confClass = { HIGH: 'conf-high', MEDIUM: 'conf-med', LOW: 'conf-low' }[f.confidence] || 'conf-med'
+
+    // Build "checked & eliminated" list
+    const checked = Array.isArray(f.checkedAndEliminated) && f.checkedAndEliminated.length
+      ? f.checkedAndEliminated.map(c => `<li>${escHtml(c)}</li>`).join('')
+      : ''
+
+    return `
+    <div class="gym-finding-card" id="gym-card-${f.id}" data-fid="${f.id}" data-idx="${i}">
+
+      <!-- Row 1: badges -->
+      <div class="gym-card-top">
+        <span class="gym-card-check">${escHtml(CHECK_LABELS[f.checkType] || f.checkType || 'CHECK')}</span>
+        <span class="sev-pill sev-${sevClass}">${escHtml(f.severity || 'LOW')}</span>
+        ${f.confidence ? `<span class="gym-conf-badge ${confClass}">${escHtml(f.confidence)}</span>` : ''}
+        <button class="gym-jump-btn" data-idx="${i}" title="Jump to document">📄</button>
+      </div>
+
+      <!-- Row 2: Missing Document (matches Excel col 4) -->
+      <div class="gym-excel-row">
+        <span class="gym-excel-label">Missing Document</span>
+        <span class="gym-excel-value gym-card-doc">${escHtml(f.missingDocument || 'N/A')}</span>
+      </div>
+
+      <!-- Row 3: Comment / Status (matches Excel col 5) -->
+      <div class="gym-excel-row">
+        <span class="gym-excel-label">Comment / Status</span>
+        <span class="gym-excel-value clamped gym-clamp-val">${escHtml(f.comment || '')}</span>
+      </div>
+
+      <!-- Row 4: Evidence -->
+      <div class="gym-excel-row">
+        <span class="gym-excel-label">Evidence</span>
+        <span class="gym-excel-value clamped gym-clamp-val gym-evidence-val" id="gym-ev-${f.id}">${escHtml(f.evidence || '')}</span>
+      </div>
+
+      ${locLabel ? `<div class="gym-card-location">${escHtml(locLabel)}</div>` : ''}
+      ${f.howIFoundThis ? `<div class="gym-how-found">💡 ${escHtml(f.howIFoundThis)}</div>` : ''}
+
+      <!-- Verdict actions -->
+      <div class="gym-card-actions">
+        <button class="gym-verdict-btn gym-verdict-correct" data-fid="${f.id}">✅ Correct</button>
+        <button class="gym-verdict-btn gym-verdict-wrong"   data-fid="${f.id}">❌ Wrong</button>
+      </div>
+      <div class="gym-card-comment" id="gym-comment-${f.id}"></div>
+
+      <!-- Expandable: Todd's full reasoning -->
+      <button class="gym-expand-btn" id="gym-exp-${f.id}" data-fid="${f.id}">▼ Show Todd's reasoning</button>
+      <div class="gym-reasoning-block hidden" id="gym-rb-${f.id}">
+        ${f.triggerQuote ? `
+        <div class="gym-rb-section">
+          <div class="gym-rb-label">🔍 What triggered this finding</div>
+          <div class="gym-rb-quote">${escHtml(f.triggerQuote)}</div>
+        </div>` : ''}
+
+        ${f.reasoning ? `
+        <div class="gym-rb-section">
+          <div class="gym-rb-label">🧠 How Todd reasoned through it</div>
+          <div class="gym-rb-text">${escHtml(f.reasoning)}</div>
+        </div>` : ''}
+
+        ${checked ? `
+        <div class="gym-rb-section">
+          <div class="gym-rb-label">✔️ What Todd checked & eliminated</div>
+          <ul class="gym-rb-list">${checked}</ul>
+        </div>` : ''}
+      </div>
+    </div>`
+  }).join('')
+
+  // Wire verdict buttons
+  scroll.querySelectorAll('.gym-verdict-correct').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); gymSetVerdict(btn.dataset.fid, 'correct') })
+  })
+  scroll.querySelectorAll('.gym-verdict-wrong').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); gymOpenFeedbackModal(btn.dataset.fid) })
+  })
+  scroll.querySelectorAll('.gym-jump-btn').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); gymJumpToFinding(parseInt(btn.dataset.idx)) })
+  })
+  // Click any clamped value to expand/collapse it
+  scroll.querySelectorAll('.gym-clamp-val').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation()
+      el.classList.toggle('expanded')
+    })
+  })
+
+  // Expand / collapse reasoning block
+  scroll.querySelectorAll('.gym-expand-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation()
+      const rb       = document.getElementById(`gym-rb-${btn.dataset.fid}`)
+      const expanded = rb.classList.toggle('hidden') === false
+      btn.textContent = expanded ? '▲ Hide reasoning' : '▼ Show Todd\'s reasoning'
+    })
+  })
+  scroll.querySelectorAll('.gym-finding-card').forEach(card => {
+    card.addEventListener('click', () => gymJumpToFinding(parseInt(card.dataset.idx)))
+  })
+}
+
+function gymSetVerdict(findingId, verdict, comment = '') {
+  gymState.feedbacks[findingId] = { verdict, comment }
+  const card = document.getElementById(`gym-card-${findingId}`)
+  if (card) {
+    card.className = 'gym-finding-card verdict-' + verdict
+    card.querySelectorAll('.gym-verdict-btn').forEach(b => b.classList.remove('active'))
+    const activeBtn = card.querySelector(verdict === 'correct' ? '.gym-verdict-correct' : '.gym-verdict-wrong')
+    if (activeBtn) activeBtn.classList.add('active')
+  }
+  const commentEl = document.getElementById(`gym-comment-${findingId}`)
+  if (commentEl) commentEl.textContent = comment ? `"${comment}"` : ''
+  gymUpdateReviewStatus()
+}
+
+function gymUpdateReviewStatus() {
+  const total    = gymState.findings.length
+  const reviewed = Object.keys(gymState.feedbacks).length + gymState.annotations.length
+  const el = document.getElementById('gym-review-status')
+  if (el) el.textContent = `${reviewed} of ${total} findings reviewed`
+}
+
+// ── Jump to finding (load relevant doc + page) ─────────────
+function gymJumpToFinding(idx) {
+  const finding = gymState.findings[idx]
+  if (!finding) return
+
+  gymState.activeFindingId = finding.id
+  document.querySelectorAll('.gym-finding-card').forEach(c => c.classList.remove('active'))
+  const card = document.getElementById(`gym-card-${finding.id}`)
+  if (card) {
+    card.classList.add('active')
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }
+
+  const { docIdx, pageNum } = gymParseEvidenceLocation(finding.evidence)
+  if (docIdx !== gymState.currentDocIdx || !gymState.pdfDoc) {
+    gymLoadDoc(docIdx, pageNum)
+  } else {
+    gymGoToPage(pageNum)
+  }
+}
+
+/**
+ * Parse the evidence string to find the best matching PDF file and page number.
+ * Evidence format (from system prompt): "Filename.pdf, Page N, Section: 'text'"
+ * Steps:
+ *   1. Split on ", Page N" → left side is the document reference
+ *   2. Try exact filename match
+ *   3. Try word-overlap scoring against all PDF filenames
+ *   4. Keyword fallback (amendment / guaranty / estoppel / lease)
+ *   5. Default to first PDF
+ */
+function gymParseEvidenceLocation(evidence) {
+  const pdfs = gymState.files.filter(f => f.isPDF)
+  const fallback = { docIdx: pdfs[0]?.index ?? 0, pageNum: 1 }
+  if (!evidence || pdfs.length === 0) return fallback
+
+  // ── Extract page number ────────────────────────────────
+  const pageMatch = evidence.match(/,\s*p(?:age)?\.?\s*(\d+)/i) ||
+                    evidence.match(/page\s+(\d+)/i) ||
+                    evidence.match(/\bp\.?\s*(\d+)\b/i)
+  const pageNum = pageMatch ? parseInt(pageMatch[1]) : 1
+
+  // ── Extract document reference (text before ", Page N") ─
+  const docRef = (evidence.split(/,\s*p(?:age)?\.?\s*\d+/i)[0] || '').trim()
+  const docRefLower = docRef.toLowerCase().replace(/\.pdf$/i, '').replace(/['"]/g, '').trim()
+
+  // ── Step 1: Exact match against file names ─────────────
+  for (const f of pdfs) {
+    const fname = f.name.toLowerCase().replace(/\.pdf$/i, '')
+    if (fname === docRefLower || docRefLower === fname) return { docIdx: f.index, pageNum }
+  }
+
+  // ── Step 2: Substring match (evidence contains filename or vice versa) ──
+  for (const f of pdfs) {
+    const fname = f.name.toLowerCase().replace(/\.pdf$/i, '')
+    if (docRefLower.includes(fname) || fname.includes(docRefLower)) return { docIdx: f.index, pageNum }
+  }
+
+  // ── Step 3: Word-overlap scoring ───────────────────────
+  const stopWords = new Set(['the','and','to','of','a','an','in','for','with','that','this','dated','date','as','by'])
+  const refWords  = docRefLower.split(/[\s,.\-–—()]+/).filter(w => w.length > 2 && !stopWords.has(w))
+  let bestFile  = null
+  let bestScore = 0
+  for (const f of pdfs) {
+    const nameWords = f.name.toLowerCase().split(/[\s,.\-–—()]+/).filter(w => w.length > 2 && !stopWords.has(w))
+    const score = refWords.filter(w => nameWords.some(nw => nw.includes(w) || w.includes(nw))).length
+    if (score > bestScore) { bestScore = score; bestFile = f }
+  }
+  if (bestFile && bestScore >= 1) return { docIdx: bestFile.index, pageNum }
+
+  // ── Step 4: Keyword fallback on full evidence string ────
+  const lower = evidence.toLowerCase()
+  const keywords = [
+    ['amendment', 'amendment'], ['guaranty', 'guaranty'], ['guarantee', 'guaranty'],
+    ['estoppel', 'estoppel'], ['license', 'license'], ['snda', 'snda'],
+    ['exhibit', 'exhibit'], ['lease', 'lease'],
+  ]
+  for (const [kw, match] of keywords) {
+    if (!lower.includes(kw)) continue
+    const hit = pdfs.find(f => f.name.toLowerCase().includes(match))
+    if (hit) return { docIdx: hit.index, pageNum }
+  }
+
+  return { docIdx: pdfs[0].index, pageNum }
+}
+
+// ── Skip to next finding ────────────────────────────────────
+document.getElementById('gym-skip-btn').addEventListener('click', () => {
+  const ids    = gymState.findings.map(f => f.id)
+  const curIdx = ids.indexOf(gymState.activeFindingId)
+  const next   = (curIdx + 1) % ids.length
+  gymJumpToFinding(next)
+})
+
+// ── PDF viewer ─────────────────────────────────────────────
+async function gymLoadDoc(fileIndex, goToPage = 1) {
+  const file = gymState.files[fileIndex]
+  if (!file || !file.isPDF) return
+  gymState.currentDocIdx = fileIndex
+  document.getElementById('gym-pdf-docname').textContent = file.name
+
+  // Keep drawer tile highlight in sync
+  document.querySelectorAll('.gym-doc-tile').forEach(t => {
+    t.classList.toggle('active', parseInt(t.dataset.docidx) === fileIndex)
+  })
+  document.getElementById('gym-pdf-hint').textContent = 'Loading PDF...'
+
+  try {
+    if (typeof pdfjsLib === 'undefined') {
+      document.getElementById('gym-pdf-hint').textContent = 'PDF.js not loaded — try refreshing'
+      return
+    }
+
+    // Use cache — avoid re-fetching a document already loaded this session
+    if (gymState.pdfCache[fileIndex]) {
+      gymState.pdfDoc    = gymState.pdfCache[fileIndex]
+      gymState.totalPages = gymState.pdfDoc.numPages
+    } else {
+      document.getElementById('gym-pdf-pageinfo').textContent = 'Loading...'
+      const loadingTask = pdfjsLib.getDocument(file.url)
+      gymState.pdfDoc   = await loadingTask.promise
+      gymState.totalPages = gymState.pdfDoc.numPages
+      gymState.pdfCache[fileIndex] = gymState.pdfDoc  // store in cache
+    }
+
+    document.getElementById('gym-pdf-prev').disabled = false
+    document.getElementById('gym-pdf-next').disabled = false
+    document.getElementById('gym-pdf-hint').textContent = 'Drag to annotate in "Flag Area" mode'
+    gymGoToPage(Math.min(goToPage, gymState.totalPages))
+  } catch (err) {
+    console.error('[gym PDF]', err)
+    document.getElementById('gym-pdf-hint').textContent = 'Could not load PDF: ' + err.message
+  }
+}
+
+async function gymGoToPage(pageNum) {
+  if (!gymState.pdfDoc) return
+  const total = gymState.totalPages
+  pageNum = Math.max(1, Math.min(pageNum, total))
+  gymState.currentPage = pageNum
+  document.getElementById('gym-pdf-pageinfo').textContent = `${pageNum} / ${total}`
+  document.getElementById('gym-pdf-prev').disabled = pageNum <= 1
+  document.getElementById('gym-pdf-next').disabled = pageNum >= total
+
+  try {
+    const page    = await gymState.pdfDoc.getPage(pageNum)
+    const scale   = 1.4
+    const vp      = page.getViewport({ scale })
+    const canvas  = document.getElementById('gym-pdf-canvas')
+    canvas.width  = vp.width
+    canvas.height = vp.height
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise
+  } catch (err) {
+    console.error('[gym render page]', err)
+  }
+}
+
+document.getElementById('gym-pdf-prev').addEventListener('click', () => gymGoToPage(gymState.currentPage - 1))
+document.getElementById('gym-pdf-next').addEventListener('click', () => gymGoToPage(gymState.currentPage + 1))
+
+// ── Document folder browser ────────────────────────────────
+function gymRenderDocDrawer() {
+  const inner = document.getElementById('gym-doc-drawer-inner')
+  if (!inner) return
+
+  // Count findings per doc for the badge
+  const findingsByDoc = {}
+  gymState.findings.forEach(f => {
+    const loc = gymParseEvidenceLocation(f.evidence)
+    findingsByDoc[loc.docIdx] = (findingsByDoc[loc.docIdx] || 0) + 1
+  })
+
+  inner.innerHTML = gymState.files.map((file, i) => {
+    const ext = file.name.split('.').pop().toLowerCase()
+    const icon = ext === 'pdf' ? '📄' : (ext === 'docx' || ext === 'doc') ? '📝' : '📃'
+    const isActive = i === gymState.currentDocIdx
+    const fCount = findingsByDoc[i] || 0
+    const shortName = file.name.replace(/\.[^.]+$/, '') // strip extension
+    return `
+    <div class="gym-doc-tile${isActive ? ' active' : ''}" data-docidx="${i}" title="${escHtml(file.name)}">
+      <span class="gym-doc-tile-icon">${icon}</span>
+      <span class="gym-doc-tile-name">${escHtml(shortName)}</span>
+      ${fCount ? `<span class="gym-doc-tile-findings">⚠️ ${fCount}</span>` : ''}
+    </div>`
+  }).join('')
+
+  inner.querySelectorAll('.gym-doc-tile').forEach(tile => {
+    tile.addEventListener('click', () => {
+      const idx = parseInt(tile.dataset.docidx)
+      gymLoadDoc(idx, 1)
+      gymToggleDocDrawer(false)
+
+      // Find the first finding that belongs to this doc and jump to it
+      const firstFindingIdx = gymState.findings.findIndex(f => {
+        const loc = gymParseEvidenceLocation(f.evidence)
+        return loc.docIdx === idx
+      })
+      if (firstFindingIdx !== -1) {
+        // Highlight the card in the left panel
+        const card = document.getElementById(`gym-card-${gymState.findings[firstFindingIdx].id}`)
+        if (card) {
+          card.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          // Brief flash so it's obvious which one was selected
+          card.classList.add('gym-card-flash')
+          setTimeout(() => card.classList.remove('gym-card-flash'), 1200)
+        }
+      }
+    })
+  })
+}
+
+function gymToggleDocDrawer(forceOpen) {
+  const drawer = document.getElementById('gym-doc-drawer')
+  const btn    = document.getElementById('gym-folder-btn')
+  const isOpen = !drawer.classList.contains('hidden')
+  const open   = forceOpen !== undefined ? forceOpen : !isOpen
+
+  if (open) {
+    drawer.classList.remove('hidden')
+    btn.classList.add('open')
+    gymRenderDocDrawer()
+    // Scroll active tile into view
+    setTimeout(() => {
+      const active = drawer.querySelector('.gym-doc-tile.active')
+      if (active) active.scrollIntoView({ inline: 'center', behavior: 'smooth' })
+    }, 50)
+  } else {
+    drawer.classList.add('hidden')
+    btn.classList.remove('open')
+  }
+}
+
+document.getElementById('gym-folder-btn').addEventListener('click', () => gymToggleDocDrawer())
+
+// Close drawer when clicking outside
+document.addEventListener('click', e => {
+  const drawer = document.getElementById('gym-doc-drawer')
+  const btn    = document.getElementById('gym-folder-btn')
+  if (!drawer || drawer.classList.contains('hidden')) return
+  if (!drawer.contains(e.target) && !btn.contains(e.target)) {
+    gymToggleDocDrawer(false)
+  }
+})
+
+document.getElementById('gym-findings-scroll')?.addEventListener('wheel', () => {}, { passive: true })
+
+// ── Annotation (Flag Area) ─────────────────────────────────
+let _gymAnnoDrawing = false
+let _gymAnnoX0 = 0, _gymAnnoY0 = 0
+
+document.getElementById('gym-flag-btn').addEventListener('click', () => {
+  gymState.annotating = !gymState.annotating
+  const btn     = document.getElementById('gym-flag-btn')
+  const overlay = document.getElementById('gym-anno-overlay')
+  if (gymState.annotating) {
+    btn.classList.add('active')
+    btn.textContent = '✏️ Cancel Flag'
+    overlay.classList.add('active')
+    toast('Drag a rectangle over the area Todd missed', 'info')
+  } else {
+    btn.classList.remove('active')
+    btn.textContent = '✏️ Flag Area'
+    overlay.classList.remove('active')
+    document.getElementById('gym-anno-rect').classList.add('hidden')
+  }
+})
+
+const _gymOverlay = document.getElementById('gym-anno-overlay')
+const _gymRect    = document.getElementById('gym-anno-rect')
+
+_gymOverlay.addEventListener('mousedown', e => {
+  if (!gymState.annotating) return
+  _gymAnnoDrawing = true
+  const r = _gymOverlay.getBoundingClientRect()
+  _gymAnnoX0 = e.clientX - r.left
+  _gymAnnoY0 = e.clientY - r.top
+  _gymRect.style.left   = _gymAnnoX0 + 'px'
+  _gymRect.style.top    = _gymAnnoY0 + 'px'
+  _gymRect.style.width  = '0px'
+  _gymRect.style.height = '0px'
+  _gymRect.classList.remove('hidden')
+})
+
+_gymOverlay.addEventListener('mousemove', e => {
+  if (!_gymAnnoDrawing) return
+  const r = _gymOverlay.getBoundingClientRect()
+  const x = e.clientX - r.left
+  const y = e.clientY - r.top
+  const left   = Math.min(_gymAnnoX0, x)
+  const top    = Math.min(_gymAnnoY0, y)
+  const width  = Math.abs(x - _gymAnnoX0)
+  const height = Math.abs(y - _gymAnnoY0)
+  _gymRect.style.left   = left   + 'px'
+  _gymRect.style.top    = top    + 'px'
+  _gymRect.style.width  = width  + 'px'
+  _gymRect.style.height = height + 'px'
+})
+
+function _gymFinishDraw(clientX, clientY) {
+  if (!_gymAnnoDrawing) return
+  _gymAnnoDrawing = false
+
+  const overlayRect = _gymOverlay.getBoundingClientRect()
+  const x1 = Math.min(_gymAnnoX0, clientX - overlayRect.left)
+  const y1 = Math.min(_gymAnnoY0, clientY - overlayRect.top)
+  const w  = Math.abs((clientX - overlayRect.left) - _gymAnnoX0)
+  const h  = Math.abs((clientY - overlayRect.top)  - _gymAnnoY0)
+  if (w < 10 || h < 10) { _gymRect.classList.add('hidden'); return }
+
+  // ── Crop the exact area from the live PDF canvas ──────────
+  // The overlay covers the full viewport (inset:0). The canvas sits inside
+  // the viewport with padding, so we need to map overlay coords → canvas pixels.
+  const canvasEl   = document.getElementById('gym-pdf-canvas')
+  const viewportEl = document.getElementById('gym-pdf-viewport')
+  const vr = viewportEl.getBoundingClientRect()
+  const cr = canvasEl.getBoundingClientRect()
+
+  // Canvas offset relative to the viewport (= overlay) top-left
+  const canvasOffX = cr.left - vr.left
+  const canvasOffY = cr.top  - vr.top
+
+  // Scale: canvas internal pixel size vs its displayed CSS pixel size
+  const scaleX = canvasEl.width  / cr.width
+  const scaleY = canvasEl.height / cr.height
+
+  // Map rectangle from overlay-space → canvas internal pixel space
+  const cx = Math.max(0, (x1 - canvasOffX) * scaleX)
+  const cy = Math.max(0, (y1 - canvasOffY) * scaleY)
+  const cw = Math.min(w * scaleX, canvasEl.width  - cx)
+  const ch = Math.min(h * scaleY, canvasEl.height - cy)
+
+  // Crop to an offscreen canvas and export as PNG data URL
+  let cropDataUrl = null
+  if (cw > 4 && ch > 4) {
+    const offscreen = document.createElement('canvas')
+    offscreen.width  = Math.round(cw)
+    offscreen.height = Math.round(ch)
+    const ctx = offscreen.getContext('2d')
+    ctx.drawImage(canvasEl, cx, cy, cw, ch, 0, 0, offscreen.width, offscreen.height)
+    cropDataUrl = offscreen.toDataURL('image/png')
+  }
+
+  // Normalised coords (0–1) so they're resolution-independent
+  const normRect = {
+    x: cx / canvasEl.width,
+    y: cy / canvasEl.height,
+    w: cw / canvasEl.width,
+    h: ch / canvasEl.height,
+  }
+
+  const file = gymState.files[gymState.currentDocIdx]
+  gymState.pendingAnno = {
+    docIdx:      gymState.currentDocIdx,
+    docName:     file ? file.name : 'Unknown',
+    pageNum:     gymState.currentPage,
+    cropDataUrl,   // base64 PNG of the flagged area
+    normRect,      // normalised position on the page (for AI context)
+  }
+
+  // Turn off annotation mode
+  gymState.annotating = false
+  document.getElementById('gym-flag-btn').classList.remove('active')
+  document.getElementById('gym-flag-btn').textContent = '✏️ Flag Area'
+  _gymOverlay.classList.remove('active')
+  _gymRect.classList.add('hidden')
+
+  // Show crop preview in the modal before user adds comment
+  const preview = document.getElementById('gym-anno-crop-preview')
+  if (preview) {
+    if (cropDataUrl) {
+      preview.src = cropDataUrl
+      preview.classList.remove('hidden')
+    } else {
+      preview.classList.add('hidden')
+    }
+  }
+
+  document.getElementById('gym-annotation-comment').value = ''
+  document.getElementById('gym-annotation-modal').classList.remove('hidden')
+}
+
+_gymOverlay.addEventListener('mouseup', e => _gymFinishDraw(e.clientX, e.clientY))
+
+// fallback: release outside overlay still finishes the draw
+window.addEventListener('mouseup', e => {
+  if (_gymAnnoDrawing) _gymFinishDraw(e.clientX, e.clientY)
+})
+
+document.getElementById('gym-annotation-cancel').addEventListener('click', () => {
+  document.getElementById('gym-annotation-modal').classList.add('hidden')
+  gymState.pendingAnno = null
+})
+
+document.getElementById('gym-annotation-submit').addEventListener('click', () => {
+  const comment = document.getElementById('gym-annotation-comment').value.trim()
+  if (!comment) { toast('Please describe what Todd missed', 'error'); return }
+  const ann = { ...gymState.pendingAnno, comment }
+  gymState.annotations.push(ann)
+  document.getElementById('gym-annotation-modal').classList.add('hidden')
+  gymState.pendingAnno = null
+  renderGymAnnotations()
+  gymUpdateReviewStatus()
+  toast('Annotation added ✓', 'success')
+})
+
+function renderGymAnnotations() {
+  const scroll = document.getElementById('gym-annotations-scroll')
+  const empty  = document.getElementById('gym-anno-empty')
+  if (gymState.annotations.length === 0) {
+    if (empty) empty.classList.remove('hidden')
+    scroll.querySelectorAll('.gym-annotation-card').forEach(c => c.remove())
+    return
+  }
+  if (empty) empty.classList.add('hidden')
+  scroll.innerHTML = gymState.annotations.map((ann, i) => `
+    <div class="gym-annotation-card">
+      <div class="gym-annotation-card-header">
+        <span class="gym-annotation-doc">📌 ${escHtml(ann.docName)}, p.${ann.pageNum}</span>
+        <button class="gym-annotation-del" data-idx="${i}">✕</button>
+      </div>
+      ${ann.cropDataUrl ? `<img class="gym-anno-thumb" src="${ann.cropDataUrl}" alt="flagged area" title="Click to enlarge">` : ''}
+      <div class="gym-annotation-comment">${escHtml(ann.comment)}</div>
+    </div>
+  `).join('')
+
+  // Click thumbnail to enlarge
+  scroll.querySelectorAll('.gym-anno-thumb').forEach(img => {
+    img.addEventListener('click', () => {
+      const overlay = document.createElement('div')
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:zoom-out'
+      const big = document.createElement('img')
+      big.src = img.src
+      big.style.cssText = 'max-width:90vw;max-height:90vh;border:2px solid #10B981;border-radius:4px;box-shadow:0 0 40px rgba(0,0,0,0.8)'
+      overlay.appendChild(big)
+      overlay.addEventListener('click', () => overlay.remove())
+      document.body.appendChild(overlay)
+    })
+  })
+  scroll.querySelectorAll('.gym-annotation-del').forEach(btn => {
+    btn.addEventListener('click', () => {
+      gymState.annotations.splice(parseInt(btn.dataset.idx), 1)
+      renderGymAnnotations()
+      gymUpdateReviewStatus()
+    })
+  })
+}
+
+// ── Feedback modal (wrong verdict) ────────────────────────
+let _gymPendingFeedbackId = null
+
+function gymOpenFeedbackModal(findingId) {
+  _gymPendingFeedbackId = findingId
+  const finding = gymState.findings.find(f => f.id === findingId)
+  document.getElementById('gym-feedback-finding-text').textContent =
+    finding ? `[${finding.checkType}] ${finding.missingDocument}` : ''
+  document.getElementById('gym-feedback-comment').value = ''
+  document.getElementById('gym-feedback-modal').classList.remove('hidden')
+}
+
+document.getElementById('gym-feedback-cancel').addEventListener('click', () => {
+  document.getElementById('gym-feedback-modal').classList.add('hidden')
+  _gymPendingFeedbackId = null
+})
+
+document.getElementById('gym-feedback-submit').addEventListener('click', () => {
+  const comment = document.getElementById('gym-feedback-comment').value.trim()
+  if (_gymPendingFeedbackId) gymSetVerdict(_gymPendingFeedbackId, 'wrong', comment)
+  document.getElementById('gym-feedback-modal').classList.add('hidden')
+  _gymPendingFeedbackId = null
+})
+
+document.getElementById('gym-feedback-partial').addEventListener('click', () => {
+  const comment = document.getElementById('gym-feedback-comment').value.trim()
+  if (_gymPendingFeedbackId) gymSetVerdict(_gymPendingFeedbackId, 'partial', comment)
+  document.getElementById('gym-feedback-modal').classList.add('hidden')
+  _gymPendingFeedbackId = null
+})
+
+// ── Analysis Workout submit ────────────────────────────────
+document.getElementById('gym-submit-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('gym-submit-btn')
+  btn.disabled = true
+  btn.textContent = '⏳ Compiling...'
+
+  const feedbacksArr = Object.entries(gymState.feedbacks).map(([findingId, fb]) => ({
+    findingId,
+    verdict: fb.verdict,
+    comment: fb.comment || ''
+  }))
+
+  try {
+    const res = await fetch('/api/gym/workout-feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId:   state.sessionId,
+        tenantId:    document.getElementById('gym-select').value,
+        findings:    gymState.findings,
+        feedbacks:   feedbacksArr,
+        annotations: gymState.annotations
+      })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Workout failed')
+    gymShowResults(data)
+  } catch (err) {
+    toast('Workout error: ' + err.message, 'error')
+    btn.disabled = false
+    btn.textContent = '💪 Analysis Workout'
+  }
+})
+
+function gymShowResults(data) {
+  gymShowPanel('results')
+  document.getElementById('gym-skip-btn').classList.add('hidden')
+  document.getElementById('gym-subtitle').textContent = 'Workout complete!'
+
+  // Draw victory Todd on result canvas
+  const rc = document.getElementById('gym-result-canvas')
+  if (rc) drawFrame(rc, VIC1)
+
+  document.getElementById('gym-results-summary').textContent = data.summary || 'Workout feedback compiled.'
+
+  const list     = document.getElementById('gym-learnings-list')
+  const learnings = data.learnings || []
+
+  if (learnings.length === 0) {
+    list.innerHTML = '<p class="gym-no-learnings">✅ No new learnings — all findings were correct! Todd is already nailing it.</p>'
+    return
+  }
+
+  list.innerHTML = learnings.map(l => `
+    <div class="gym-learning-card" id="gym-learning-${l.id}">
+      <div class="gym-learning-top">
+        <span class="gym-learning-check">${l.checkType}</span>
+        <span class="gym-learning-confidence confidence-${l.confidence}">${l.confidence}</span>
+      </div>
+      <div class="gym-learning-suggestion">${escHtml(l.suggestion)}</div>
+      <div class="gym-learning-rationale">${escHtml(l.rationale || '')}</div>
+      <div class="gym-learning-activate">
+        <label class="gym-activate-toggle">
+          <input type="checkbox" class="gym-activate-cb" data-id="${l.id}" />
+          <span class="gym-activate-slider"></span>
+        </label>
+        <span class="gym-activate-label">Activate for Beefed-Up Todd</span>
+      </div>
+    </div>
+  `).join('')
+
+  list.querySelectorAll('.gym-activate-cb').forEach(cb => {
+    cb.addEventListener('change', async () => {
+      try {
+        await fetch(`/api/gym/learnings/${cb.dataset.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ active: cb.checked })
+        })
+        toast(cb.checked ? '✅ Learning activated' : 'Learning deactivated', 'success')
+      } catch {
+        toast('Could not save — try again', 'error')
+        cb.checked = !cb.checked
+      }
+    })
+  })
+}
+
+document.getElementById('gym-results-back').addEventListener('click', () => {
+  gymOpenPicker()
+})
