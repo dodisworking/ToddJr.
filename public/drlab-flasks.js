@@ -207,6 +207,40 @@
     img.src = url
   }
 
+  function removeBrewLayer(jar) {
+    jar.querySelector('.drlab-brew-layer')?.remove()
+  }
+
+  /** 8-bit “brewing” bubbles rising from the OpenAI test flask neck */
+  function ensureOpenAiBrew(jar) {
+    if (jar.querySelector('.drlab-brew-layer')) return
+    const layer = document.createElement('div')
+    layer.className = 'drlab-brew-layer'
+    layer.setAttribute('aria-hidden', 'true')
+    const bits = [
+      { i: 0, bx: -10, dx: -1, dur: 1.65, sz: 'sm' },
+      { i: 1, bx: -4, dx: 3, dur: 1.9, sz: 'md' },
+      { i: 2, bx: 2, dx: -2, dur: 2.1, sz: 'sm' },
+      { i: 3, bx: 8, dx: 2, dur: 1.75, sz: 'md' },
+      { i: 4, bx: -7, dx: 4, dur: 2.25, sz: 'fizz' },
+      { i: 5, bx: 5, dx: -3, dur: 1.95, sz: 'fizz' },
+      { i: 6, bx: 0, dx: 0, dur: 1.55, sz: 'lg' },
+      { i: 7, bx: -12, dx: 2, dur: 2.05, sz: 'sm' },
+      { i: 8, bx: 11, dx: -1, dur: 1.8, sz: 'fizz' },
+      { i: 9, bx: -1, dx: 5, dur: 2.15, sz: 'md' }
+    ]
+    for (const b of bits) {
+      const el = document.createElement('span')
+      el.className = 'drlab-brew-bit drlab-brew-bit--' + b.sz
+      el.style.setProperty('--i', String(b.i))
+      el.style.setProperty('--bx', b.bx + 'px')
+      el.style.setProperty('--dx', b.dx + 'px')
+      el.style.setProperty('--brew-dur', b.dur + 's')
+      layer.appendChild(el)
+    }
+    jar.appendChild(layer)
+  }
+
   function refreshAllLabFlasks() {
     document.querySelectorAll('.drlab-tube').forEach(tube => {
       const jar = tube.querySelector('.drlab-tube-jar')
@@ -215,6 +249,8 @@
       const s = settingsForMode(mode)
       setJarImg(jar, buildFlaskSvg(s))
       tube.style.setProperty('--drlab-flask-glow', glowHexForSettings(s))
+      if (mode === 'openai') ensureOpenAiBrew(jar)
+      else removeBrewLayer(jar)
     })
     document.documentElement.style.removeProperty('--drlab-flask-glow')
   }

@@ -728,6 +728,7 @@ function goTo(screenName) {
   if (screenName === 'upload') {
     refreshApiDevPanel()
     void verifyToddBackendOrProbe()
+    void maybeAutoOpenOpenAiKeyModal()
   }
 }
 
@@ -993,8 +994,7 @@ async function startUpload(files) {
     return
   }
 
-  // Fresh session ID for each hunt
-  state.sessionId = crypto.randomUUID()
+  // Keep state.sessionId across upload so an OpenAI key saved on the home screen (same tab) stays on this session.
 
   // Show progress
   setProgress(0, `Uploading ${allFiles.length} files...`)
@@ -1018,6 +1018,7 @@ async function startUpload(files) {
     renderTenantCards(result.tenants)
     showOversizeWarnings(result.tenants)
     showHuntCta()
+    void refreshOpenAiKeyPanel()
 
     // Single tenant mode: auto-run on the only/first tenant
     if (state.singleTenantMode && result.tenants.length > 0) {
@@ -2081,6 +2082,14 @@ async function startSideBySide(tenantId = null, mode = 'juice', _probeRetry = fa
       )
       return
     }
+    if (!data.tenantCount) {
+      toast(
+        data.note ||
+          'Upload at least one tenant folder before running this screen (your API key can be saved first on the home screen).',
+        'error'
+      )
+      return
+    }
     check = data
   } catch (e) {
     const origin = getApiOrigin() || '(unknown)'
@@ -2093,7 +2102,10 @@ async function startSideBySide(tenantId = null, mode = 'juice', _probeRetry = fa
 
   if (mode === 'openaitest') {
     if (!check.openAIConfigured) {
-      toast('OpenAI Test Lab needs OPENAI_API_KEY on the server (Railway Variables or .env).', 'error')
+      toast(
+        'OpenAI Test Lab needs a key: add openai.key (one line) or OPENAI_API_KEY in .env and restart, or paste on the home screen (local Todd only). Then upload folders.',
+        'error'
+      )
       return
     }
   } else if (!check.anthropicConfigured) {
@@ -2104,7 +2116,10 @@ async function startSideBySide(tenantId = null, mode = 'juice', _probeRetry = fa
     return
   }
   if (mode === 'modelcompare' && !check.openAIConfigured) {
-    toast('OPENAI_API_KEY not set — only the Claude column will run. Add the key on Railway or .env for OpenAI.', 'info')
+    toast(
+      'No OpenAI key — only Claude runs. Add openai.key or OPENAI_API_KEY, or paste on the home screen (local server only).',
+      'info'
+    )
   }
 
   applySbsModeUi(cfg)
@@ -2138,7 +2153,7 @@ async function startSideBySide(tenantId = null, mode = 'juice', _probeRetry = fa
     state.eventSource = null
     toast(
       mode === 'openaitest'
-        ? 'OpenAI test did not start. Confirm folders are loaded, OPENAI_API_KEY is set, and the server is running.'
+        ? 'OpenAI test did not start. Confirm folders are uploaded, an OpenAI key is set (server or pasted session key), and the API URL is correct.'
         : 'Comparison did not start. Use your server URL, load tenant folders on the Hunt screen first, and ensure ANTHROPIC_API_KEY is set.',
       'error'
     )
@@ -4596,6 +4611,200 @@ function refreshApiDevPanel() {
   input.value = stored || (window.location.protocol !== 'file:' ? window.location.origin : '')
 }
 
+const OPENAI_MODAL_ONCE_KEY = 'toddOpenAiKeyModalOnce'
+
+async function postLocalOpenAiKey(openaiApiKey) {
+  const r = await fetch(sameOriginApi('/api/local-openai-key'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ openaiApiKey })
+  })
+  const rawText = await r.text()
+  let data = {}
+  try {
+    data = rawText.trim() ? JSON.parse(rawText) : {}
+  } catch {
+    data = {}
+  }
+  return { r, rawText, data }
+}
+
+/**
+ * Save pasted OpenAI key to local Todd server (RAM). Returns { ok, message? }.
+ */
+async function saveOpenAiKeyFromPaste(secret) {
+  const v = String(secret || '').trim()
+  if (!v) {
+    return { ok: false, message: 'Paste your sk-… key first.' }
+  }
+  try {
+    const { r, rawText, data } = await postLocalOpenAiKey(v)
+    if (!r.ok || !data.ok) {
+      const hint =
+        data.error ||
+        (rawText && rawText.length < 200 && !rawText.trim().startsWith('{')
+          ? rawText.trim().slice(0, 120)
+          : null)
+      return {
+        ok: false,
+        message:
+          hint ||
+          `Save failed (HTTP ${r.status}). Run npm start on this Mac and open that URL, or use openai.key / .env.`
+      }
+    }
+    toast('OpenAI key saved on this Todd server (memory until restart).', 'success')
+    return { ok: true }
+  } catch (err) {
+    return {
+      ok: false,
+      message:
+        'Save failed: ' +
+        (err?.message || err) +
+        ' — API base must point at your local Todd server.'
+    }
+  }
+}
+
+function openOpenAiKeyModal() {
+  const m = document.getElementById('openai-key-modal')
+  const main = document.getElementById('openai-key-input')
+  const mi = document.getElementById('openai-key-modal-input')
+  if (mi && main) mi.value = main.value
+  m?.classList.remove('hidden')
+  window.setTimeout(() => mi?.focus(), 80)
+}
+
+function closeOpenAiKeyModal() {
+  document.getElementById('openai-key-modal')?.classList.add('hidden')
+}
+
+/** First time you land on Home each tab session, if the server has no OpenAI key yet, show the popup. */
+async function maybeAutoOpenOpenAiKeyModal() {
+  if (typeof sessionStorage === 'undefined') return
+  if (sessionStorage.getItem(OPENAI_MODAL_ONCE_KEY) === '1') return
+  if (window.location.protocol === 'file:') return
+  try {
+    const hr = await fetch(sameOriginApi('/api/health'), { cache: 'no-store' })
+    const h = await hr.json().catch(() => ({}))
+    if (h.openaiConfigured === true) return
+    sessionStorage.setItem(OPENAI_MODAL_ONCE_KEY, '1')
+    openOpenAiKeyModal()
+  } catch {
+    /* API not reachable — skip auto popup */
+  }
+}
+
+async function refreshOpenAiKeyPanel() {
+  const status = document.getElementById('openai-key-status')
+  const input = document.getElementById('openai-key-input')
+  if (!status) return
+  let health = {}
+  try {
+    const hr = await fetch(sameOriginApi('/api/health'), { cache: 'no-store' })
+    const t = await hr.text()
+    try {
+      health = t.trim() ? JSON.parse(t) : {}
+    } catch {
+      health = {}
+    }
+  } catch {
+    status.textContent =
+      'Could not reach /api/health — set “Local / API connection” to your Todd server URL (e.g. http://127.0.0.1:3456).'
+    if (input) input.placeholder = 'sk-…'
+    return
+  }
+
+  const src = health.openaiKeySource || 'none'
+  const ok = health.openaiConfigured === true
+
+  if (ok) {
+    const bySource = {
+      env: 'OpenAI is ready: using OPENAI_API_KEY from the server (.env or Railway).',
+      'openai.key': 'OpenAI is ready: using the openai.key file in the project folder.',
+      localhost_memory:
+        'OpenAI is ready: using the key you pasted below (kept in server memory until you restart npm start).',
+      none: 'OpenAI key detected.'
+    }
+    status.textContent = bySource[src] || 'OpenAI key is configured on this server.'
+    if (input) {
+      input.placeholder =
+        src === 'localhost_memory' ? 'Paste a new key to replace…' : 'Optional: paste to store in memory (localhost)…'
+    }
+  } else {
+    status.textContent =
+      'No key on this server yet. Easiest: in the Todd project folder create a file named openai.key with one line (your sk-… key), save, restart npm start. Or paste below — only works when the API runs on your Mac (127.0.0.1).'
+    if (input) input.placeholder = 'sk-…'
+  }
+}
+
+document.getElementById('openai-key-panel')?.addEventListener('toggle', e => {
+  if (e.target?.id === 'openai-key-panel' && e.target.open) void refreshOpenAiKeyPanel()
+})
+
+document.getElementById('btn-openai-key-popup')?.addEventListener('click', () => openOpenAiKeyModal())
+
+document.getElementById('openai-key-modal-cancel')?.addEventListener('click', () => closeOpenAiKeyModal())
+
+document.getElementById('openai-key-modal')?.addEventListener('click', e => {
+  if (e.target?.id === 'openai-key-modal') closeOpenAiKeyModal()
+})
+
+document.getElementById('openai-key-modal-save')?.addEventListener('click', async () => {
+  const mi = document.getElementById('openai-key-modal-input')
+  const main = document.getElementById('openai-key-input')
+  const v = mi?.value?.trim() || ''
+  const res = await saveOpenAiKeyFromPaste(v)
+  if (!res.ok) {
+    toast(res.message, v ? 'error' : 'info')
+    return
+  }
+  if (mi) mi.value = ''
+  if (main) main.value = ''
+  closeOpenAiKeyModal()
+  void refreshOpenAiKeyPanel()
+})
+
+document.getElementById('openai-key-save')?.addEventListener('click', async () => {
+  const input = document.getElementById('openai-key-input')
+  const v = input?.value?.trim() || ''
+  if (!v) {
+    toast('Paste your sk-… key, or create openai.key in the project folder (one line) and restart the server.', 'info')
+    return
+  }
+  const res = await saveOpenAiKeyFromPaste(v)
+  if (!res.ok) {
+    toast(res.message, 'error')
+    return
+  }
+  if (input) input.value = ''
+  void refreshOpenAiKeyPanel()
+})
+
+document.getElementById('openai-key-clear')?.addEventListener('click', async () => {
+  try {
+    const r = await fetch(sameOriginApi('/api/local-openai-key'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ openaiApiKey: '' })
+    })
+    const rawText = await r.text()
+    let data = {}
+    try {
+      data = rawText.trim() ? JSON.parse(rawText) : {}
+    } catch {
+      data = {}
+    }
+    if (!r.ok || !data.ok) {
+      toast(data.error || `Clear failed (${r.status})`, 'error')
+      return
+    }
+    toast('Pasted key cleared from server memory (openai.key and .env unchanged).', 'success')
+    void refreshOpenAiKeyPanel()
+  } catch (err) {
+    toast('Clear failed: ' + (err?.message || err), 'error')
+  }
+})
+
 document.getElementById('api-dev-save')?.addEventListener('click', () => {
   const input = document.getElementById('api-dev-input')
   const v = input?.value?.trim()
@@ -4640,4 +4849,6 @@ document.getElementById('api-dev-test')?.addEventListener('click', async () => {
 })
 
 refreshApiDevPanel()
+void refreshOpenAiKeyPanel()
 void verifyToddBackendOrProbe()
+if (state.screen === 'upload') void maybeAutoOpenOpenAiKeyModal()

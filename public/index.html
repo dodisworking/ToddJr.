@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=42" />
+  <link rel="stylesheet" href="style.css?v=44" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
@@ -49,6 +49,9 @@
           </button>
           <button type="button" class="btn-prey-zip" id="btn-browse-zip" aria-label="Choose a ZIP archive">ZIP PACK</button>
           <p class="prey-drag-hint">or drag folders / a ZIP onto this box</p>
+          <button type="button" class="btn-openai-key-pill" id="btn-openai-key-popup" title="Paste your OpenAI sk-… key">
+            🔑 OpenAI key
+          </button>
           <button type="button" id="btn-browse" class="prey-folder-proxy" tabindex="-1" aria-hidden="true">folder</button>
           <input type="file" id="file-input" webkitdirectory multiple style="display:none" />
           <input type="file" id="file-input-zip" accept=".zip,.ZIP" style="display:none" />
@@ -78,6 +81,39 @@
             <strong>Railway API, browser on this Mac:</strong> paste your app root
             <code>https://YOUR-SERVICE.up.railway.app</code> (no trailing slash) → Save. In
             <strong>Railway → Variables</strong> on that service add <code>LOCAL_DEV_CORS=1</code> and redeploy so localhost is allowed by CORS.
+          </p>
+        </div>
+      </details>
+
+      <details class="api-dev-panel" id="openai-key-panel">
+        <summary class="api-dev-summary">OpenAI key (local — easiest options)</summary>
+        <div class="api-dev-body">
+          <p class="api-dev-hint">
+            <strong>Easiest:</strong> in the same folder as <code>package.json</code>, create a file named <code>openai.key</code> with your <code>sk-…</code> on one line, then restart <code>npm start</code>. No browser needed.
+          </p>
+          <p class="api-dev-line" id="openai-key-status">
+            Or paste below — only when Todd runs on <strong>this Mac</strong> (the server sees 127.0.0.1). For Railway, set <code>OPENAI_API_KEY</code> in Variables instead.
+          </p>
+          <label class="api-dev-label">
+            Paste key (optional)
+            <textarea
+              id="openai-key-input"
+              class="api-dev-input api-dev-textarea"
+              rows="2"
+              spellcheck="false"
+              autocomplete="off"
+              placeholder="sk-…"
+            ></textarea>
+          </label>
+          <div class="api-dev-actions">
+            <button type="button" class="api-dev-btn" id="openai-key-save">Save on server (RAM)</button>
+            <button type="button" class="api-dev-btn api-dev-btn-ghost" id="openai-key-clear">Clear pasted key</button>
+          </div>
+          <p class="api-dev-railway">
+            Pasted keys live in server memory until you restart Node. They are not written to disk. <code>openai.key</code> and <code>.env</code> are more permanent for local dev.
+          </p>
+          <p class="api-dev-hint">
+            <strong>TextEdit / file:</strong> the file must be named <code>.env</code> (with the dot — not <code>.nv</code>), in the <strong>same folder as <code>package.json</code></strong>, with one line: <code>OPENAI_API_KEY=sk-your-key-here</code> then restart <code>npm start</code>.
           </p>
         </div>
       </details>
@@ -678,8 +714,34 @@
     </div>
   </div>
 
-  <script src="drlab-flasks.js?v=2"></script>
+  <!-- OpenAI key popup (home + auto once if server has no key) -->
+  <div id="openai-key-modal" class="gym-modal hidden" aria-modal="true" role="dialog" aria-labelledby="openai-key-modal-title">
+    <div class="gym-modal-box openai-key-modal-box">
+      <h4 class="gym-modal-title" id="openai-key-modal-title">🔑 OpenAI API key</h4>
+      <p class="gym-modal-hint">
+        Paste your <code>sk-…</code> secret below and click <strong>Save</strong>. It stays in this Todd server’s memory until you stop <code>npm start</code>.
+      </p>
+      <label class="openai-key-modal-label" for="openai-key-modal-input">Secret key</label>
+      <textarea
+        id="openai-key-modal-input"
+        class="api-dev-input api-dev-textarea openai-key-modal-textarea"
+        rows="4"
+        spellcheck="false"
+        autocomplete="off"
+        placeholder="sk-…"
+      ></textarea>
+      <div class="gym-modal-actions">
+        <button type="button" id="openai-key-modal-cancel" class="gym-modal-btn gym-modal-cancel">Close</button>
+        <button type="button" id="openai-key-modal-save" class="gym-modal-btn gym-modal-submit-ann">Save on server</button>
+      </div>
+      <p class="gym-modal-hint openai-key-modal-filehint">
+        <strong>File instead:</strong> In the Todd project folder (next to <code>package.json</code>), save a plain-text file named <code>.env</code> with one line <code>OPENAI_API_KEY=sk-…</code>, or create <code>openai.key</code> with only the key on one line — then restart the server.
+      </p>
+    </div>
+  </div>
+
+  <script src="drlab-flasks.js?v=3"></script>
   <script src="sbs-boxing.js?v=1"></script>
-  <script src="app.js?v=56"></script>
+  <script src="app.js?v=57"></script>
 </body>
 </html>

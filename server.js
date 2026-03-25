@@ -9,7 +9,12 @@ import { fileURLToPath } from 'url'
 import fs from 'fs'
 import unzipper from 'unzipper'
 import { analyzeTenant, gymAnalyzeTenant, beefedUpAnalyzeTenant } from './lib/analyzer.js'
-import { openaiAnalyzeTenant } from './lib/openai.js'
+import {
+  openaiAnalyzeTenant,
+  setLocalOpenAiKey,
+  isOpenAiKeyConfigured,
+  getServerOpenAiKeyHint
+} from './lib/openai.js'
 import { generateReport } from './lib/reporter.js'
 import { mountIsaacRoutes } from './lib/isaac-routes.js'
 
@@ -32,6 +37,29 @@ function isCheapMode(req) {
 
 // In-memory session store: sessionId -> SessionData
 const sessions = new Map()
+
+/** Per-session pasted key wins; else openai.key / localhost memory / .env (see lib/openai.js). */
+function resolveSessionOpenAi(session) {
+  const pasted = session?.openaiApiKeyOverride?.trim()
+  if (pasted) return { configured: true, optionKey: pasted }
+  if (isOpenAiKeyConfigured()) return { configured: true, optionKey: null }
+  return { configured: false, optionKey: null }
+}
+
+const ALLOW_LOCAL_OPENAI_BODY = ['1', 'true', 'yes'].includes(
+  String(process.env.ALLOW_LOCAL_OPENAI_KEY || '').toLowerCase()
+)
+
+function requestAllowsLocalOpenAiKey(req) {
+  if (ALLOW_LOCAL_OPENAI_BODY) return true
+  const addr = String(req.socket?.remoteAddress || '')
+  const xff = String(req.headers['x-forwarded-for'] || '')
+    .split(',')[0]
+    .trim()
+  return [addr, xff].filter(Boolean).some(a =>
+    /^(::1|127\.0\.0\.1|::ffff:127\.0\.0\.1)$/i.test(a)
+  )
+}
 
 const UPLOADS_DIR = path.join(__dirname, 'uploads')
 const OUTPUTS_DIR = path.join(__dirname, 'outputs')
@@ -109,6 +137,42 @@ if (CORS_ORIGIN_FIXED || LOCAL_DEV_CORS) {
   }
 }
 
+// Localhost only: paste OpenAI key into UI — no session, no upload (RAM until restart).
+app.post('/api/local-openai-key', (req, res) => {
+  try {
+    if (!requestAllowsLocalOpenAiKey(req)) {
+      return res.status(403).json({
+        ok: false,
+        error:
+          'This save only works when the Todd server runs on your Mac (request from 127.0.0.1). If the API is on Railway, add OPENAI_API_KEY there. Optional: ALLOW_LOCAL_OPENAI_KEY=1 on the server to allow this from any client (dev only).'
+      })
+    }
+    if (!Object.prototype.hasOwnProperty.call(req.body || {}, 'openaiApiKey')) {
+      return res.status(400).json({ ok: false, error: 'Missing openaiApiKey (use "" to clear).' })
+    }
+    const key = String(req.body.openaiApiKey ?? '').trim()
+    if (!key) {
+      setLocalOpenAiKey('')
+      return res.json({
+        ok: true,
+        openaiConfigured: isOpenAiKeyConfigured(),
+        openaiKeySource: getServerOpenAiKeyHint()
+      })
+    }
+    if (key.length < 20 || !key.startsWith('sk-')) {
+      return res.status(400).json({ ok: false, error: 'Key should start with sk-.' })
+    }
+    setLocalOpenAiKey(key)
+    return res.json({
+      ok: true,
+      openaiConfigured: true,
+      openaiKeySource: getServerOpenAiKeyHint()
+    })
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message || 'Server error' })
+  }
+})
+
 // Isaac / Teacher Excel — registered immediately after body parser (must not depend on later server.js code)
 mountIsaacRoutes(app, { outputsDir: OUTPUTS_DIR, parseFolderName })
 
@@ -118,7 +182,8 @@ app.get('/api/health', (_req, res) => {
     service: 'todd-jr',
     isaacRoutes: true,
     claudeConfigured: !!process.env.ANTHROPIC_API_KEY?.trim(),
-    openaiConfigured: !!process.env.OPENAI_API_KEY?.trim(),
+    openaiConfigured: isOpenAiKeyConfigured(),
+    openaiKeySource: getServerOpenAiKeyHint(),
     localDevCors: LOCAL_DEV_CORS,
     /** Set by Railway on deploy — compare to GitHub to confirm the live build */
     gitCommit: process.env.RAILWAY_GIT_COMMIT_SHA || null,
@@ -168,15 +233,76 @@ app.get('/api/session/check', (req, res) => {
     })
   }
   const tenantCount = Array.isArray(session.tenants) ? session.tenants.length : 0
+  const openSession = !!session.openaiApiKeyOverride?.trim()
+  const openAIConfigured = openSession || isOpenAiKeyConfigured()
+  const openAIKeySource = openSession ? 'session' : getServerOpenAiKeyHint()
   if (tenantCount === 0) {
-    return res.status(400).json({ ok: false, error: 'Session has no tenants — upload folders again.' })
+    return res.json({
+      ok: true,
+      tenantCount: 0,
+      anthropicConfigured: !!process.env.ANTHROPIC_API_KEY?.trim(),
+      openAIConfigured,
+      openAIKeySource,
+      note: 'Upload tenant folders to run hunts and OpenAI Test Lab.'
+    })
   }
   res.json({
     ok: true,
     tenantCount,
     anthropicConfigured: !!process.env.ANTHROPIC_API_KEY?.trim(),
-    openAIConfigured: !!process.env.OPENAI_API_KEY?.trim()
+    openAIConfigured,
+    openAIKeySource
   })
+})
+
+function ensureSessionShell(sessionId) {
+  let session = sessions.get(sessionId)
+  if (session) return session
+  session = {
+    tenants: [],
+    findings: new Map(),
+    uploadDir: path.join(UPLOADS_DIR, sessionId),
+    createdAt: Date.now(),
+    openaiApiKeyOverride: null
+  }
+  sessions.set(sessionId, session)
+  try {
+    fs.mkdirSync(session.uploadDir, { recursive: true })
+  } catch {
+    /* non-fatal — multer also mkdirs on upload */
+  }
+  return session
+}
+
+// POST /api/session/openai-key — store per-session OpenAI key (RAM only; never logged)
+app.post('/api/session/openai-key', (req, res) => {
+  try {
+    const sessionId = String(req.body?.sessionId || '').trim()
+    if (!sessionId) return res.status(400).json({ ok: false, error: 'Missing sessionId' })
+    const session = ensureSessionShell(sessionId)
+    if (!Object.prototype.hasOwnProperty.call(req.body || {}, 'openaiApiKey')) {
+      return res.status(400).json({ ok: false, error: 'Missing openaiApiKey (use empty string to clear).' })
+    }
+    const key = String(req.body.openaiApiKey ?? '').trim()
+    if (!key) {
+      session.openaiApiKeyOverride = null
+      return res.json({
+        ok: true,
+        openAIConfigured: isOpenAiKeyConfigured(),
+        openAIKeySource: getServerOpenAiKeyHint()
+      })
+    }
+    if (key.length < 20 || !key.startsWith('sk-')) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Key should start with sk- and resemble a valid OpenAI API secret.'
+      })
+    }
+    session.openaiApiKeyOverride = key
+    return res.json({ ok: true, openAIConfigured: true, openAIKeySource: 'session' })
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message || 'Server error' })
+  }
 })
 
 // ═══════════════════════════════════════════════════════════
@@ -373,11 +499,13 @@ app.post('/api/upload', upload.array('files', 10000), async (req, res) => {
       return String(a.suite).localeCompare(String(b.suite), undefined, { numeric: true })
     })
 
+    const prevSession = sessions.get(sessionId)
     sessions.set(sessionId, {
       tenants,
       findings: new Map(),
       uploadDir: path.join(UPLOADS_DIR, sessionId),
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      openaiApiKeyOverride: prevSession?.openaiApiKeyOverride || null
     })
 
     res.json({
@@ -853,7 +981,7 @@ app.get('/api/modelcompare', async (req, res) => {
   let aborted = false
   req.on('close', () => { aborted = true; clearInterval(heartbeat) })
 
-  const openaiKey = process.env.OPENAI_API_KEY?.trim()
+  const { configured: openaiConfigured, optionKey: openaiOptionKey } = resolveSessionOpenAi(session)
 
   function skippedOpenaiResult(reason) {
     return {
@@ -865,7 +993,7 @@ app.get('/api/modelcompare', async (req, res) => {
           checkType: 'SPECIAL_AGREEMENT',
           severity: 'LOW',
           missingDocument: 'OpenAI API',
-          comment: `Not run — ${reason}. Add OPENAI_API_KEY (Railway Variables or .env) and restart.`,
+          comment: `Not run — ${reason}. Add OPENAI_API_KEY on the server or paste a key on the home screen (OpenAI API key → Save to session).`,
           evidence: ''
         }
       ],
@@ -880,19 +1008,19 @@ app.get('/api/modelcompare', async (req, res) => {
       tenantName: tenant.tenantName,
       activeLearningCount: 0,
       mode: 'modelcompare',
-      openaiEnabled: !!openaiKey
+      openaiEnabled: openaiConfigured
     })
-    const cheapOpts = { cheapMode: isCheapMode(req) }
+    const cheapOpts = { cheapMode: isCheapMode(req), openaiApiKey: openaiOptionKey || undefined }
 
     if (!aborted) {
       emit('sbs-progress', { side: 'raw', percent: 1, message: 'Claude API engaged' })
-      if (openaiKey) {
+      if (openaiConfigured) {
         emit('sbs-progress', { side: 'beefed', percent: 1, message: 'OpenAI API engaged' })
       } else {
         emit('sbs-progress', {
           side: 'beefed',
           percent: 5,
-          message: 'OpenAI skipped — OPENAI_API_KEY not set (Claude runs on the left)'
+          message: 'OpenAI skipped — no key (set OPENAI_API_KEY or paste key on home → OpenAI API key)'
         })
       }
     }
@@ -908,8 +1036,8 @@ app.get('/api/modelcompare', async (req, res) => {
     }, cheapOpts)
 
     const openaiPromise = (async () => {
-      if (!openaiKey) {
-        return skippedOpenaiResult('OPENAI_API_KEY not set on server')
+      if (!openaiConfigured) {
+        return skippedOpenaiResult('No OpenAI key (server env or pasted session key)')
       }
       try {
         return await openaiAnalyzeTenant(tenant, tenant.files, ({ percent, message }) => {
@@ -993,16 +1121,20 @@ app.get('/api/openaitest', async (req, res) => {
   let aborted = false
   req.on('close', () => { aborted = true; clearInterval(heartbeat) })
 
-  const openaiKey = process.env.OPENAI_API_KEY?.trim()
+  const { configured: openaiConfigured, optionKey: openaiOptionKey } = resolveSessionOpenAi(session)
 
   try {
     emit('sbs-start', {
       tenantName: tenant.tenantName,
       activeLearningCount: 0,
       mode: 'openaitest',
-      openaiEnabled: !!openaiKey
+      openaiEnabled: openaiConfigured
     })
-    const cheapOpts = { cheapMode: isCheapMode(req), includeDebug: true }
+    const cheapOpts = {
+      cheapMode: isCheapMode(req),
+      includeDebug: true,
+      openaiApiKey: openaiOptionKey || undefined
+    }
 
     if (!aborted) {
       emit('sbs-progress', {
@@ -1010,25 +1142,25 @@ app.get('/api/openaitest', async (req, res) => {
         percent: 0,
         message: 'OpenAI-only test — Claude not called'
       })
-      if (openaiKey) {
+      if (openaiConfigured) {
         emit('sbs-progress', { side: 'beefed', percent: 2, message: 'OpenAI: starting…' })
       } else {
         emit('sbs-progress', {
           side: 'beefed',
           percent: 100,
-          message: 'OPENAI_API_KEY not set — cannot run OpenAI Test Lab'
+          message: 'No OpenAI key — set OPENAI_API_KEY or paste key (home → OpenAI API key)'
         })
       }
     }
 
-    if (!openaiKey) {
+    if (!openaiConfigured) {
       if (!aborted) {
         emit('sbs-complete', {
           tenantName: tenant.tenantName,
           mode: 'openaitest',
           openaiTestMeta: {
             api: 'OpenAI Responses API',
-            error: 'OPENAI_API_KEY missing on server'
+            error: 'No OpenAI key — set OPENAI_API_KEY on the server or paste a key under OpenAI API key on the home screen.'
           },
           raw: {
             tenantNameInDocuments: tenant.tenantName,
@@ -1045,7 +1177,8 @@ app.get('/api/openaitest', async (req, res) => {
                 checkType: 'SPECIAL_AGREEMENT',
                 severity: 'LOW',
                 missingDocument: 'OpenAI API',
-                comment: 'Set OPENAI_API_KEY in Railway Variables or .env and restart the server.',
+                comment:
+                  'Set OPENAI_API_KEY on the server, or on the home screen open “OpenAI API key (optional)”, paste your key, and Save to session.',
                 evidence: ''
               }
             ],
@@ -1382,10 +1515,12 @@ if (!process.env.ANTHROPIC_API_KEY?.trim()) {
    Railway: Service → Variables, add ANTHROPIC_API_KEY, then redeploy.
 `)
 }
-if (!process.env.OPENAI_API_KEY?.trim()) {
+if (!isOpenAiKeyConfigured()) {
   console.warn(`
-ℹ️  OPENAI_API_KEY is missing — "Claude vs OpenAI" test mode will error until this is set.
-   Local: add OPENAI_API_KEY to .env (gitignored). Railway: Service → Variables, then redeploy.
+ℹ️  No OpenAI key yet — OpenAI Test Lab / API Battle need one.
+   Easiest local: create openai.key in this folder (one line, your sk-… key) and restart.
+   Or: OPENAI_API_KEY in .env, or paste in the browser (home screen) when Todd runs on this machine.
+   Railway: Service → Variables → OPENAI_API_KEY, then redeploy.
 `)
 }
 

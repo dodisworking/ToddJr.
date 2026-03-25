@@ -1,4 +1,5 @@
 .env
+openai.key
 node_modules/
 uploads/
 outputs/

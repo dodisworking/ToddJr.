@@ -142,6 +142,13 @@ html, body {
   background: var(--bg);
   color: var(--text);
 }
+textarea.api-dev-textarea {
+  resize: vertical;
+  min-height: 52px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.35;
+}
 .api-dev-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1742,6 +1749,96 @@ input:checked + .toggle-slider:before { transform:translateX(22px); background:#
   --flask-low: #047857;
   --drlab-flask-glow: #34d399;
 }
+
+/* OpenAI test flask — subtle wobble + 8-bit “brew” bubbles */
+.drlab-tube-openai .drlab-tube-jar {
+  position: relative;
+  overflow: visible;
+}
+.drlab-tube-openai .drlab-tube-jar img.drlab-flask-sprite {
+  animation: drlab-openai-flask-wobble 2.5s ease-in-out infinite;
+}
+.drlab-tube-openai.selected .drlab-tube-jar img.drlab-flask-sprite {
+  animation:
+    drlab-flask-dropglow 1s ease-in-out infinite alternate,
+    drlab-openai-flask-wobble 2.5s ease-in-out infinite;
+}
+
+@keyframes drlab-openai-flask-wobble {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+.drlab-brew-layer {
+  position: absolute;
+  left: 50%;
+  bottom: 62%;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+  z-index: 2;
+  image-rendering: pixelated;
+}
+
+.drlab-brew-bit {
+  position: absolute;
+  left: var(--bx, 0);
+  bottom: 0;
+  background: #ecfdf5;
+  box-shadow: 0 0 0 1px #065f46;
+  opacity: 0;
+  animation-name: drlab-brew-pop;
+  animation-duration: var(--brew-dur, 1.9s);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-delay: calc(var(--i, 0) * 0.18s);
+}
+
+.drlab-brew-bit--sm {
+  width: 4px;
+  height: 4px;
+}
+.drlab-brew-bit--md {
+  width: 6px;
+  height: 6px;
+  background: #d1fae5;
+  box-shadow: 0 0 0 1px #047857, 2px 0 0 #fff;
+}
+.drlab-brew-bit--lg {
+  width: 8px;
+  height: 8px;
+  background: #a7f3d0;
+  box-shadow: 0 0 0 1px #065f46, 4px 0 0 #ecfdf5, 4px 0 0 1px #047857;
+}
+.drlab-brew-bit--fizz {
+  width: 3px;
+  height: 3px;
+  background: #fff;
+  box-shadow: 0 0 0 1px #34d399;
+}
+
+@keyframes drlab-brew-pop {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.95;
+  }
+  70% {
+    opacity: 0.75;
+  }
+  100% {
+    transform: translate3d(var(--dx, 0), -52px, 0) scale(0.35);
+    opacity: 0;
+  }
+}
+
 .drlab-initiate {
   margin-top: 4px;
   min-width: 280px;
@@ -4192,6 +4289,46 @@ a.isaac-download-link:hover { text-decoration: underline; color: #c4b5fd; }
 .gym-modal-submit  { background: #EF4444; border: none; color: #fff; }
 .gym-modal-partial { background: #D97706; border: none; color: #fff; }
 .gym-modal-submit-ann { background: #10B981; border: none; color: #fff; }
+
+/* OpenAI key pill + modal */
+.btn-openai-key-pill {
+  display: block;
+  margin: 12px auto 0;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  background: rgba(16, 185, 129, 0.12);
+  color: #6ee7b7;
+  cursor: pointer;
+}
+.btn-openai-key-pill:hover {
+  border-color: #34d399;
+  background: rgba(16, 185, 129, 0.2);
+  color: #a7f3d0;
+}
+.openai-key-modal-box {
+  max-width: 440px;
+}
+.openai-key-modal-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text2);
+  margin-bottom: 6px;
+}
+.openai-key-modal-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+}
+.openai-key-modal-filehint {
+  margin-top: 12px;
+  font-size: 11px;
+  line-height: 1.45;
+}
 .gym-modal-cancel:hover  { opacity: 0.8; }
 .gym-modal-submit:hover  { opacity: 0.85; }
 .gym-modal-partial:hover { opacity: 0.85; }
