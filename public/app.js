@@ -691,6 +691,25 @@ function updateGlobalNav() {
   btnGlobalBack.title = busyCook ? 'Not available while cooking' : 'Go back one screen'
 }
 
+function updateSbsOpenAiLoadingChrome(show) {
+  const loadEl = document.getElementById('sbs-loading')
+  const brewWrap = document.getElementById('sbs-openai-brew-wrap')
+  const mirror = document.getElementById('sbs-boxer-mirror-right')
+  const jar = document.getElementById('sbs-openai-brew-jar')
+  const vs = document.getElementById('sbs-vs-pixel')
+  if (!loadEl) return
+  const isOai = !!show && state.sbsMode === 'openaitest'
+  loadEl.classList.toggle('sbs-loading--openaitest', isOai)
+  if (brewWrap) brewWrap.classList.toggle('hidden', !isOai)
+  if (mirror) mirror.classList.toggle('hidden', isOai)
+  if (vs) vs.textContent = isOai ? '⚗' : 'VS'
+  if (isOai) {
+    window.__paintOpenAiFlaskInto?.(jar)
+  } else {
+    window.__clearOpenAiFlaskPaint?.(jar)
+  }
+}
+
 function setSideBySideLoadingVisible(show) {
   const el = document.getElementById('sbs-loading')
   const screen = document.getElementById('screen-sidebyside')
@@ -698,8 +717,10 @@ function setSideBySideLoadingVisible(show) {
   if (show) {
     el.classList.remove('hidden')
     screen.classList.add('sbs-pixel-battle')
+    updateSbsOpenAiLoadingChrome(true)
     window.SbsArena?.start()
   } else {
+    updateSbsOpenAiLoadingChrome(false)
     el.classList.add('hidden')
     screen.classList.remove('sbs-pixel-battle')
     window.SbsArena?.stop()
@@ -2195,7 +2216,15 @@ async function startSideBySide(tenantId = null, mode = 'juice', _probeRetry = fa
     window.clearTimeout(sbsFailTimer)
     es.close()
     state.eventSource = null
-    const d = JSON.parse(e.data)
+    let d
+    try {
+      d = JSON.parse(e.data)
+    } catch (parseErr) {
+      console.error('[sbs-complete] JSON parse failed', parseErr, e.data?.slice?.(0, 400))
+      toast('Could not read results from the server. Try again or check server logs.', 'error')
+      setSideBySideLoadingVisible(false)
+      return
+    }
     // Store for verdict call
     state.sbsLastResult = d
     setSideBySideLoadingVisible(false)
@@ -2205,7 +2234,12 @@ async function startSideBySide(tenantId = null, mode = 'juice', _probeRetry = fa
     document.getElementById('sbs-verdict-report').classList.add('hidden')
     document.getElementById('btn-run-verdict').disabled = false
     document.getElementById('btn-run-verdict').textContent = '🔬 Generate Verdict'
-    renderSideBySide(d)
+    try {
+      renderSideBySide(d)
+    } catch (renderErr) {
+      console.error('[sbs-complete] render failed', renderErr)
+      toast('Results arrived but the UI failed to display them. See the browser console.', 'error')
+    }
   })
 
   es.addEventListener('sbs-error', e => {
@@ -2213,8 +2247,13 @@ async function startSideBySide(tenantId = null, mode = 'juice', _probeRetry = fa
     window.clearTimeout(sbsFailTimer)
     es.close()
     state.eventSource = null
-    const d = JSON.parse(e.data)
-    toast('Side-by-side error: ' + (d.error || 'Unknown'), 'error')
+    let errMsg = 'Unknown'
+    try {
+      errMsg = e.data ? (JSON.parse(e.data).error || 'Unknown') : 'Unknown'
+    } catch {
+      errMsg = typeof e.data === 'string' && e.data ? e.data : 'Unknown'
+    }
+    toast('Side-by-side error: ' + errMsg, 'error')
     setSideBySideLoadingVisible(false)
     goTo(state.sbsSourceScreen || 'loading')
   })
@@ -2307,8 +2346,16 @@ function renderSideBySide(data) {
   // Learnings bar
   const bar = document.getElementById('sbs-learnings-bar')
   if (mode === 'openaitest') {
-    bar.textContent =
-      '🤖 OpenAI Test Lab — left: pipeline summary; below: full debug JSON. Right: OpenAI findings. Claude is not called.'
+    if (beefed.openaiSkipped) {
+      bar.textContent =
+        '⚠️ No OpenAI key — paste a key on the home screen or set OPENAI_API_KEY / openai.key on the server, then re-run.'
+    } else if (beefed.openaiError || (data.openaiTestMeta && data.openaiTestMeta.error)) {
+      bar.textContent =
+        '⚠️ OpenAI Test Lab reported an error — see findings and pipeline summary; check server logs if needed.'
+    } else {
+      bar.textContent =
+        '🤖 OpenAI Test Lab — left: pipeline summary; below: full debug JSON. Right: OpenAI findings. Claude is not called.'
+    }
     bar.classList.remove('hidden')
   } else if (mode === 'modelcompare') {
     if (beefed.openaiSkipped) {

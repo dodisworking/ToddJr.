@@ -1112,8 +1112,81 @@ app.get('/api/openaitest', async (req, res) => {
   })
   res.flushHeaders()
 
+  const cloneJsonSafe = (obj, label) => {
+    if (obj == null) return null
+    try {
+      return JSON.parse(JSON.stringify(obj))
+    } catch (e) {
+      console.warn(`[openaitest] ${label} not JSON-cloneable`, e)
+      return {
+        note: `${label} omitted (not serializable)`,
+        error: String(e?.message || e)
+      }
+    }
+  }
   const emit = (event, data) => {
-    try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`) } catch {}
+    let payload
+    try {
+      payload = JSON.stringify(data)
+    } catch (serErr) {
+      console.error('[openaitest] SSE JSON.stringify failed', event, serErr)
+      if (event === 'sbs-complete') {
+        const fallback = {
+          tenantName: tenant.tenantName,
+          mode: 'openaitest',
+          openaiTestMeta: {
+            api: 'OpenAI Responses API',
+            error: 'Server could not serialize the full result for SSE.',
+            stringifyMessage: String(serErr?.message || serErr)
+          },
+          raw: {
+            tenantNameInDocuments: tenant.tenantName,
+            findings: [],
+            allClear: true,
+            openaiTestPlaceholder: true
+          },
+          beefed: {
+            tenantNameInDocuments: tenant.tenantName,
+            mostRecentDocumentDate: null,
+            leaseExpirationDate: null,
+            findings: [
+              {
+                checkType: 'REFERENCED_DOC',
+                severity: 'HIGH',
+                missingDocument: 'Stream serialization error',
+                comment: String(serErr?.message || serErr),
+                evidence: 'Check server logs for [openaitest] SSE JSON.stringify failed'
+              }
+            ],
+            allClear: false,
+            openaiError: true
+          },
+          activeLearnings: []
+        }
+        try {
+          res.write(`event: sbs-complete\ndata: ${JSON.stringify(fallback)}\n\n`)
+        } catch (e2) {
+          console.error('[openaitest] fallback sbs-complete failed', e2)
+          try {
+            res.write(
+              `event: sbs-error\ndata: ${JSON.stringify({ error: 'Results could not be sent over the stream' })}\n\n`
+            )
+          } catch {}
+        }
+      } else {
+        try {
+          res.write(
+            `event: sbs-error\ndata: ${JSON.stringify({ error: 'Server stream encoding failed' })}\n\n`
+          )
+        } catch {}
+      }
+      return
+    }
+    try {
+      res.write(`event: ${event}\ndata: ${payload}\n\n`)
+    } catch (writeErr) {
+      console.error('[openaitest] SSE write failed', event, writeErr)
+    }
   }
   const heartbeat = setInterval(() => {
     try { res.write(': ping\n\n') } catch { clearInterval(heartbeat) }
@@ -1200,12 +1273,14 @@ app.get('/api/openaitest', async (req, res) => {
 
       const meta = openaiResult._openaiDebug
       delete openaiResult._openaiDebug
+      const openaiTestMeta =
+        meta == null ? { note: 'Debug metadata missing' } : cloneJsonSafe(meta, 'Pipeline metadata') || { note: 'Debug metadata missing' }
 
       if (!aborted) {
         emit('sbs-complete', {
           tenantName: tenant.tenantName,
           mode: 'openaitest',
-          openaiTestMeta: meta || { note: 'Debug metadata missing' },
+          openaiTestMeta,
           raw: {
             tenantNameInDocuments: tenant.tenantName,
             findings: [],
@@ -1219,7 +1294,41 @@ app.get('/api/openaitest', async (req, res) => {
     }
   } catch (err) {
     console.error('[openaitest]', err)
-    if (!aborted) emit('sbs-error', { error: err.message })
+    if (!aborted) {
+      const msg = err?.message != null ? String(err.message) : String(err)
+      emit('sbs-complete', {
+        tenantName: tenant.tenantName,
+        mode: 'openaitest',
+        openaiTestMeta: {
+          api: 'OpenAI Responses API',
+          error: msg
+        },
+        raw: {
+          tenantNameInDocuments: tenant.tenantName,
+          findings: [],
+          allClear: true,
+          openaiTestPlaceholder: true
+        },
+        beefed: {
+          tenantNameInDocuments: tenant.tenantName,
+          mostRecentDocumentDate: null,
+          leaseExpirationDate: null,
+          findings: [
+            {
+              checkType: 'REFERENCED_DOC',
+              severity: 'HIGH',
+              missingDocument: 'OpenAI Test Lab run failed',
+              comment: msg,
+              evidence:
+                'See server logs [openaitest]. Confirm API key, model access, and PDF size limits.'
+            }
+          ],
+          allClear: false,
+          openaiError: true
+        },
+        activeLearnings: []
+      })
+    }
   } finally {
     clearInterval(heartbeat)
     res.end()
