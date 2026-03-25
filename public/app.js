@@ -601,7 +601,25 @@ function updateGlobalNav() {
   btnGlobalBack.title = busyCook ? 'Not available while cooking' : 'Go back one screen'
 }
 
+function setSideBySideLoadingVisible(show) {
+  const el = document.getElementById('sbs-loading')
+  const screen = document.getElementById('screen-sidebyside')
+  if (!el || !screen) return
+  if (show) {
+    el.classList.remove('hidden')
+    screen.classList.add('sbs-pixel-battle')
+    window.SbsArena?.start()
+  } else {
+    el.classList.add('hidden')
+    screen.classList.remove('sbs-pixel-battle')
+    window.SbsArena?.stop()
+  }
+}
+
 function goTo(screenName) {
+  if (state.screen === 'sidebyside' && screenName !== 'sidebyside') {
+    setSideBySideLoadingVisible(false)
+  }
   Object.values(screens).forEach(s => s.classList.remove('active'))
   screens[screenName].classList.add('active')
   state.screen = screenName
@@ -1975,7 +1993,7 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
   goTo('sidebyside')
   document.getElementById('sbs-subtitle').textContent =
     `Connected — ${check.tenantCount} tenant(s) in session · starting live stream…`
-  document.getElementById('sbs-loading').classList.remove('hidden')
+  setSideBySideLoadingVisible(true)
   document.getElementById('sbs-results').classList.add('hidden')
   document.getElementById('sbs-raw-fill').style.width    = '0%'
   document.getElementById('sbs-beefed-fill').style.width = '0%'
@@ -2003,7 +2021,7 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
       'Comparison did not start. Use your server URL, load tenant folders on the Hunt screen first, and ensure ANTHROPIC_API_KEY is set.',
       'error'
     )
-    document.getElementById('sbs-loading')?.classList.add('hidden')
+    setSideBySideLoadingVisible(false)
     goTo(state.sbsSourceScreen || 'loading')
   }, 15000)
 
@@ -2040,7 +2058,7 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
     const d = JSON.parse(e.data)
     // Store for verdict call
     state.sbsLastResult = d
-    document.getElementById('sbs-loading').classList.add('hidden')
+    setSideBySideLoadingVisible(false)
     document.getElementById('sbs-results').classList.remove('hidden')
     // Reset verdict panel
     document.getElementById('sbs-verdict-cta').classList.remove('hidden')
@@ -2058,7 +2076,7 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
     state.eventSource = null
     const d = JSON.parse(e.data)
     toast('Side-by-side error: ' + (d.error || 'Unknown'), 'error')
-    document.getElementById('sbs-loading')?.classList.add('hidden')
+    setSideBySideLoadingVisible(false)
     goTo(state.sbsSourceScreen || 'loading')
   })
 
@@ -2073,7 +2091,7 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
         'Lost connection to the server before the run started. Reload, confirm folders are loaded, and check the server is running.',
         'error'
       )
-      document.getElementById('sbs-loading')?.classList.add('hidden')
+      setSideBySideLoadingVisible(false)
       goTo(state.sbsSourceScreen || 'loading')
     }, 80)
   })

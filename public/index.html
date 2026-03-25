@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=39" />
+  <link rel="stylesheet" href="style.css?v=40" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
@@ -356,19 +356,37 @@
       <span class="sbs-subtitle" id="sbs-subtitle"></span>
     </div>
 
-    <!-- Loading state -->
+    <!-- Loading state (8-bit arena + boxers while streams run) -->
     <div class="sbs-loading" id="sbs-loading">
-      <div class="sbs-loading-cols">
-        <div class="sbs-loading-col">
-          <div class="sbs-col-badge raw" id="sbs-loading-left-label">RAW TODD</div>
-          <p class="sbs-loading-label" id="sbs-raw-msg">Waiting...</p>
-          <div class="sbs-bar-wrap"><div class="sbs-bar-fill" id="sbs-raw-fill" style="width:0%"></div></div>
-        </div>
-        <div class="sbs-loading-divider">VS</div>
-        <div class="sbs-loading-col">
-          <div class="sbs-col-badge beefed" id="sbs-loading-right-label">BEEFED-UP TODD</div>
-          <p class="sbs-loading-label" id="sbs-beefed-msg">Waiting...</p>
-          <div class="sbs-bar-wrap"><div class="sbs-bar-fill beefed" id="sbs-beefed-fill" style="width:0%"></div></div>
+      <div class="sbs-arena">
+        <div class="sbs-arena-lights" aria-hidden="true"></div>
+        <div class="sbs-arena-canvas">
+          <div class="sbs-arena-rope sbs-arena-rope--back"></div>
+          <div class="sbs-loading-cols sbs-loading-cols--arena">
+            <div class="sbs-loading-col">
+              <div class="sbs-boxer-slot sbs-boxer-slot--left">
+                <canvas id="sbs-boxer-canvas-left" width="64" height="72" class="sbs-boxer-canvas"></canvas>
+              </div>
+              <div class="sbs-col-badge raw" id="sbs-loading-left-label">RAW TODD</div>
+              <p class="sbs-loading-label" id="sbs-raw-msg">Waiting...</p>
+              <div class="sbs-bar-wrap sbs-bar-wrap--pixel"><div class="sbs-bar-fill" id="sbs-raw-fill" style="width:0%"></div></div>
+            </div>
+            <div class="sbs-loading-center">
+              <div class="sbs-vs-pixel" id="sbs-vs-pixel" aria-hidden="true">VS</div>
+            </div>
+            <div class="sbs-loading-col">
+              <div class="sbs-boxer-slot sbs-boxer-slot--right">
+                <div class="sbs-boxer-mirror">
+                  <canvas id="sbs-boxer-canvas-right" width="64" height="72" class="sbs-boxer-canvas"></canvas>
+                </div>
+              </div>
+              <div class="sbs-col-badge beefed" id="sbs-loading-right-label">BEEFED-UP TODD</div>
+              <p class="sbs-loading-label" id="sbs-beefed-msg">Waiting...</p>
+              <div class="sbs-bar-wrap sbs-bar-wrap--pixel"><div class="sbs-bar-fill beefed" id="sbs-beefed-fill" style="width:0%"></div></div>
+            </div>
+          </div>
+          <div class="sbs-arena-rope sbs-arena-rope--front"></div>
+          <div class="sbs-arena-floor" aria-hidden="true"></div>
         </div>
       </div>
     </div>
@@ -619,6 +637,7 @@
   </div>
 
   <script src="drlab-flasks.js?v=1"></script>
-  <script src="app.js?v=51"></script>
+  <script src="sbs-boxing.js?v=1"></script>
+  <script src="app.js?v=52"></script>
 </body>
 </html>
