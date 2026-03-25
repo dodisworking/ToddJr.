@@ -1331,12 +1331,72 @@ function renderJuiceRuleRowHtml(l) {
     </div>`
 }
 
+let juicePendingDelete = null
+
+function openJuiceDeleteConfirm(ids, bodyEl, tenant, kind) {
+  juicePendingDelete = { ids, bodyEl }
+  const kindLine = kind === 'dr-todd' ? 'DR TODD EXTRACT' : 'GYM REPORT'
+  const msg = document.getElementById('juice-del-modal-msg')
+  if (msg) {
+    msg.textContent =
+      `SCRAP THIS WHOLE BATCH?\n\n` +
+      `${String(tenant || 'RULES').slice(0, 80)}\n` +
+      `${kindLine}\n\n` +
+      `${ids.length} RULE${ids.length !== 1 ? 'S' : ''} — GONE 4EVER`
+  }
+  document.getElementById('juice-delete-confirm-modal')?.classList.remove('hidden')
+}
+
+function closeJuiceDeleteConfirm() {
+  document.getElementById('juice-delete-confirm-modal')?.classList.add('hidden')
+  juicePendingDelete = null
+}
+
+document.getElementById('juice-del-cancel')?.addEventListener('click', () => closeJuiceDeleteConfirm())
+document.getElementById('juice-delete-confirm-modal')?.addEventListener('click', (e) => {
+  if (e.target.id === 'juice-delete-confirm-modal') closeJuiceDeleteConfirm()
+})
+document.getElementById('juice-del-yes')?.addEventListener('click', async () => {
+  const pending = juicePendingDelete
+  if (!pending?.ids?.length) {
+    closeJuiceDeleteConfirm()
+    return
+  }
+  const { ids, bodyEl } = pending
+  closeJuiceDeleteConfirm()
+  try {
+    for (const id of ids) {
+      const res = await fetch(`/api/gym/learnings/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('delete failed')
+    }
+    toast('SCRAPPED ✓', 'success')
+    await juiceRefreshModalAfterChange(bodyEl)
+    await prefetchLearningsCount()
+    refreshHuntJarSprite()
+    await refreshJuiceHomePanel()
+  } catch {
+    toast('DELETE FAILED', 'error')
+    const body = document.getElementById('juice-learnings-body')
+    if (body) await juiceRefreshModalAfterChange(body)
+  }
+})
+
 let juiceLearningsBodyDelegated = false
 function ensureJuiceLearningsDelegation() {
   const body = document.getElementById('juice-learnings-body')
   if (!body || juiceLearningsBodyDelegated) return
   juiceLearningsBodyDelegated = true
   body.addEventListener('click', async (e) => {
+    const delBtn = e.target.closest('.juice-8bit-delete')
+    if (delBtn) {
+      e.preventDefault()
+      e.stopPropagation()
+      const ids = (delBtn.dataset.ids || '').split(',').map(s => s.trim()).filter(Boolean)
+      const tenant = delBtn.getAttribute('data-tenant') || ''
+      const kind = delBtn.getAttribute('data-kind') || ''
+      openJuiceDeleteConfirm(ids, body, tenant, kind)
+      return
+    }
     const expand = e.target.closest('.juice-8bit-expand')
     if (expand) {
       const group = expand.closest('[data-juice-group]')
@@ -1413,6 +1473,7 @@ function renderJuiceLearningsListInto(container, learnings) {
     const masterChecked = allActive ? 'checked' : ''
     return `
     <section class="juice-8bit-group" data-juice-group data-rule-count="${n}">
+      <button type="button" class="juice-8bit-delete" data-ids="${ids}" data-tenant="${escHtml(g.tenant)}" data-kind="${g.kind === 'dr-todd' ? 'dr-todd' : 'gym'}" title="Delete this whole batch">✕</button>
       <div class="juice-8bit-group-bar">
         <div class="juice-8bit-group-info">
           <span class="juice-8bit-badge ${badgeClass}">${badgeText}</span>

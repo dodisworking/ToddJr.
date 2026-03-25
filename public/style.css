@@ -3036,11 +3036,133 @@ a.isaac-download-link:hover { text-decoration: underline; color: #c4b5fd; }
   gap: 14px;
 }
 .juice-8bit-group {
+  position: relative;
   border: 3px solid #1e3a5f;
   border-radius: 6px;
   background: #080f1a;
   box-shadow: 0 4px 0 #020617, inset 0 1px 0 rgba(96, 165, 250, 0.06);
   overflow: hidden;
+}
+.juice-8bit-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 5;
+  width: 32px;
+  height: 28px;
+  padding: 0;
+  margin: 0;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  line-height: 1;
+  color: #fecaca;
+  background: #450a0a;
+  border: 3px solid #ef4444;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s, transform 0.1s, filter 0.1s;
+  box-shadow: 0 2px 0 #7f1d1d, inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  image-rendering: pixelated;
+}
+.juice-8bit-group:hover .juice-8bit-delete {
+  opacity: 1;
+  pointer-events: auto;
+}
+.juice-8bit-delete:hover {
+  filter: brightness(1.12);
+  transform: scale(1.05);
+}
+.juice-8bit-delete:active {
+  transform: scale(0.98);
+}
+@media (hover: none) {
+  .juice-8bit-delete {
+    opacity: 0.5;
+    pointer-events: auto;
+  }
+  .juice-8bit-group:hover .juice-8bit-delete {
+    opacity: 0.65;
+  }
+}
+
+/* 8-bit confirm — delete Juice batch (above learnings modal) */
+.juice-del-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 600;
+  background: rgba(0, 0, 0, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.juice-del-modal.hidden {
+  display: none !important;
+}
+.juice-del-modal-box {
+  max-width: 400px;
+  width: 100%;
+  padding: 24px 22px;
+  background: linear-gradient(180deg, #1c1917 0%, #0c0a09 100%);
+  border: 4px solid #ef4444;
+  border-radius: 4px;
+  box-shadow:
+    0 0 0 3px #450a0a,
+    0 16px 48px rgba(0, 0, 0, 0.75),
+    inset 0 1px 0 rgba(254, 202, 202, 0.08);
+  text-align: center;
+}
+.juice-del-modal-title {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: #fecaca;
+  margin: 0 0 16px;
+  text-shadow: 0 0 20px rgba(239, 68, 68, 0.45);
+}
+.juice-del-modal-msg {
+  font-family: var(--font-pixel);
+  font-size: 6px;
+  line-height: 1.65;
+  letter-spacing: 0.5px;
+  color: #d6d3d1;
+  margin: 0 0 22px;
+  white-space: pre-line;
+}
+.juice-del-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+.juice-del-btn {
+  font-family: var(--font-pixel);
+  font-size: 6px;
+  letter-spacing: 0.5px;
+  padding: 12px 18px;
+  border-radius: 4px;
+  border: 3px solid;
+  cursor: pointer;
+  image-rendering: pixelated;
+  transition: transform 0.1s, filter 0.1s;
+}
+.juice-del-btn:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.08);
+}
+.juice-del-btn-no {
+  background: #1e293b;
+  border-color: #64748b;
+  color: #e2e8f0;
+  box-shadow: 0 3px 0 #0f172a;
+}
+.juice-del-btn-yes {
+  background: linear-gradient(180deg, #b91c1c, #7f1d1d);
+  border-color: #f87171;
+  color: #fef2f2;
+  box-shadow: 0 3px 0 #450a0a;
 }
 .juice-8bit-group-bar {
   display: flex;
@@ -3049,6 +3171,7 @@ a.isaac-download-link:hover { text-decoration: underline; color: #c4b5fd; }
   justify-content: space-between;
   gap: 12px;
   padding: 12px 14px;
+  padding-right: 48px;
   background: linear-gradient(180deg, #0f172a, #0c1222);
   border-bottom: 2px solid #1e3a5f;
 }
