@@ -18,13 +18,9 @@ const state = {
   drlabMode:        null,
 }
 
-/** Saved from Upload screen — points /api/* at a Todd server (e.g. http://localhost:3001 or Railway). */
-const TODD_API_BASE_STORAGE_KEY = 'toddJrApiBase'
-
 /**
- * Normalize a user-entered API root: origin plus optional path prefix (no trailing slash).
- * Strips a lone trailing `/api` — Todd already serves routes at `/api/...` from site root, so
- * saving `http://host:3456/api` would otherwise double up or confuse proxies.
+ * Normalize API root from a full URL: origin + optional path prefix (no trailing slash).
+ * Strips a lone `/api` suffix — Todd serves `/api/*` from site root.
  */
 function normalizeToddApiBase(input) {
   try {
@@ -40,22 +36,13 @@ function normalizeToddApiBase(input) {
   }
 }
 
-function readStoredApiBase() {
-  const raw = localStorage.getItem(TODD_API_BASE_STORAGE_KEY)?.trim()
-  if (!raw) return ''
-  return normalizeToddApiBase(raw)
-}
-
 /**
- * API base URL for /api/* calls (origin, or origin + subpath when UI lives under a prefix).
- * 1) localStorage `toddJrApiBase` (Upload → “Local / API connection”)
- * 2) <meta name="todd-api-base" content="https://…">
- * 3) Same origin as this page (when you open the URL from `npm start`)
+ * API base for /api/* fetch and XHR.
+ * 1) <meta name="todd-api-base" content="https://…"> (optional — split UI vs API)
+ * 2) Same origin as this page (typical: open the URL from `npm start`)
  */
 function getApiOrigin() {
   if (typeof window === 'undefined') return ''
-  const fromLs = readStoredApiBase()
-  if (fromLs) return fromLs
   const raw = document.querySelector('meta[name="todd-api-base"]')?.getAttribute('content')?.trim()
   if (raw) {
     const n = normalizeToddApiBase(raw)
@@ -80,77 +67,6 @@ function sameOriginApi(path) {
     return new URL(slug, baseWithSlash).href
   } catch {
     return `/${slug}`
-  }
-}
-
-/** Ports to try when this browser tab is on the wrong process (e.g. :3000 = another app). Default Todd local port is 3456. */
-const TODD_PROBE_PORTS = [3456, 3001, 3080, 3847, 5000, 8787, 3000]
-
-async function tryProbeAndSaveToddApiBase() {
-  if (typeof window === 'undefined') return false
-  if (readStoredApiBase()) return false
-  const hosts = ['127.0.0.1', 'localhost']
-  for (const host of hosts) {
-    for (const port of TODD_PROBE_PORTS) {
-      const origin = `http://${host}:${port}`
-      try {
-        const r = await fetch(`${origin}/api/health`, { cache: 'no-store' })
-        const text = await r.text()
-        let j = null
-        try {
-          j = JSON.parse(text)
-        } catch {
-          j = null
-        }
-        if (r.ok && j && j.ok === true && j.service === 'todd-jr') {
-          localStorage.setItem(TODD_API_BASE_STORAGE_KEY, normalizeToddApiBase(origin))
-          return true
-        }
-      } catch {
-        /* try next */
-      }
-    }
-  }
-  return false
-}
-
-/** Once per load: if /api/health on the page origin is not Todd, scan localhost for a real Todd server. */
-async function verifyToddBackendOrProbe() {
-  if (typeof window === 'undefined') return
-  if (window.location.protocol === 'file:') return
-  if (window.__toddAutoProbeDone) return
-  if (readStoredApiBase()) {
-    window.__toddAutoProbeDone = true
-    return
-  }
-  const origin = getApiOrigin()
-  if (!origin) return
-  let looksLikeTodd = false
-  try {
-    const r = await fetch(sameOriginApi('/api/health'), { cache: 'no-store' })
-    const text = await r.text()
-    let j = null
-    try {
-      j = JSON.parse(text)
-    } catch {
-      j = null
-    }
-    looksLikeTodd = !!(r.ok && j && j.ok === true && j.service === 'todd-jr')
-  } catch {
-    looksLikeTodd = false
-  }
-  if (looksLikeTodd) {
-    window.__toddAutoProbeDone = true
-    return
-  }
-  const patched = await tryProbeAndSaveToddApiBase()
-  window.__toddAutoProbeDone = true
-  if (patched) {
-    refreshApiDevPanel()
-    toast(
-      `Todd Jr. is running at ${getApiOrigin()} — not on this tab’s port. API calls now use that URL. Open it in the browser (see terminal after npm start) so the UI matches the server.`,
-      'info'
-    )
   }
 }
 
@@ -773,11 +689,6 @@ function goTo(screenName) {
   }
   updateGlobalNav()
   if (screenName === 'upload' || screenName === 'loading') void refreshJuiceHomePanel()
-  if (screenName === 'upload') {
-    refreshApiDevPanel()
-    void verifyToddBackendOrProbe()
-    void maybeAutoOpenOpenAiKeyModal()
-  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1041,8 +952,6 @@ async function startUpload(files) {
     goTo('upload')
     return
   }
-
-  // Keep state.sessionId across upload so an OpenAI key saved on the home screen (same tab) stays on this session.
 
   // Show progress
   setProgress(0, `Uploading ${allFiles.length} files...`)
@@ -2075,7 +1984,7 @@ function applySbsModeUi(cfg) {
   document.getElementById('sbs-verdict-copy').textContent = cfg.verdictCopy
 }
 
-async function startSideBySide(tenantId = null, mode = 'juice', _probeRetry = false) {
+async function startSideBySide(tenantId = null, mode = 'juice') {
   state.sbsSourceScreen = state.screen
   state.sbsMode = mode
   const cfg = getSbsModeConfig(mode)
@@ -2099,16 +2008,9 @@ async function startSideBySide(tenantId = null, mode = 'juice', _probeRetry = fa
         data = JSON.parse(text)
       } catch {
         const looksHtml = /<\!DOCTYPE|<html|Cannot GET/i.test(text)
-        if (!_probeRetry && (r.status === 404 || looksHtml)) {
-          const patched = await tryProbeAndSaveToddApiBase()
-          if (patched) {
-            toast(`Found Todd Jr. at ${getApiOrigin()} — retrying…`, 'success')
-            return startSideBySide(tenantId, mode, true)
-          }
-        }
         if (r.status === 404 && looksHtml) {
           toast(
-            'This browser tab is not talking to Todd Jr. (the server returned HTML, not JSON). Run `npm start` in the project folder and open the URL it prints (port 3456 by default), or expand “Local / API connection” on the home screen and set the API URL.',
+            'This browser tab is not talking to Todd Jr. (the server returned HTML, not JSON). Run `npm start` in the project folder and open the URL it prints (port 3456 by default). If the UI is hosted separately, set <meta name="todd-api-base"> to your API origin.',
             'error'
           )
         } else {
@@ -2133,7 +2035,7 @@ async function startSideBySide(tenantId = null, mode = 'juice', _probeRetry = fa
     if (!data.tenantCount) {
       toast(
         data.note ||
-          'Upload at least one tenant folder before running this screen (your API key can be saved first on the home screen).',
+          'Upload at least one tenant folder before running this screen.',
         'error'
       )
       return
@@ -2143,7 +2045,7 @@ async function startSideBySide(tenantId = null, mode = 'juice', _probeRetry = fa
     const origin = getApiOrigin() || '(unknown)'
     const hint =
       'Failed to connect. Run `npm start` and use the URL in the terminal (e.g. http://127.0.0.1:3456). ' +
-      'If the UI is hosted separately, set the API base under “Local / API connection” or todd-api-base meta to your Railway URL.'
+      'If the UI is hosted separately, set <meta name="todd-api-base" content="https://…"> to your API origin (e.g. Railway).'
     toast(`${e?.message || 'Network error'} — API base: ${origin}. ${hint}`, 'error')
     return
   }
@@ -2151,7 +2053,7 @@ async function startSideBySide(tenantId = null, mode = 'juice', _probeRetry = fa
   if (mode === 'openaitest') {
     if (!check.openAIConfigured) {
       toast(
-        'OpenAI Test Lab needs a key: add openai.key (one line) or OPENAI_API_KEY in .env and restart, or paste on the home screen (local Todd only). Then upload folders.',
+        'OpenAI Test Lab needs a key: add openai.key (one line) or OPENAI_API_KEY in .env (or Railway Variables) and restart. Then upload folders.',
         'error'
       )
       return
@@ -2165,7 +2067,7 @@ async function startSideBySide(tenantId = null, mode = 'juice', _probeRetry = fa
   }
   if (mode === 'modelcompare' && !check.openAIConfigured) {
     toast(
-      'No OpenAI key — only Claude runs. Add openai.key or OPENAI_API_KEY, or paste on the home screen (local server only).',
+      'No OpenAI key — only Claude runs. Add openai.key or OPENAI_API_KEY on the server.',
       'info'
     )
   }
@@ -2204,7 +2106,7 @@ async function startSideBySide(tenantId = null, mode = 'juice', _probeRetry = fa
     state.eventSource = null
     toast(
       mode === 'openaitest'
-        ? 'OpenAI test did not start. Confirm folders are uploaded, an OpenAI key is set (server or pasted session key), and the API URL is correct.'
+        ? 'OpenAI test did not start. Confirm folders are uploaded, OPENAI_API_KEY or openai.key is set on the server, and the API URL is correct.'
         : 'Comparison did not start. Use your server URL, load tenant folders on the Hunt screen first, and ensure ANTHROPIC_API_KEY is set.',
       'error'
     )
@@ -2382,7 +2284,7 @@ function renderSideBySide(data) {
   if (mode === 'openaitest') {
     if (beefed.openaiSkipped) {
       bar.textContent =
-        '⚠️ No OpenAI key — paste a key on the home screen or set OPENAI_API_KEY / openai.key on the server, then re-run.'
+        '⚠️ No OpenAI key — set OPENAI_API_KEY or openai.key on the server, then re-run.'
     } else if (beefed.openaiError || (data.openaiTestMeta && data.openaiTestMeta.error)) {
       bar.textContent =
         '⚠️ OpenAI Test Lab reported an error — see findings and pipeline summary; check server logs if needed.'
@@ -4680,266 +4582,3 @@ function gymShowResults(data) {
 document.getElementById('gym-results-back').addEventListener('click', () => {
   gymOpenPicker()
 })
-
-// ── Upload screen: local API base (fixes wrong process on :3000 or UI on another port) ──
-function refreshApiDevPanel() {
-  const show = document.getElementById('api-dev-showing')
-  const input = document.getElementById('api-dev-input')
-  if (!show || !input) return
-  const o = getApiOrigin()
-  show.textContent = o || '(none — set below, or run npm start and use that URL)'
-  const stored = readStoredApiBase()
-  input.value = stored || (window.location.protocol !== 'file:' ? window.location.origin : '')
-}
-
-const OPENAI_MODAL_ONCE_KEY = 'toddOpenAiKeyModalOnce'
-
-async function postLocalOpenAiKey(openaiApiKey) {
-  const url = sameOriginApi('/api/local-openai-key')
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ openaiApiKey })
-  })
-  const rawText = await r.text()
-  let data = {}
-  try {
-    data = rawText.trim() ? JSON.parse(rawText) : {}
-  } catch {
-    data = {}
-  }
-  return { r, rawText, data, url }
-}
-
-/**
- * Save pasted OpenAI key to local Todd server (RAM). Returns { ok, message? }.
- */
-async function saveOpenAiKeyFromPaste(secret) {
-  const v = String(secret || '').trim()
-  if (!v) {
-    return { ok: false, message: 'Paste your sk-… key first.' }
-  }
-  try {
-    const { r, rawText, data, url } = await postLocalOpenAiKey(v)
-    const looksHtml =
-      /<\!DOCTYPE|<html[\s>]|<title>Error<\/title>|Cannot POST\s+\//i.test(rawText || '')
-    if (looksHtml && !data.ok) {
-      return {
-        ok: false,
-        message:
-          `That request hit a server that is not Todd Jr. (got an HTML error page). It was sent to: ${url}. Under “Local / API connection” set the URL printed when you run npm start (e.g. http://127.0.0.1:3456), click Save, then try “Save on server” again.`
-      }
-    }
-    if (!r.ok || !data.ok) {
-      const hint =
-        data.error ||
-        (rawText && rawText.length < 200 && !rawText.trim().startsWith('{')
-          ? rawText.trim().slice(0, 120)
-          : null)
-      return {
-        ok: false,
-        message:
-          hint ||
-          `Save failed (HTTP ${r.status}). Run npm start on this Mac and open that URL, or use openai.key / .env.`
-      }
-    }
-    toast('OpenAI key saved on this Todd server (memory until restart).', 'success')
-    return { ok: true }
-  } catch (err) {
-    return {
-      ok: false,
-      message:
-        'Save failed: ' +
-        (err?.message || err) +
-        ' — API base must point at your local Todd server.'
-    }
-  }
-}
-
-function openOpenAiKeyModal() {
-  const m = document.getElementById('openai-key-modal')
-  const main = document.getElementById('openai-key-input')
-  const mi = document.getElementById('openai-key-modal-input')
-  if (mi && main) mi.value = main.value
-  m?.classList.remove('hidden')
-  window.setTimeout(() => mi?.focus(), 80)
-}
-
-function closeOpenAiKeyModal() {
-  document.getElementById('openai-key-modal')?.classList.add('hidden')
-}
-
-/** First time you land on Home each tab session, if the server has no OpenAI key yet, show the popup. */
-async function maybeAutoOpenOpenAiKeyModal() {
-  if (typeof sessionStorage === 'undefined') return
-  if (sessionStorage.getItem(OPENAI_MODAL_ONCE_KEY) === '1') return
-  if (window.location.protocol === 'file:') return
-  try {
-    const hr = await fetch(sameOriginApi('/api/health'), { cache: 'no-store' })
-    const h = await hr.json().catch(() => ({}))
-    if (h.openaiConfigured === true) return
-    sessionStorage.setItem(OPENAI_MODAL_ONCE_KEY, '1')
-    openOpenAiKeyModal()
-  } catch {
-    /* API not reachable — skip auto popup */
-  }
-}
-
-async function refreshOpenAiKeyPanel() {
-  const status = document.getElementById('openai-key-status')
-  const input = document.getElementById('openai-key-input')
-  if (!status) return
-  let health = {}
-  try {
-    const hr = await fetch(sameOriginApi('/api/health'), { cache: 'no-store' })
-    const t = await hr.text()
-    try {
-      health = t.trim() ? JSON.parse(t) : {}
-    } catch {
-      health = {}
-    }
-  } catch {
-    status.textContent =
-      'Could not reach /api/health — set “Local / API connection” to your Todd server URL (e.g. http://127.0.0.1:3456).'
-    if (input) input.placeholder = 'sk-…'
-    return
-  }
-
-  const src = health.openaiKeySource || 'none'
-  const ok = health.openaiConfigured === true
-
-  if (ok) {
-    const bySource = {
-      env: 'OpenAI is ready: using OPENAI_API_KEY from the server (.env or Railway).',
-      'openai.key': 'OpenAI is ready: using the openai.key file in the project folder.',
-      localhost_memory:
-        'OpenAI is ready: using the key you pasted below (kept in server memory until you restart npm start).',
-      none: 'OpenAI key detected.'
-    }
-    status.textContent = bySource[src] || 'OpenAI key is configured on this server.'
-    if (input) {
-      input.placeholder =
-        src === 'localhost_memory' ? 'Paste a new key to replace…' : 'Optional: paste to store in memory (localhost)…'
-    }
-  } else {
-    status.textContent =
-      'No key on this server yet. Easiest: in the Todd project folder create a file named openai.key with one line (your sk-… key), save, restart npm start. Or paste below — only works when the API runs on your Mac (127.0.0.1).'
-    if (input) input.placeholder = 'sk-…'
-  }
-}
-
-document.getElementById('openai-key-panel')?.addEventListener('toggle', e => {
-  if (e.target?.id === 'openai-key-panel' && e.target.open) void refreshOpenAiKeyPanel()
-})
-
-document.getElementById('btn-openai-key-popup')?.addEventListener('click', () => openOpenAiKeyModal())
-
-document.getElementById('openai-key-modal-cancel')?.addEventListener('click', () => closeOpenAiKeyModal())
-
-document.getElementById('openai-key-modal')?.addEventListener('click', e => {
-  if (e.target?.id === 'openai-key-modal') closeOpenAiKeyModal()
-})
-
-document.getElementById('openai-key-modal-save')?.addEventListener('click', async () => {
-  const mi = document.getElementById('openai-key-modal-input')
-  const main = document.getElementById('openai-key-input')
-  const v = mi?.value?.trim() || ''
-  const res = await saveOpenAiKeyFromPaste(v)
-  if (!res.ok) {
-    toast(res.message, v ? 'error' : 'info')
-    return
-  }
-  if (mi) mi.value = ''
-  if (main) main.value = ''
-  closeOpenAiKeyModal()
-  void refreshOpenAiKeyPanel()
-})
-
-document.getElementById('openai-key-save')?.addEventListener('click', async () => {
-  const input = document.getElementById('openai-key-input')
-  const v = input?.value?.trim() || ''
-  if (!v) {
-    toast('Paste your sk-… key, or create openai.key in the project folder (one line) and restart the server.', 'info')
-    return
-  }
-  const res = await saveOpenAiKeyFromPaste(v)
-  if (!res.ok) {
-    toast(res.message, 'error')
-    return
-  }
-  if (input) input.value = ''
-  void refreshOpenAiKeyPanel()
-})
-
-document.getElementById('openai-key-clear')?.addEventListener('click', async () => {
-  try {
-    const r = await fetch(sameOriginApi('/api/local-openai-key'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ openaiApiKey: '' })
-    })
-    const rawText = await r.text()
-    let data = {}
-    try {
-      data = rawText.trim() ? JSON.parse(rawText) : {}
-    } catch {
-      data = {}
-    }
-    if (!r.ok || !data.ok) {
-      toast(data.error || `Clear failed (${r.status})`, 'error')
-      return
-    }
-    toast('Pasted key cleared from server memory (openai.key and .env unchanged).', 'success')
-    void refreshOpenAiKeyPanel()
-  } catch (err) {
-    toast('Clear failed: ' + (err?.message || err), 'error')
-  }
-})
-
-document.getElementById('api-dev-save')?.addEventListener('click', () => {
-  const input = document.getElementById('api-dev-input')
-  const v = input?.value?.trim()
-  if (!v) {
-    toast('Enter your Todd server URL, e.g. http://127.0.0.1:3456', 'info')
-    return
-  }
-  const base = normalizeToddApiBase(v)
-  if (!base) {
-    toast('Invalid URL — use http://127.0.0.1:3456 or your full https://… Railway URL.', 'error')
-    return
-  }
-  localStorage.setItem(TODD_API_BASE_STORAGE_KEY, base)
-  toast('API base saved — using ' + base, 'success')
-  refreshApiDevPanel()
-})
-
-document.getElementById('api-dev-clear')?.addEventListener('click', () => {
-  localStorage.removeItem(TODD_API_BASE_STORAGE_KEY)
-  window.__toddAutoProbeDone = false
-  toast('Cleared saved API base — using same origin as this page', 'success')
-  refreshApiDevPanel()
-  void verifyToddBackendOrProbe()
-})
-
-document.getElementById('api-dev-test')?.addEventListener('click', async () => {
-  try {
-    const url = sameOriginApi('/api/health')
-    const r = await fetch(url, { cache: 'no-store' })
-    const text = await r.text()
-    if (!r.ok) throw new Error(`${r.status} — ${text.slice(0, 120)}`)
-    let j
-    try {
-      j = JSON.parse(text)
-    } catch {
-      throw new Error('Response is not JSON — another app may be on this URL (not Todd Jr.)')
-    }
-    toast(`Todd API OK (${j.service || 'todd-jr'})`, 'success')
-  } catch (e) {
-    toast('Health check failed: ' + (e?.message || e), 'error')
-  }
-})
-
-refreshApiDevPanel()
-void refreshOpenAiKeyPanel()
-void verifyToddBackendOrProbe()
-if (state.screen === 'upload') void maybeAutoOpenOpenAiKeyModal()
