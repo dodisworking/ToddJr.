@@ -5,16 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <!--
     API base for /api/* (optional).
-    • Same origin as Todd: leave empty — open the URL from `npm start`.
-    • API on Railway, UI elsewhere: set content="https://YOUR-SERVICE.up.railway.app" (no /api suffix).
-    On Railway Variables add LOCAL_DEV_CORS=1 so localhost can call your deployed API.
+    • Same origin as Todd: leave content="" — open the URL Railway/npm prints (one host serves UI + API).
+    • Static UI + API on Railway: set content="https://YOUR-SERVICE.up.railway.app" (no /api suffix).
+    Railway Variables (on the API service): ANTHROPIC_API_KEY, OPENAI_API_KEY (optional), LOCAL_DEV_CORS=1 if the browser origin differs.
   -->
   <meta name="todd-api-base" content="" />
   <title>Todd Jr. — Real Estate Document Hunter</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=48" />
+  <link rel="stylesheet" href="style.css?v=49" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
@@ -375,9 +375,17 @@
           <div class="sbs-arena-rope sbs-arena-rope--back"></div>
           <div class="sbs-loading-cols sbs-loading-cols--arena">
             <div class="sbs-openai-brew-hero hidden" id="sbs-openai-brew-hero" aria-hidden="true">
-              <p class="sbs-openai-brew-headline">OpenAI test is brewing</p>
-              <div class="drlab-tube-jar sbs-openai-brew-jar sbs-openai-brew-jar--hero" id="sbs-openai-brew-jar"></div>
-              <p class="sbs-openai-brew-sub" id="sbs-openai-brew-sub">Starting…</p>
+              <div class="sbs-openai-brew-row">
+                <div class="sbs-openai-brew-log-wrap">
+                  <div class="sbs-openai-brew-log-head" id="sbs-openai-brew-log-head">OpenAI run log</div>
+                  <pre class="sbs-openai-brew-log" id="sbs-openai-brew-log" aria-live="polite"></pre>
+                </div>
+                <div class="sbs-openai-brew-flask-col">
+                  <p class="sbs-openai-brew-headline">OpenAI test is brewing</p>
+                  <div class="drlab-tube-jar sbs-openai-brew-jar sbs-openai-brew-jar--hero" id="sbs-openai-brew-jar"></div>
+                  <p class="sbs-openai-brew-sub" id="sbs-openai-brew-sub">Starting…</p>
+                </div>
+              </div>
             </div>
             <div class="sbs-loading-col">
               <div class="sbs-boxer-slot sbs-boxer-slot--left">
@@ -656,8 +664,8 @@
     </div>
   </div>
 
-  <script src="drlab-flasks.js?v=5"></script>
+  <script src="drlab-flasks.js?v=6"></script>
   <script src="sbs-boxing.js?v=3"></script>
-  <script src="app.js?v=62"></script>
+  <script src="app.js?v=64"></script>
 </body>
 </html>

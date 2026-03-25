@@ -626,6 +626,32 @@ function updateGlobalNav() {
   btnGlobalBack.title = busyCook ? 'Not available while cooking' : 'Go back one screen'
 }
 
+function resetOpenAiBrewLog() {
+  const el = document.getElementById('sbs-openai-brew-log')
+  if (el) el.textContent = ''
+}
+
+/** Activity log beside the OpenAI Test Lab flask (stream progress + errors). */
+function appendOpenAiBrewLog(message, kind = 'info') {
+  const el = document.getElementById('sbs-openai-brew-log')
+  if (!el || message == null || message === '') return
+  const t = new Date().toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
+  const sym = kind === 'error' ? '✖' : kind === 'ok' ? '✓' : '·'
+  const line = `[${t}] ${sym} ${String(message).replace(/\r\n/g, '\n')}`
+  el.textContent = el.textContent ? `${el.textContent}\n${line}` : line
+  const maxLines = 100
+  const lines = el.textContent.split('\n')
+  if (lines.length > maxLines) {
+    el.textContent = '…\n' + lines.slice(-maxLines).join('\n')
+  }
+  el.scrollTop = el.scrollHeight
+}
+
 function updateSbsOpenAiLoadingChrome(show) {
   const loadEl = document.getElementById('sbs-loading')
   const brewHero = document.getElementById('sbs-openai-brew-hero')
@@ -975,7 +1001,6 @@ async function startUpload(files) {
     renderTenantCards(result.tenants)
     showOversizeWarnings(result.tenants)
     showHuntCta()
-    void refreshOpenAiKeyPanel()
 
     // Single tenant mode: auto-run on the only/first tenant
     if (state.singleTenantMode && result.tenants.length > 0) {
@@ -2086,6 +2111,10 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
     mode === 'openaitest' ? 'Starting…' : 'Waiting for stream…'
   const brewSub = document.getElementById('sbs-openai-brew-sub')
   if (brewSub) brewSub.textContent = mode === 'openaitest' ? 'Starting…' : ''
+  if (mode === 'openaitest') {
+    resetOpenAiBrewLog()
+    appendOpenAiBrewLog(`Connecting… ${cfg.endpoint}`)
+  }
 
   let qs = `sessionId=${encodeURIComponent(state.sessionId)}`
   if (tenantId) qs += `&tenantId=${encodeURIComponent(tenantId)}`
@@ -2104,6 +2133,12 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
     if (state.screen !== 'sidebyside') return
     try { es.close() } catch {}
     state.eventSource = null
+    if (mode === 'openaitest') {
+      appendOpenAiBrewLog(
+        'No stream activity within 15s — check server, session, and OPENAI_API_KEY / openai.key.',
+        'error'
+      )
+    }
     toast(
       mode === 'openaitest'
         ? 'OpenAI test did not start. Confirm folders are uploaded, OPENAI_API_KEY or openai.key is set on the server, and the API URL is correct.'
@@ -2123,6 +2158,12 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
       sub.textContent = d.openaiEnabled === false
         ? `${d.tenantName} — OpenAI Test Lab (API key missing on server)`
         : `${d.tenantName} — OpenAI Responses API only (native PDF input_file path)`
+      appendOpenAiBrewLog(
+        d.openaiEnabled === false
+          ? 'sbs-start: OpenAI key not configured on server — expect skipped run.'
+          : `sbs-start: ${d.tenantName || 'Tenant'} — OpenAI pipeline starting.`,
+        d.openaiEnabled === false ? 'error' : 'ok'
+      )
     } else if (mode === 'modelcompare') {
       sub.textContent = d.openaiEnabled === false
         ? `${d.tenantName} — Claude API (OpenAI not configured on server)`
@@ -2145,6 +2186,11 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
       const sub = document.getElementById('sbs-openai-brew-sub')
       if (sub) sub.textContent = d.message || ''
     }
+    if (mode === 'openaitest' && d.message) {
+      const who = d.side === 'beefed' ? 'OpenAI' : 'Status'
+      const isErr = /error|fail|skipped|missing key|no key/i.test(d.message)
+      appendOpenAiBrewLog(`${who}: ${d.message}`, isErr ? 'error' : 'info')
+    }
   })
 
   es.addEventListener('sbs-complete', e => {
@@ -2157,9 +2203,27 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
       d = JSON.parse(e.data)
     } catch (parseErr) {
       console.error('[sbs-complete] JSON parse failed', parseErr, e.data?.slice?.(0, 400))
+      if (mode === 'openaitest') {
+        appendOpenAiBrewLog('sbs-complete: response was not valid JSON — check server / proxy logs.', 'error')
+      }
       toast('Could not read results from the server. Try again or check server logs.', 'error')
       setSideBySideLoadingVisible(false)
       return
+    }
+    if (mode === 'openaitest') {
+      const meta = d.openaiTestMeta
+      const beefed = d.beefed || {}
+      if (meta && typeof meta.error === 'string' && meta.error.trim()) {
+        appendOpenAiBrewLog(`Pipeline: ${meta.error}`, 'error')
+      }
+      if (beefed.openaiSkipped) {
+        const hint = (beefed.findings && beefed.findings[0] && beefed.findings[0].comment) || 'OpenAI skipped.'
+        appendOpenAiBrewLog(`Skipped: ${hint}`, 'error')
+      }
+      if (beefed.openaiError && beefed.findings && beefed.findings[0]) {
+        appendOpenAiBrewLog(`OpenAI failure: ${beefed.findings[0].comment || beefed.findings[0].missingDocument || 'see findings'}`, 'error')
+      }
+      appendOpenAiBrewLog('sbs-complete: run finished — showing results.', 'ok')
     }
     // Store for verdict call
     state.sbsLastResult = d
@@ -2174,6 +2238,9 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
       renderSideBySide(d)
     } catch (renderErr) {
       console.error('[sbs-complete] render failed', renderErr)
+      if (mode === 'openaitest') {
+        appendOpenAiBrewLog(`Results UI error: ${renderErr?.message || renderErr}`, 'error')
+      }
       toast('Results arrived but the UI failed to display them. See the browser console.', 'error')
     }
   })
@@ -2189,6 +2256,7 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
     } catch {
       errMsg = typeof e.data === 'string' && e.data ? e.data : 'Unknown'
     }
+    if (mode === 'openaitest') appendOpenAiBrewLog(`sbs-error: ${errMsg}`, 'error')
     toast('Side-by-side error: ' + errMsg, 'error')
     setSideBySideLoadingVisible(false)
     goTo(state.sbsSourceScreen || 'loading')
@@ -2201,6 +2269,9 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
       if (es.readyState !== EventSource.CLOSED) return
       window.clearTimeout(sbsFailTimer)
       state.eventSource = null
+      if (state.sbsMode === 'openaitest') {
+        appendOpenAiBrewLog('EventSource closed before the run completed — network, CORS, or server crash.', 'error')
+      }
       toast(
         'Lost connection to the server before the run started. Reload, confirm folders are loaded, and check the server is running.',
         'error'

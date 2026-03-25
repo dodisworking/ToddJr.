@@ -259,8 +259,8 @@
       const s = settingsForMode(mode)
       setJarImg(jar, buildFlaskSvg(s))
       tube.style.setProperty('--drlab-flask-glow', glowHexForSettings(s))
-      if (mode === 'openai') ensureOpenAiBrew(jar)
-      else removeBrewLayer(jar)
+      /* Brew bubbles only on the live OpenAI Test run hero — not on Dr. Lab picker tiles */
+      removeBrewLayer(jar)
     })
     document.documentElement.style.removeProperty('--drlab-flask-glow')
   }
