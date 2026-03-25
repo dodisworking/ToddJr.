@@ -51,6 +51,11 @@ html, body {
   padding: 32px 24px;
   animation: fadeIn 0.4s ease;
 }
+/* Reserve space for floating ◀ BACK (left) and ⌂ HOME (right) — avoid overlapping titles */
+.screen:not(#screen-upload) {
+  padding-left: max(24px, calc(env(safe-area-inset-left, 0px) + 118px));
+  padding-right: max(24px, calc(env(safe-area-inset-right, 0px) + 118px));
+}
 .screen.active { display: flex; }
 
 @keyframes fadeIn {
@@ -1363,6 +1368,10 @@ input:checked + .toggle-slider:before { transform:translateX(22px); background:#
 ═══════════════════════════════════════════════════════════ */
 @media (max-width: 600px) {
   .screen { padding: 20px 16px; }
+  .screen:not(#screen-upload) {
+    padding-left: max(16px, calc(env(safe-area-inset-left, 0px) + 108px));
+    padding-right: max(16px, calc(env(safe-area-inset-right, 0px) + 108px));
+  }
   .logo-title { font-size: 20px; }
   .hunt-cta-cluster {
     flex-direction: column;
