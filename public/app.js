@@ -21,23 +21,36 @@ const state = {
 /** Saved from Upload screen — points /api/* at a Todd server (e.g. http://localhost:3001 or Railway). */
 const TODD_API_BASE_STORAGE_KEY = 'toddJrApiBase'
 
-function readStoredApiBase() {
+/**
+ * Normalize a user-entered API root: origin plus optional path prefix (no trailing slash).
+ * Strips a lone trailing `/api` — Todd already serves routes at `/api/...` from site root, so
+ * saving `http://host:3456/api` would otherwise double up or confuse proxies.
+ */
+function normalizeToddApiBase(input) {
   try {
-    const s = localStorage.getItem(TODD_API_BASE_STORAGE_KEY)?.trim()
+    const s = String(input || '').trim()
     if (!s) return ''
     const u = new URL(s)
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return ''
-    return u.origin
+    let path = (u.pathname || '').replace(/\/$/, '') || ''
+    if (path === '/api') path = ''
+    return `${u.origin}${path}`
   } catch {
     return ''
   }
 }
 
+function readStoredApiBase() {
+  const raw = localStorage.getItem(TODD_API_BASE_STORAGE_KEY)?.trim()
+  if (!raw) return ''
+  return normalizeToddApiBase(raw)
+}
+
 /**
- * API origin for /api/* calls.
- * 1) localStorage `toddJrApiBase` (set on Upload → “Local / API connection”)
+ * API base URL for /api/* calls (origin, or origin + subpath when UI lives under a prefix).
+ * 1) localStorage `toddJrApiBase` (Upload → “Local / API connection”)
  * 2) <meta name="todd-api-base" content="https://…">
- * 3) Same as the page (correct when you run `npm start` and open the URL it prints)
+ * 3) Same origin as this page (when you open the URL from `npm start`)
  */
 function getApiOrigin() {
   if (typeof window === 'undefined') return ''
@@ -45,23 +58,29 @@ function getApiOrigin() {
   if (fromLs) return fromLs
   const raw = document.querySelector('meta[name="todd-api-base"]')?.getAttribute('content')?.trim()
   if (raw) {
-    try {
-      return new URL(raw).origin
-    } catch {
-      /* fall through */
-    }
+    const n = normalizeToddApiBase(raw)
+    if (n) return n
   }
   if (window.location.protocol === 'file:') return ''
-  return window.location.origin
+  return normalizeToddApiBase(window.location.origin) || window.location.origin
 }
 
-/** Absolute URL for same-stack API routes. */
+/**
+ * Absolute URL for Todd API routes. Resolves relative to API base so a subpath base
+ * (e.g. https://host/app) yields https://host/app/api/... instead of dropping the prefix.
+ */
 function sameOriginApi(path) {
-  const p = path.startsWith('/') ? path : `/${path}`
-  if (typeof window === 'undefined') return p
-  const origin = getApiOrigin()
-  if (!origin) return p
-  return new URL(p, origin).href
+  const raw = String(path || '')
+  const slug = raw.startsWith('/') ? raw.slice(1) : raw
+  if (typeof window === 'undefined') return `/${slug}`
+  const base = getApiOrigin()
+  if (!base) return `/${slug}`
+  const baseWithSlash = base.endsWith('/') ? base : `${base}/`
+  try {
+    return new URL(slug, baseWithSlash).href
+  } catch {
+    return `/${slug}`
+  }
 }
 
 /** Ports to try when this browser tab is on the wrong process (e.g. :3000 = another app). Default Todd local port is 3456. */
@@ -84,7 +103,7 @@ async function tryProbeAndSaveToddApiBase() {
           j = null
         }
         if (r.ok && j && j.ok === true && j.service === 'todd-jr') {
-          localStorage.setItem(TODD_API_BASE_STORAGE_KEY, origin)
+          localStorage.setItem(TODD_API_BASE_STORAGE_KEY, normalizeToddApiBase(origin))
           return true
         }
       } catch {
@@ -108,7 +127,7 @@ async function verifyToddBackendOrProbe() {
   if (!origin) return
   let looksLikeTodd = false
   try {
-    const r = await fetch(`${origin}/api/health`, { cache: 'no-store' })
+    const r = await fetch(sameOriginApi('/api/health'), { cache: 'no-store' })
     const text = await r.text()
     let j = null
     try {
@@ -1058,7 +1077,7 @@ async function startUpload(files) {
 function uploadWithProgress(formData, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    xhr.open('POST', '/api/upload')
+    xhr.open('POST', sameOriginApi('/api/upload'))
     xhr.setRequestHeader('X-Session-Id', state.sessionId)
 
     xhr.upload.addEventListener('progress', e => {
@@ -2086,7 +2105,7 @@ async function startSideBySide(tenantId = null, mode = 'juice', _probeRetry = fa
           )
         } else {
           toast(
-            `Server returned ${r.status} with non-JSON. Open ${getApiOrigin()}/api/health — you should see JSON with "service":"todd-jr".`,
+            `Server returned ${r.status} with non-JSON. Open ${sameOriginApi('/api/health')} — you should see JSON with "service":"todd-jr".`,
             'error'
           )
         }
@@ -4661,7 +4680,8 @@ function refreshApiDevPanel() {
 const OPENAI_MODAL_ONCE_KEY = 'toddOpenAiKeyModalOnce'
 
 async function postLocalOpenAiKey(openaiApiKey) {
-  const r = await fetch(sameOriginApi('/api/local-openai-key'), {
+  const url = sameOriginApi('/api/local-openai-key')
+  const r = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ openaiApiKey })
@@ -4673,7 +4693,7 @@ async function postLocalOpenAiKey(openaiApiKey) {
   } catch {
     data = {}
   }
-  return { r, rawText, data }
+  return { r, rawText, data, url }
 }
 
 /**
@@ -4685,7 +4705,16 @@ async function saveOpenAiKeyFromPaste(secret) {
     return { ok: false, message: 'Paste your sk-… key first.' }
   }
   try {
-    const { r, rawText, data } = await postLocalOpenAiKey(v)
+    const { r, rawText, data, url } = await postLocalOpenAiKey(v)
+    const looksHtml =
+      /<\!DOCTYPE|<html[\s>]|<title>Error<\/title>|Cannot POST\s+\//i.test(rawText || '')
+    if (looksHtml && !data.ok) {
+      return {
+        ok: false,
+        message:
+          `That request hit a server that is not Todd Jr. (got an HTML error page). It was sent to: ${url}. Under “Local / API connection” set the URL printed when you run npm start (e.g. http://127.0.0.1:3456), click Save, then try “Save on server” again.`
+      }
+    }
     if (!r.ok || !data.ok) {
       const hint =
         data.error ||
@@ -4859,14 +4888,14 @@ document.getElementById('api-dev-save')?.addEventListener('click', () => {
     toast('Enter your Todd server URL, e.g. http://127.0.0.1:3456', 'info')
     return
   }
-  try {
-    const origin = new URL(v).origin
-    localStorage.setItem(TODD_API_BASE_STORAGE_KEY, origin)
-    toast('API base saved — using ' + origin, 'success')
-    refreshApiDevPanel()
-  } catch {
-    toast('Invalid URL', 'error')
+  const base = normalizeToddApiBase(v)
+  if (!base) {
+    toast('Invalid URL — use http://127.0.0.1:3456 or your full https://… Railway URL.', 'error')
+    return
   }
+  localStorage.setItem(TODD_API_BASE_STORAGE_KEY, base)
+  toast('API base saved — using ' + base, 'success')
+  refreshApiDevPanel()
 })
 
 document.getElementById('api-dev-clear')?.addEventListener('click', () => {
