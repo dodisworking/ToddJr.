@@ -586,6 +586,7 @@ const fileInput     = document.getElementById('file-input')
 const fileInputZip  = document.getElementById('file-input-zip')
 const btnBrowse     = document.getElementById('btn-browse')
 const btnBrowseZip  = document.getElementById('btn-browse-zip')
+const btnPreyMain   = document.getElementById('btn-prey-main')
 
 // Choose folder — modern picker, then legacy webkitdirectory (never auto-opens ZIP on cancel)
 btnBrowse.addEventListener('click', async () => {
@@ -601,6 +602,8 @@ btnBrowse.addEventListener('click', async () => {
   }
   fileInput.click()
 })
+
+btnPreyMain?.addEventListener('click', () => btnBrowse.click())
 
 btnBrowseZip?.addEventListener('click', () => fileInputZip.click())
 
