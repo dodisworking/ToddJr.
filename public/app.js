@@ -18,11 +18,31 @@ const state = {
   drlabMode:        null,
 }
 
-/** Same-origin API URL (avoids edge cases with relative resolution). */
+/**
+ * API origin for /api/* calls. Default: current page origin (Express + static on same host).
+ * If you serve the HTML from somewhere else, set <meta name="todd-api-base" content="https://your-railway-app.up.railway.app">
+ */
+function getApiOrigin() {
+  if (typeof window === 'undefined') return ''
+  if (window.location.protocol === 'file:') return ''
+  const raw = document.querySelector('meta[name="todd-api-base"]')?.getAttribute('content')?.trim()
+  if (raw) {
+    try {
+      return new URL(raw).origin
+    } catch {
+      /* fall through */
+    }
+  }
+  return window.location.origin
+}
+
+/** Absolute URL for same-stack API routes. */
 function sameOriginApi(path) {
   const p = path.startsWith('/') ? path : `/${path}`
   if (typeof window === 'undefined') return p
-  return new URL(p, window.location.origin).href
+  const origin = getApiOrigin()
+  if (!origin) return p
+  return new URL(p, origin).href
 }
 
 // ── DOM refs ─────────────────────────────────────────────────
@@ -1887,21 +1907,56 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
   state.sbsMode = mode
   const cfg = getSbsModeConfig(mode)
 
-  let check
-  try {
-    const r = await fetch(
-      sameOriginApi(`/api/session/check?sessionId=${encodeURIComponent(state.sessionId)}`)
-    )
-    check = await r.json()
-    if (!r.ok || !check.ok) {
-      toast(check.error || `Server check failed (${r.status})`, 'error')
-      return
-    }
-  } catch {
+  if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
     toast(
-      'Cannot reach the Todd server. Open this app from the same URL as server.js (e.g. http://localhost:3000), not a downloaded HTML file.',
+      'Do not open index.html from the file system. Run `npm start` and use http://localhost:3000 (or your Railway URL in the browser).',
       'error'
     )
+    return
+  }
+
+  let check
+  const checkUrl = sameOriginApi(`/api/session/check?sessionId=${encodeURIComponent(state.sessionId)}`)
+  try {
+    const r = await fetch(checkUrl, { cache: 'no-store' })
+    const text = await r.text()
+    let data = {}
+    if (text.trim()) {
+      try {
+        data = JSON.parse(text)
+      } catch {
+        const looksHtml = /<\!DOCTYPE|<html|Cannot GET/i.test(text)
+        if (r.status === 404 && looksHtml) {
+          toast(
+            'Port 3000 is not running the Todd Jr. server (404 HTML, not the API). In the project folder run `npm start`, use only that tab, or free port 3000 from another app.',
+            'error'
+          )
+        } else {
+          toast(
+            `Server returned ${r.status} with non-JSON. Open ${getApiOrigin()}/api/health — if that is not JSON, restart Todd with \`npm start\` from this repo.`,
+            'error'
+          )
+        }
+        return
+      }
+    }
+    if (!r.ok || !data.ok) {
+      toast(
+        data.error ||
+          (r.status === 404
+            ? 'No session on this server — upload folders again (or the server restarted and cleared in-memory sessions).'
+            : `Server check failed (${r.status})`),
+        'error'
+      )
+      return
+    }
+    check = data
+  } catch (e) {
+    const origin = getApiOrigin() || '(unknown)'
+    const hint =
+      'Failed to connect. Use the URL where Node serves the app (e.g. http://localhost:3000). ' +
+      'If the page is hosted separately from the API, set <meta name="todd-api-base" content="https://YOUR-RAILWAY-APP.up.railway.app"> in index.html and redeploy.'
+    toast(`${e?.message || 'Network error'} — API base: ${origin}. ${hint}`, 'error')
     return
   }
 
