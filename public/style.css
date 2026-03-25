@@ -48,7 +48,7 @@ html, body {
   flex-direction: column;
   align-items: center;
   overflow-y: auto;
-  padding: 32px 24px;
+  padding: 52px 24px 28px;
   animation: fadeIn 0.4s ease;
 }
 .screen.active { display: flex; }
@@ -70,6 +70,150 @@ html, body {
   width: 100%;
   margin: auto;
   padding-top: 16px;
+}
+
+/* Fixed 8-bit nav — all screens */
+.global-pixel-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: linear-gradient(180deg, #0c1222 0%, #080d18 100%);
+  border-bottom: 3px solid #1e3a5f;
+  box-shadow: 0 4px 0 #020617, inset 0 1px 0 rgba(96, 165, 250, 0.12);
+}
+.pixel-nav-btn {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  letter-spacing: 0.5px;
+  padding: 10px 14px;
+  border-radius: 4px;
+  border: 3px solid;
+  cursor: pointer;
+  image-rendering: pixelated;
+  transition: transform 0.12s, box-shadow 0.12s;
+  line-height: 1.4;
+}
+.pixel-nav-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+.pixel-nav-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+.pixel-nav-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+.pixel-nav-back {
+  background: #1e293b;
+  border-color: #64748b;
+  color: #e2e8f0;
+  box-shadow: 0 3px 0 #0f172a, inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.pixel-nav-back:hover:not(:disabled) {
+  border-color: #94a3b8;
+  box-shadow: 0 3px 0 #0f172a, 0 0 12px rgba(148, 163, 184, 0.25);
+}
+.pixel-nav-home {
+  background: linear-gradient(180deg, #1d4ed8, #1e3a8a);
+  border-color: #60a5fa;
+  color: #f8fafc;
+  box-shadow: 0 3px 0 #172554, inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+.pixel-nav-home:hover:not(:disabled) {
+  box-shadow: 0 3px 0 #172554, 0 0 16px rgba(59, 130, 246, 0.45);
+}
+
+.juice-home-panel {
+  width: 100%;
+  max-width: 480px;
+  padding: 14px 16px;
+  background: #0f172a;
+  border: 2px solid #14532d;
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.15), 0 0 20px rgba(34, 197, 94, 0.12);
+}
+.juice-home-label {
+  display: block;
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #86efac;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+.juice-home-text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text2);
+  margin: 0 0 12px;
+}
+.juice-home-manage {
+  font-family: var(--font-pixel);
+  font-size: 6px;
+  padding: 10px 16px;
+  background: linear-gradient(180deg, #166534, #14532d);
+  border: 2px solid #4ade80;
+  color: #ecfccb;
+  border-radius: 4px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  box-shadow: 0 3px 0 #052e16, inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+.juice-home-manage:hover {
+  filter: brightness(1.08);
+}
+
+/* Loading screen — Juice ON but zero activated rules (above tenant folders) */
+.juice-loading-banner {
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto 16px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #14532d 0%, #0f172a 55%, #1e1b4b 100%);
+  border: 3px solid #4ade80;
+  border-radius: 10px;
+  box-shadow:
+    0 0 24px rgba(74, 222, 128, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.juice-loading-banner.hidden {
+  display: none !important;
+}
+.juice-loading-banner-label {
+  display: block;
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #bbf7d0;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+  text-shadow: 0 0 12px rgba(74, 222, 128, 0.5);
+}
+.juice-loading-banner-text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #e2e8f0;
+  margin: 0 0 12px;
+}
+.juice-loading-banner-btn {
+  font-family: var(--font-pixel);
+  font-size: 6px;
+  padding: 10px 18px;
+  background: linear-gradient(180deg, #22c55e, #15803d);
+  border: 2px solid #86efac;
+  color: #052e16;
+  border-radius: 4px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  box-shadow: 0 3px 0 #14532d, inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.juice-loading-banner-btn:hover {
+  filter: brightness(1.07);
 }
 
 .logo-area {
@@ -2748,12 +2892,37 @@ a.isaac-download-link:hover { text-decoration: underline; color: #c4b5fd; }
 .isaac-pdf-tag { font-size: 9px; color: #10B981; margin-left: 4px; }
 .isaac-evidence { margin-top: 6px; font-size: 11px; color: var(--text3); line-height: 1.45; white-space: pre-wrap; }
 
-/* Isaac easter egg (upload screen) */
-.isaac-easter {
+/* Home corner: Juice (learnings) + Isaac (exports) */
+.upload-corner-easter {
   position: fixed;
   bottom: 14px;
   right: 14px;
   z-index: 40;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 12px;
+}
+.juice-easter {
+  display: block;
+  padding: 0;
+  border: none;
+  background: transparent;
+  opacity: 0.32;
+  cursor: pointer;
+  transition: opacity 0.25s, transform 0.2s, filter 0.2s;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 8px rgba(34, 197, 94, 0.25));
+}
+.juice-easter:hover {
+  opacity: 1;
+  transform: scale(1.08);
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 14px rgba(74, 222, 128, 0.55));
+}
+.juice-easter canvas {
+  display: block;
+}
+.isaac-easter {
+  position: relative;
   opacity: 0.28;
   cursor: pointer;
   transition: opacity 0.25s, transform 0.2s;
@@ -2762,6 +2931,147 @@ a.isaac-download-link:hover { text-decoration: underline; color: #c4b5fd; }
 .isaac-easter:hover {
   opacity: 1;
   transform: scale(1.06);
+}
+
+.juice-learnings-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  padding: 12px 14px;
+  background: #0f172a;
+  border: 2px solid #334155;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+.juice-toolbar-label {
+  font-family: var(--font-pixel);
+  font-size: 6px;
+  color: #94a3b8;
+  letter-spacing: 0.5px;
+  width: 100%;
+  margin-bottom: 2px;
+}
+.juice-bulk-global {
+  font-family: var(--font-pixel);
+  font-size: 6px;
+  padding: 10px 14px;
+  border-radius: 4px;
+  border: 2px solid;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: transform 0.1s, filter 0.1s;
+}
+.juice-bulk-global:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+.juice-bulk-on.juice-bulk-global {
+  background: linear-gradient(180deg, #166534, #14532d);
+  border-color: #4ade80;
+  color: #ecfccb;
+  box-shadow: 0 2px 0 #052e16;
+}
+.juice-bulk-off.juice-bulk-global {
+  background: #1e293b;
+  border-color: #64748b;
+  color: #e2e8f0;
+  box-shadow: 0 2px 0 #0f172a;
+}
+
+.juice-learnings-group {
+  margin-bottom: 20px;
+  border: 2px solid #1e3a5f;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #0c1222;
+}
+.juice-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: linear-gradient(180deg, #111c33, #0d1528);
+  border-bottom: 2px solid #1e3a5f;
+}
+.juice-group-title {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.juice-group-kind {
+  display: block;
+  font-family: var(--font-pixel);
+  font-size: 6px;
+  color: #60a5fa;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+.juice-group-heading {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 4px;
+  line-height: 1.35;
+}
+.juice-group-meta {
+  font-size: 11px;
+  color: var(--text3);
+}
+.juice-group-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.juice-bulk-on.juice-bulk-group,
+.juice-bulk-off.juice-bulk-group {
+  font-family: var(--font-pixel);
+  font-size: 5px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 2px solid;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+.juice-bulk-on.juice-bulk-group {
+  background: #14532d;
+  border-color: #22c55e;
+  color: #bbf7d0;
+}
+.juice-bulk-off.juice-bulk-group {
+  background: #1e293b;
+  border-color: #475569;
+  color: #cbd5e1;
+}
+.juice-group-cards {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.juice-group-cards .gym-learning-card {
+  margin: 0;
+}
+
+.juice-learnings-body {
+  max-height: min(55vh, 420px);
+  overflow-y: auto;
+  margin: 12px 0 0;
+  text-align: left;
+}
+.juice-learnings-body .gym-no-learnings {
+  font-size: 13px;
+  color: var(--text2);
+  margin: 8px 0;
+}
+.juice-learning-source {
+  font-size: 9px;
+  font-family: var(--font-pixel);
+  color: #a78bfa;
+  margin-top: 6px;
 }
 
 /* Crop preview in annotation modal */

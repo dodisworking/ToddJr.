@@ -585,13 +585,18 @@ app.post('/api/drtoddhunt/extract-learnings', async (req, res) => {
     const { extractLearningsFromDrTodd } = await import('./lib/gym-trainer.js')
     const result = await extractLearningsFromDrTodd(reportText, tenantName || 'Unknown', !!cheapMode)
 
-    // Enrich with IDs, timestamps, source tag, and save
+    // One batch per extract — same batchId + timestamp so the UI can group “whole extract”
+    const batchId = `drtodd-${Date.now()}`
+    const savedAt = new Date().toISOString()
+    const tenantLabel = tenantName || 'Unknown'
     const newLearnings = (result.learnings || []).map(l => ({
       ...l,
-      id:        `learning-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
-      createdAt: new Date().toISOString(),
-      source:    'dr-todd-diagnostic',
-      active:    false,
+      id:         `learning-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      createdAt:  savedAt,
+      batchId,
+      tenantName: tenantLabel,
+      source:     'dr-todd-diagnostic',
+      active:     false,
     }))
 
     const existing = readLearnings()
@@ -891,10 +896,13 @@ app.post('/api/gym/workout-feedback', async (req, res) => {
       cheapMode:   !!cheapMode
     })
 
+    const batchId = `gym-${Date.now()}`
+    const savedAt = new Date().toISOString()
     const newLearnings = (result.learnings || []).map(l => ({
       ...l,
       id:         randomUUID(),
-      created_at: new Date().toISOString(),
+      created_at: savedAt,
+      batchId,
       tenant:     tenant.tenantName,
       active:     false  // inactive by default — user must explicitly activate
     }))

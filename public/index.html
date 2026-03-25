@@ -9,10 +9,15 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=14" />
+  <link rel="stylesheet" href="style.css?v=17" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
+
+  <nav class="global-pixel-nav" id="global-pixel-nav" aria-label="App navigation">
+    <button type="button" class="pixel-nav-btn pixel-nav-back" id="btn-global-back" title="Go back one screen">◀ BACK</button>
+    <button type="button" class="pixel-nav-btn pixel-nav-home" id="btn-global-home" title="Home — new session">⌂ HOME</button>
+  </nav>
 
   <!-- ═══════════════════════════════════════
        SCREEN: UPLOAD
@@ -23,6 +28,12 @@
         <canvas id="hero-canvas" width="60" height="84" title="Todd Jr."></canvas>
         <h1 class="logo-title">Todd Jr.</h1>
         <p class="logo-sub">Real Estate Document Hunter</p>
+      </div>
+
+      <div class="juice-home-panel" id="juice-home-panel">
+        <span class="juice-home-label">🧃 JUICE RULES</span>
+        <p class="juice-home-text" id="juice-home-text">Loading saved learnings…</p>
+        <button type="button" class="juice-home-manage" id="juice-home-manage">Open rule list</button>
       </div>
 
       <div class="drop-zone" id="drop-zone">
@@ -46,9 +57,13 @@
         </div>
       </div>
 
-      <!-- Hidden Isaac — Gym Teacher logs (click) -->
-      <div class="isaac-easter" id="isaac-easter" title="Isaac — saved Gym notes">
-        <canvas id="isaac-canvas" width="36" height="52" style="image-rendering:pixelated"></canvas>
+      <div class="upload-corner-easter" aria-hidden="false">
+        <button type="button" class="juice-easter" id="juice-easter" title="Juice — saved learnings (activate for hunts)">
+          <canvas id="juice-easter-canvas" width="32" height="40" style="image-rendering:pixelated"></canvas>
+        </button>
+        <div class="isaac-easter" id="isaac-easter" title="Isaac — saved Gym notes">
+          <canvas id="isaac-canvas" width="36" height="52" style="image-rendering:pixelated"></canvas>
+        </div>
       </div>
     </div>
   </div>
@@ -82,6 +97,13 @@
     </div>
 
     <div id="oversize-warning" class="oversize-warning hidden"></div>
+
+    <div id="juice-loading-banner" class="juice-loading-banner hidden" role="status">
+      <span class="juice-loading-banner-label">🧃 JUICE — NO RULES ON</span>
+      <p class="juice-loading-banner-text" id="juice-loading-banner-text"></p>
+      <button type="button" class="juice-loading-banner-btn" id="juice-loading-manage">Open rule list</button>
+    </div>
+
     <div class="tenant-grid" id="tenant-grid-loading"></div>
 
     <div class="hunt-cta-wrap" id="hunt-cta-wrap">
@@ -517,6 +539,18 @@
 
   </div>
 
+  <!-- Juice learnings (home corner + manage button) -->
+  <div id="juice-learnings-modal" class="gym-modal hidden">
+    <div class="gym-modal-box gym-modal-wide">
+      <h4 class="gym-modal-title">🧃 Juice — saved learnings</h4>
+      <p class="gym-modal-hint">Rules are grouped by <strong>each Dr. Todd extract</strong> or <strong>each Gym workout report</strong>. Use <strong>All ON / All OFF</strong> for everything, or per group for one whole extract/report — or toggle individual rules.</p>
+      <div class="juice-learnings-body" id="juice-learnings-body"></div>
+      <div class="gym-modal-actions">
+        <button type="button" id="juice-learnings-close" class="gym-modal-btn gym-modal-submit">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Isaac logs (home screen easter egg) -->
   <div id="isaac-logs-modal" class="gym-modal hidden">
     <div class="gym-modal-box gym-modal-wide">
@@ -529,6 +563,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=28"></script>
+  <script src="app.js?v=31"></script>
 </body>
 </html>

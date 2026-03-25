@@ -558,10 +558,23 @@ requestAnimationFrame(animLoop)
 // SCREEN TRANSITIONS
 // ═══════════════════════════════════════════════════════════
 
+const btnGlobalBack = document.getElementById('btn-global-back')
+const btnGlobalHome = document.getElementById('btn-global-home')
+
+function updateGlobalNav() {
+  if (!btnGlobalBack || !btnGlobalHome) return
+  btnGlobalBack.hidden = state.screen === 'upload'
+  const busyCook = state.screen === 'cooking'
+  btnGlobalBack.disabled = busyCook
+  btnGlobalBack.title = busyCook ? 'Not available while cooking' : 'Go back one screen'
+}
+
 function goTo(screenName) {
   Object.values(screens).forEach(s => s.classList.remove('active'))
   screens[screenName].classList.add('active')
   state.screen = screenName
+  updateGlobalNav()
+  if (screenName === 'upload' || screenName === 'loading') void refreshJuiceHomePanel()
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1162,31 +1175,287 @@ async function prefetchLearningsCount() {
   }
 }
 
-/** Only when Juice is turned on: tell user if the hunt will use saved learnings. */
+/** Only when Juice is turned on and rules apply — details live on the home panel + 🧃 corner. */
 function toastJuiceLearningsStatus() {
   const n = cachedActiveLearningCount ?? 0
-  const total = cachedTotalLearnings ?? 0
   if (n > 0) {
     toast(
-      `Juice on — this hunt will use ${n} activated saved rule${n !== 1 ? 's' : ''} from your learnings (Gym / Dr. Todd).`,
+      `Juice on — ${n} activated rule${n !== 1 ? 's' : ''} will apply on this hunt.`,
       'success'
     )
-  } else if (total > 0) {
-    toast(
-      'Juice on — you have saved rules, but none are activated. Open Results and turn rules ON to apply them on hunts.',
-      'info'
-    )
-  } else if (total === 0) {
-    toast(
-      'Juice on — no saved learnings yet. Extract rules from Gym Teacher or Dr. Todd, then activate them in Results.',
-      'info'
-    )
-  } else {
-    toast(
-      'Juice on — could not check learnings. If the hunt uses saved rules, they still apply when the server is reachable.',
-      'info'
-    )
   }
+}
+
+function learningSourceLabel(l) {
+  if (l.source === 'dr-todd-diagnostic') return 'Dr. Todd extract'
+  return 'Gym Teacher'
+}
+
+function formatLearningBatchDate(iso) {
+  if (!iso) return 'unknown date'
+  try {
+    return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+  } catch {
+    return String(iso).slice(0, 16)
+  }
+}
+
+function batchKeyForLearning(l) {
+  if (l.batchId) return String(l.batchId)
+  const isDr = l.source === 'dr-todd-diagnostic'
+  const t = (l.createdAt || l.created_at || '').slice(0, 16)
+  if (isDr) return `legacy-dr|${t}`
+  const tenant = String(l.tenant || '').replace(/\|/g, '_')
+  return `legacy-gym|${tenant}|${t}`
+}
+
+function buildJuiceLearningGroups(learnings) {
+  const byKey = new Map()
+  for (const l of learnings) {
+    const key = batchKeyForLearning(l)
+    if (!byKey.has(key)) byKey.set(key, [])
+    byKey.get(key).push(l)
+  }
+  const groups = []
+  for (const [, items] of byKey) {
+    if (items.length === 0) continue
+    const first = items[0]
+    const kind = first.source === 'dr-todd-diagnostic' ? 'dr-todd' : 'gym'
+    const tenant = first.tenantName || first.tenant || 'Unknown'
+    const when = first.createdAt || first.created_at || ''
+    groups.push({ kind, tenant, when, items })
+  }
+  groups.sort((a, b) => (b.when || '').localeCompare(a.when || ''))
+  return groups
+}
+
+function sortLearningsForDisplay(items) {
+  return [...items].sort(
+    (a, b) => Number(!!b.active) - Number(!!a.active) ||
+      String(a.checkType || '').localeCompare(String(b.checkType || ''))
+  )
+}
+
+async function juicePatchLearningActive(id, active) {
+  const res = await fetch(`/api/gym/learnings/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ active })
+  })
+  if (!res.ok) throw new Error('patch failed')
+}
+
+async function juiceRefreshModalAfterChange(bodyEl) {
+  const res = await fetch('/api/gym/learnings')
+  const list = await res.json()
+  if (!res.ok) throw new Error(list.error || 'Failed to load')
+  const arr = Array.isArray(list) ? list : []
+  cachedTotalLearnings = arr.length
+  cachedActiveLearningCount = arr.filter(x => x.active).length
+  renderJuiceLearningsListInto(bodyEl, arr)
+  await refreshJuiceHomePanel()
+  refreshHuntJarSprite()
+}
+
+async function juiceBulkSetActive(bodyEl, cbs, active) {
+  const targets = cbs.filter(cb => cb.checked !== active)
+  if (targets.length === 0) {
+    toast(active ? 'Already all ON in that set' : 'Already all OFF in that set', 'info')
+    return
+  }
+  try {
+    for (const cb of targets) {
+      await juicePatchLearningActive(cb.dataset.id, active)
+    }
+    toast(active ? `✅ ${targets.length} ON` : `${targets.length} OFF`, 'success')
+    await juiceRefreshModalAfterChange(bodyEl)
+  } catch {
+    toast('Could not update — try again', 'error')
+  }
+}
+
+let juiceLearningsBodyDelegated = false
+function ensureJuiceLearningsDelegation() {
+  const body = document.getElementById('juice-learnings-body')
+  if (!body || juiceLearningsBodyDelegated) return
+  juiceLearningsBodyDelegated = true
+  body.addEventListener('click', async (e) => {
+    const gOn = e.target.closest('.juice-bulk-on.juice-bulk-group')
+    if (gOn) {
+      const group = gOn.closest('.juice-learnings-group')
+      await juiceBulkSetActive(body, [...group.querySelectorAll('.juice-learning-cb')], true)
+      return
+    }
+    const gOff = e.target.closest('.juice-bulk-off.juice-bulk-group')
+    if (gOff) {
+      const group = gOff.closest('.juice-learnings-group')
+      await juiceBulkSetActive(body, [...group.querySelectorAll('.juice-learning-cb')], false)
+      return
+    }
+    if (e.target.closest('.juice-bulk-on.juice-bulk-global')) {
+      await juiceBulkSetActive(body, [...body.querySelectorAll('.juice-learning-cb')], true)
+      return
+    }
+    if (e.target.closest('.juice-bulk-off.juice-bulk-global')) {
+      await juiceBulkSetActive(body, [...body.querySelectorAll('.juice-learning-cb')], false)
+    }
+  })
+  body.addEventListener('change', async (e) => {
+    const cb = e.target.closest('.juice-learning-cb')
+    if (!cb || e.target !== cb) return
+    try {
+      await juicePatchLearningActive(cb.dataset.id, cb.checked)
+      toast(cb.checked ? '✅ Rule ON for Juice' : 'Rule OFF', 'success')
+      await prefetchLearningsCount()
+      refreshHuntJarSprite()
+      await refreshJuiceHomePanel()
+    } catch {
+      toast('Could not save — try again', 'error')
+      cb.checked = !cb.checked
+    }
+  })
+}
+
+function renderJuiceLearningCardHtml(l) {
+  const ct = escHtml(l.checkType || 'Rule')
+  const conf = escHtml(l.confidence || 'medium')
+  const sug = escHtml(l.suggestion || '')
+  const rat = escHtml(l.rationale || '')
+  const src = escHtml(learningSourceLabel(l))
+  const when = escHtml((l.createdAt || l.created_at || '').slice(0, 10))
+  const on = l.active ? 'checked' : ''
+  const safeId = String(l.id).replace(/[^a-zA-Z0-9_-]/g, '')
+  return `
+    <div class="gym-learning-card" id="juice-learning-${safeId}">
+      <div class="gym-learning-top">
+        <span class="gym-learning-check">${ct}</span>
+        <span class="gym-learning-confidence confidence-${escHtml((l.confidence || 'medium').toLowerCase())}">${conf}</span>
+      </div>
+      <div class="gym-learning-suggestion">${sug}</div>
+      <div class="gym-learning-rationale">${rat}</div>
+      <p class="juice-learning-source">${src}${when ? ` · ${when}` : ''}</p>
+      <div class="gym-learning-activate">
+        <label class="gym-activate-toggle">
+          <input type="checkbox" class="gym-activate-cb juice-learning-cb" data-id="${String(l.id).replace(/"/g, '')}" ${on} />
+          <span class="gym-activate-slider"></span>
+        </label>
+        <span class="gym-activate-label">ON for Juice hunts</span>
+      </div>
+    </div>`
+}
+
+function renderJuiceLearningsListInto(container, learnings) {
+  if (learnings.length === 0) {
+    container.innerHTML =
+      '<p class="gym-no-learnings">No learnings saved yet. Run Gym Teacher → Analysis Workout or Dr. Todd → Extract learnings.</p>'
+    return
+  }
+  const groups = buildJuiceLearningGroups(learnings)
+  const toolbar = `
+    <div class="juice-learnings-toolbar">
+      <span class="juice-toolbar-label">EVERYTHING</span>
+      <button type="button" class="juice-bulk-on juice-bulk-global">ALL ON</button>
+      <button type="button" class="juice-bulk-off juice-bulk-global">ALL OFF</button>
+    </div>`
+  const sections = groups.map(g => {
+    const kindLabel = g.kind === 'dr-todd' ? 'DR. TODD — ONE EXTRACT' : 'GYM — ONE REPORT'
+    const subLabel = g.kind === 'dr-todd' ? 'Whole diagnostic extract' : 'Whole workout analysis'
+    const sorted = sortLearningsForDisplay(g.items)
+    const cards = sorted.map(renderJuiceLearningCardHtml).join('')
+    return `
+    <section class="juice-learnings-group">
+      <header class="juice-group-head">
+        <div class="juice-group-title">
+          <span class="juice-group-kind">${kindLabel}</span>
+          <h5 class="juice-group-heading">${escHtml(g.tenant)}</h5>
+          <span class="juice-group-meta">${escHtml(subLabel)} · ${escHtml(formatLearningBatchDate(g.when))} · ${sorted.length} rule${sorted.length !== 1 ? 's' : ''}</span>
+        </div>
+        <div class="juice-group-actions">
+          <button type="button" class="juice-bulk-on juice-bulk-group">ALL ON</button>
+          <button type="button" class="juice-bulk-off juice-bulk-group">ALL OFF</button>
+        </div>
+      </header>
+      <div class="juice-group-cards">${cards}</div>
+    </section>`
+  }).join('')
+  container.innerHTML = toolbar + `<div class="juice-learnings-groups">${sections}</div>`
+}
+
+async function openJuiceLearningsModal() {
+  const modal = document.getElementById('juice-learnings-modal')
+  const body = document.getElementById('juice-learnings-body')
+  if (!modal || !body) return
+  ensureJuiceLearningsDelegation()
+  body.innerHTML = '<p class="gym-no-learnings">Loading…</p>'
+  modal.classList.remove('hidden')
+  try {
+    const res = await fetch('/api/gym/learnings')
+    const list = await res.json()
+    if (!res.ok) throw new Error(list.error || 'Failed to load')
+    const arr = Array.isArray(list) ? list : []
+    cachedTotalLearnings = arr.length
+    cachedActiveLearningCount = arr.filter(x => x.active).length
+    renderJuiceLearningsListInto(body, arr)
+    await refreshJuiceHomePanel()
+  } catch (e) {
+    body.innerHTML = `<p class="gym-no-learnings">Could not load: ${escHtml(e.message)}</p>`
+    await prefetchLearningsCount()
+    syncJuiceLoadingBanner()
+  }
+}
+
+function syncJuiceLoadingBanner() {
+  const el = document.getElementById('juice-loading-banner')
+  const textEl = document.getElementById('juice-loading-banner-text')
+  if (!el || !textEl) return
+  const juiceOn = document.getElementById('juice-toggle')?.checked === true
+  const n = cachedActiveLearningCount ?? 0
+  const total = cachedTotalLearnings ?? 0
+  const onLoading = state.screen === 'loading'
+  if (!onLoading || !juiceOn || n > 0) {
+    el.classList.add('hidden')
+    return
+  }
+  el.classList.remove('hidden')
+  if (cachedActiveLearningCount === null && cachedTotalLearnings === null) {
+    textEl.textContent =
+      'Juice is ON but learnings could not be loaded. Check your connection, then open the rule list to activate rules before hunting.'
+    return
+  }
+  if (total === 0) {
+    textEl.textContent =
+      'Juice is ON and there are no saved rules yet — this hunt runs standard Todd. Add learnings from Gym Teacher or Dr. Todd, then activate them below, or turn Juice off for a plain run.'
+  } else {
+    textEl.textContent =
+      `Juice is ON but no rules are activated (${total} saved). Open the rule list and turn rules ON, or this hunt won’t use your training.`
+  }
+}
+
+async function refreshJuiceHomePanel() {
+  const text = document.getElementById('juice-home-text')
+  await prefetchLearningsCount()
+  const n = cachedActiveLearningCount ?? 0
+  const total = cachedTotalLearnings ?? 0
+  const juiceOn = juiceToggle?.checked
+  if (text) {
+    if (cachedActiveLearningCount === null && cachedTotalLearnings === null) {
+      text.textContent =
+        'Could not reach the server. When you’re online, use “Open rule list” or the 🧃 in the corner to load learnings.'
+    } else if (total === 0) {
+      text.textContent = juiceOn
+        ? 'Juice is ON — no saved rules yet. After Gym Teacher or Dr. Todd adds learnings, turn them ON here or via the 🧃 in the corner.'
+        : 'No saved rules yet. Train Todd in Gym Teacher or Dr. Todd, then turn rules ON here (or 🧃 corner) and flip JUICE on after you upload folders.'
+    } else if (n === 0) {
+      text.textContent = juiceOn
+        ? `Juice is ON, but no rules are activated yet — you have ${total} saved. Use “Open rule list” or the 🧃 below to switch rules ON for hunts.`
+        : `You have ${total} saved rule${total !== 1 ? 's' : ''} — activate them below (or 🧃 corner), then turn JUICE on when you hunt.`
+    } else {
+      text.textContent = juiceOn
+        ? `Juice is ON — ${n} activated rule${n !== 1 ? 's' : ''} will apply on hunts (${total} saved total).`
+        : `${n} rule${n !== 1 ? 's' : ''} activated — turn JUICE on when you upload to apply them. ${total} saved total.`
+    }
+  }
+  syncJuiceLoadingBanner()
 }
 
 if (juiceToggle) {
@@ -1196,16 +1465,26 @@ if (juiceToggle) {
     localStorage.setItem(JUICE_MODE_KEY, juiceToggle.checked ? '1' : '0')
     const turnedOn = juiceToggle.checked
     syncJuiceJarGlow({ flash: turnedOn })
-    prefetchLearningsCount().then(() => {
+    prefetchLearningsCount().then(async () => {
       refreshHuntJarSprite()
+      await refreshJuiceHomePanel()
       if (turnedOn) toastJuiceLearningsStatus()
     })
   })
 }
 
+document.getElementById('juice-home-manage')?.addEventListener('click', () => openJuiceLearningsModal())
+document.getElementById('juice-easter')?.addEventListener('click', () => openJuiceLearningsModal())
+document.getElementById('juice-loading-manage')?.addEventListener('click', () => openJuiceLearningsModal())
+document.getElementById('juice-learnings-close')?.addEventListener('click', () => {
+  document.getElementById('juice-learnings-modal')?.classList.add('hidden')
+  void refreshJuiceHomePanel()
+})
+
 // Restore jar overlays (glasses/dumb, muscles when juice + active rules) after localStorage init
-prefetchLearningsCount().then(() => {
+prefetchLearningsCount().then(async () => {
   requestAnimationFrame(() => refreshHuntJarSprite())
+  await refreshJuiceHomePanel()
 })
 
 function showOversizeWarnings(tenants) {
@@ -1224,7 +1503,10 @@ function showHuntCta() {
   const wrap = document.getElementById('hunt-cta-wrap')
   wrap.classList.add('ready')
   syncJuiceJarGlow({ flash: false })
-  prefetchLearningsCount().then(() => refreshHuntJarSprite())
+  prefetchLearningsCount().then(async () => {
+    refreshHuntJarSprite()
+    await refreshJuiceHomePanel()
+  })
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1234,25 +1516,7 @@ function showHuntCta() {
 document.getElementById('btn-hunt').addEventListener('click', () => startHunt())
 
 document.getElementById('btn-kill-hunt').addEventListener('click', () => {
-  // Close SSE — server sees req.close → sets aborted=true → stops launching new API calls
-  if (state.eventSource) { state.eventSource.close(); state.eventSource = null }
-  stopArena()
-
-  // Full state reset
-  state.tenants     = []
-  state.findings    = new Map()
-  state.downloadUrl = null
-  state.sessionId   = crypto.randomUUID()
-
-  // Reset UI
-  animState.toddMode = 'idle'
-  document.getElementById('btn-kill-hunt').classList.add('hidden')
-  document.getElementById('cook-cta-wrap').classList.add('hidden')
-  document.getElementById('tenant-grid-loading').innerHTML = ''
-  document.getElementById('tenant-grid-hunt').innerHTML = ''
-  document.getElementById('hunt-cta-wrap').classList.remove('ready')
-  document.getElementById('upload-progress-fill').style.width = '0%'
-
+  fullResetSession()
   goTo('upload')
   toast('Hunt stopped — ready for a new session', 'info')
 })
@@ -2347,6 +2611,91 @@ function stopArena() {
   if (arenaLoopId) { cancelAnimationFrame(arenaLoopId); arenaLoopId = null }
 }
 
+/** Full session reset (Home / Kill hunt) — tenants cleared, back to upload. */
+function fullResetSession() {
+  if (state.eventSource) { state.eventSource.close(); state.eventSource = null }
+  stopArena()
+  gymReset()
+  state.tenants     = []
+  state.findings    = new Map()
+  state.downloadUrl = null
+  state.sessionId   = crypto.randomUUID()
+  animState.toddMode = 'idle'
+  document.getElementById('btn-kill-hunt')?.classList.add('hidden')
+  document.getElementById('cook-cta-wrap')?.classList.add('hidden')
+  document.getElementById('tenant-grid-loading').innerHTML = ''
+  document.getElementById('tenant-grid-hunt').innerHTML = ''
+  document.getElementById('hunt-cta-wrap')?.classList.remove('ready')
+  document.getElementById('upload-progress-fill').style.width = '0%'
+}
+
+function resetToHome() {
+  fullResetSession()
+  goTo('upload')
+  toast('Home — new session', 'info')
+}
+
+function navigateGlobalBack() {
+  switch (state.screen) {
+    case 'upload':
+      break
+    case 'loading':
+      if (state.tenants.length === 0) {
+        goTo('upload')
+        return
+      }
+      if (!window.confirm('Leave the folder list? You’ll start fresh from home.')) return
+      fullResetSession()
+      goTo('upload')
+      break
+    case 'hunt':
+      if (!window.confirm('Stop the hunt and return to your folder list?')) return
+      if (state.eventSource) { state.eventSource.close(); state.eventSource = null }
+      stopArena()
+      animState.toddMode = 'idle'
+      document.getElementById('btn-kill-hunt').classList.add('hidden')
+      document.getElementById('cook-cta-wrap').classList.add('hidden')
+      document.getElementById('tenant-grid-hunt').innerHTML = ''
+      state.findings = new Map()
+      goTo('loading')
+      break
+    case 'cooking':
+      toast('Still cooking — use Home to cancel the whole session', 'info')
+      break
+    case 'report':
+      goTo(state.tenants.length ? 'loading' : 'upload')
+      break
+    case 'drtoddhunt':
+      if (state.eventSource) { state.eventSource.close(); state.eventSource = null }
+      goTo('loading')
+      break
+    case 'gym':
+      if (state.eventSource) { state.eventSource.close(); state.eventSource = null }
+      gymReset()
+      goTo('loading')
+      break
+    case 'sidebyside':
+      if (state.eventSource) { state.eventSource.close(); state.eventSource = null }
+      goTo('drtoddhunt')
+      break
+    default:
+      break
+  }
+}
+
+btnGlobalHome?.addEventListener('click', () => {
+  if (state.screen === 'upload') {
+    toast('You’re already home', 'info')
+    return
+  }
+  if (!window.confirm('Go home? This starts a new session (upload folders again).')) return
+  resetToHome()
+})
+
+btnGlobalBack?.addEventListener('click', () => navigateGlobalBack())
+
+updateGlobalNav()
+
 // ═══════════════════════════════════════════════════════════
 // UTILITIES
 // ═══════════════════════════════════════════════════════════
@@ -2363,11 +2712,50 @@ function sleep(ms) {
   return new Promise(r => setTimeout(r, ms))
 }
 
+// ── Pixel juice box (home corner, next to Isaac) ────────────
+const JUICE_EASTER_CANVAS = document.getElementById('juice-easter-canvas')
+const JUICE_PS_E = 4
+const JuC = {
+  '.': null,
+  b: '#0f172a',
+  g: '#22c55e',
+  l: '#86efac',
+  y: '#eab308',
+}
+const JUICE_PIXELS = [
+  'bbbbbbbb',
+  'bggggggb',
+  'bgllllgb',
+  'bgllllgb',
+  'bgygyyyb',
+  'bggggggb',
+  'bbbybbbb',
+  'bbbbbbbb',
+  'bbbbbbbb',
+  'bbbbbbbb',
+]
+function drawJuiceEasterIcon() {
+  if (!JUICE_EASTER_CANVAS) return
+  const ctx = JUICE_EASTER_CANVAS.getContext('2d')
+  ctx.clearRect(0, 0, JUICE_EASTER_CANVAS.width, JUICE_EASTER_CANVAS.height)
+  for (let r = 0; r < JUICE_PIXELS.length; r++) {
+    const row = JUICE_PIXELS[r]
+    for (let c = 0; c < row.length; c++) {
+      const col = JuC[row[c]]
+      if (col) {
+        ctx.fillStyle = col
+        ctx.fillRect(c * JUICE_PS_E, r * JUICE_PS_E, JUICE_PS_E, JUICE_PS_E)
+      }
+    }
+  }
+}
+
 // ── Initial draw ─────────────────────────────────────────────
 drawFrame(HERO_CANVAS,    IDLE1)
 if (HUNT_JAR_CANVAS) drawFrame(HUNT_JAR_CANVAS, buildHuntJarComposite())
 drawFrame(COOK_CANVAS,    ATK1)
 drawFrame(REPORT_CANVAS,  VIC1)
+drawJuiceEasterIcon()
 
 // ═══════════════════════════════════════════════════════════
 // GYM TEACHER MODE
@@ -3510,7 +3898,9 @@ function gymShowResults(data) {
           body: JSON.stringify({ active: cb.checked })
         })
         toast(cb.checked ? '✅ Learning activated' : 'Learning deactivated', 'success')
-        prefetchLearningsCount().then(() => refreshHuntJarSprite())
+        await prefetchLearningsCount()
+        refreshHuntJarSprite()
+        await refreshJuiceHomePanel()
       } catch {
         toast('Could not save — try again', 'error')
         cb.checked = !cb.checked
