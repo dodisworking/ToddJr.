@@ -423,10 +423,277 @@ html, body {
   pointer-events: none;
   transition: opacity 0.4s;
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
 }
 .hunt-cta-wrap.ready {
   opacity: 1;
   pointer-events: auto;
+}
+
+/* Jar (left) + stacked buttons & toggles (right) */
+.hunt-cta-cluster {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 18px 22px;
+  width: 100%;
+  max-width: 640px;
+  flex-wrap: wrap;
+}
+/* Jar was visually low vs. only the three buttons (toggles extend the right column). Nudge up. */
+.hunt-cta-cluster > .hunt-jar-wrap {
+  transform: translateY(-20px);
+}
+.hunt-cta-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 260px;
+  max-width: 340px;
+}
+.hunt-cta-actions .btn-hunt {
+  width: 100%;
+  justify-content: center;
+  box-sizing: border-box;
+}
+.hunt-cta-actions .btn-drtoddhunt,
+.hunt-cta-actions .btn-workout {
+  width: 100%;
+  box-sizing: border-box;
+}
+.hunt-cta-actions .hunt-toggles-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 4px 0 0;
+  padding: 12px 8px 0;
+  border-top: 1px solid rgba(51, 65, 85, 0.6);
+}
+.hunt-toggle-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+.hunt-toggle-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 8px;
+  width: 100%;
+  max-width: 288px;
+}
+.hunt-tog-l {
+  text-align: right;
+  justify-self: end;
+  white-space: nowrap;
+}
+.hunt-tog-r {
+  text-align: left;
+  justify-self: start;
+  white-space: nowrap;
+}
+.hunt-tog-switch {
+  justify-self: center;
+}
+
+.hunt-jar-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  filter: drop-shadow(0 6px 14px rgba(59, 130, 246, 0.25));
+}
+
+.hunt-jar-neck {
+  width: 28px;
+  height: 8px;
+  background: linear-gradient(180deg, #334155, #1e293b);
+  border: 2px solid #64748b;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12);
+}
+
+.hunt-jar-glass {
+  position: relative;
+  width: 72px;
+  height: 96px;
+  border-radius: 8px 8px 42% 42% / 8px 8px 55% 55%;
+  border: 3px solid rgba(96, 165, 250, 0.85);
+  background: linear-gradient(
+    165deg,
+    rgba(30, 58, 95, 0.35) 0%,
+    rgba(15, 23, 42, 0.55) 45%,
+    rgba(16, 185, 129, 0.12) 100%
+  );
+  box-shadow:
+    inset 0 0 20px rgba(59, 130, 246, 0.15),
+    inset 0 -24px 32px rgba(6, 182, 212, 0.08),
+    0 0 0 1px rgba(15, 23, 42, 0.9);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hunt-jar-liquid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 38%;
+  background: linear-gradient(180deg, transparent, rgba(59, 130, 246, 0.18), rgba(16, 185, 129, 0.12));
+  border-radius: 0 0 36% 36%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.hunt-jar-canvas {
+  position: relative;
+  z-index: 2;
+  display: block;
+  margin: 4px 0 2px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.hunt-jar-shine {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  width: 14px;
+  height: 48%;
+  background: linear-gradient(90deg, rgba(255,255,255,0.14), transparent);
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.hunt-jar-base {
+  width: 52px;
+  height: 10px;
+  margin-top: -2px;
+  background: linear-gradient(180deg, #475569, #1e293b);
+  border: 2px solid #64748b;
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+}
+
+/* Juice ON — green gamma glow + vertical “ray” scan inside glass */
+.hunt-jar-wrap--juice:not(.hunt-jar-wrap--juice-flash) {
+  filter:
+    drop-shadow(0 4px 10px rgba(59, 130, 246, 0.2))
+    drop-shadow(0 0 12px rgba(74, 222, 128, 0.75))
+    drop-shadow(0 0 28px rgba(34, 197, 94, 0.55))
+    drop-shadow(0 0 48px rgba(22, 163, 74, 0.35));
+  animation: huntJarJuiceGlowPulse 2.4s ease-in-out infinite;
+}
+.hunt-jar-wrap--juice .hunt-jar-glass {
+  border-color: rgba(134, 239, 172, 0.9);
+  box-shadow:
+    inset 0 0 28px rgba(34, 197, 94, 0.22),
+    inset 0 -20px 36px rgba(74, 222, 128, 0.12),
+    0 0 0 1px rgba(20, 83, 45, 0.5),
+    0 0 22px rgba(74, 222, 128, 0.45),
+    0 0 44px rgba(22, 163, 74, 0.25);
+}
+.hunt-jar-wrap--juice .hunt-jar-glass::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 4;
+  background: repeating-linear-gradient(
+    95deg,
+    transparent 0px,
+    transparent 5px,
+    rgba(190, 242, 100, 0.14) 5px,
+    rgba(190, 242, 100, 0.14) 6px,
+    transparent 6px,
+    transparent 14px
+  );
+  mix-blend-mode: screen;
+  opacity: 0.55;
+  animation: huntJarGammaRaySweep 2.1s linear infinite;
+}
+.hunt-jar-wrap--juice .hunt-jar-liquid {
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(34, 197, 94, 0.22),
+    rgba(74, 222, 128, 0.18)
+  );
+}
+
+@keyframes huntJarJuiceGlowPulse {
+  0%, 100% {
+    filter:
+      drop-shadow(0 4px 10px rgba(59, 130, 246, 0.18))
+      drop-shadow(0 0 8px rgba(74, 222, 128, 0.55))
+      drop-shadow(0 0 22px rgba(34, 197, 94, 0.4))
+      drop-shadow(0 0 40px rgba(22, 163, 74, 0.22));
+  }
+  50% {
+    filter:
+      drop-shadow(0 4px 10px rgba(59, 130, 246, 0.2))
+      drop-shadow(0 0 18px rgba(163, 230, 53, 0.95))
+      drop-shadow(0 0 36px rgba(74, 222, 128, 0.7))
+      drop-shadow(0 0 64px rgba(34, 197, 94, 0.45));
+  }
+}
+
+@keyframes huntJarGammaRaySweep {
+  0% {
+    transform: translateX(-18%) skewX(-6deg);
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translateX(18%) skewX(-6deg);
+    opacity: 0.35;
+  }
+}
+
+/* One-shot burst when Juice is toggled on (pulse resumes after class removed in JS) */
+.hunt-jar-wrap--juice-flash {
+  animation: huntJarJuiceFlash 0.85s ease-out forwards;
+}
+
+@keyframes huntJarJuiceFlash {
+  0% {
+    filter:
+      drop-shadow(0 0 4px rgba(255, 255, 255, 0.9))
+      drop-shadow(0 0 24px rgba(190, 242, 100, 1))
+      drop-shadow(0 0 56px rgba(74, 222, 128, 0.9))
+      drop-shadow(0 0 100px rgba(34, 197, 94, 0.65));
+  }
+  35% {
+    filter:
+      drop-shadow(0 0 20px rgba(163, 230, 53, 1))
+      drop-shadow(0 0 50px rgba(74, 222, 128, 0.95))
+      drop-shadow(0 0 90px rgba(22, 163, 74, 0.55));
+  }
+  100% {
+    filter:
+      drop-shadow(0 4px 10px rgba(59, 130, 246, 0.2))
+      drop-shadow(0 0 12px rgba(74, 222, 128, 0.75))
+      drop-shadow(0 0 28px rgba(34, 197, 94, 0.55))
+      drop-shadow(0 0 48px rgba(22, 163, 74, 0.35));
+  }
 }
 
 .btn-hunt {
@@ -555,9 +822,7 @@ html, body {
   flex-shrink: 0;
 }
 
-.scan-mode-wrap { display:flex; align-items:center; gap:10px; margin-bottom:16px; justify-content:center; flex-wrap:wrap; }
 .scan-mode-label { font-family:'Press Start 2P',monospace; font-size:7px; color:#9CA3AF; }
-.scan-mode-hint { font-size:10px; color:#6B7280; }
 .toggle-switch { position:relative; display:inline-block; width:44px; height:22px; }
 .toggle-switch input { opacity:0; width:0; height:0; }
 .toggle-slider { position:absolute; inset:0; background:#374151; border-radius:22px; cursor:pointer; transition:0.2s; }
@@ -566,25 +831,8 @@ input:checked + .toggle-slider { background:#1D4ED8; }
 input:checked + .toggle-slider:before { transform:translateX(22px); background:#fff; }
 /* Dumb mode on — distinct accent from accuracy toggle */
 #cheap-mode-toggle:checked + .toggle-slider { background:#6d28d9; }
-
-.btn-test-mode {
-  margin-top: 12px;
-  background: transparent;
-  border: 2px dashed #4B5563;
-  color: #9CA3AF;
-  font-family: 'Press Start 2P', monospace;
-  font-size: 9px;
-  padding: 10px 20px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  letter-spacing: 0.5px;
-}
-.btn-test-mode:hover {
-  border-color: #F59E0B;
-  color: #F59E0B;
-  background: rgba(245,158,11,0.08);
-}
+/* Juice mode — learnings applied on main hunt */
+#juice-toggle:checked + .toggle-slider { background:#059669; }
 
 .btn-sprite { image-rendering: pixelated; }
 
@@ -966,26 +1214,50 @@ input:checked + .toggle-slider:before { transform:translateX(22px); background:#
 @media (max-width: 600px) {
   .screen { padding: 20px 16px; }
   .logo-title { font-size: 20px; }
+  .hunt-cta-cluster {
+    flex-direction: column;
+    align-items: center;
+  }
+  .hunt-cta-cluster > .hunt-jar-wrap {
+    transform: translateY(-8px);
+  }
+  .hunt-cta-actions {
+    max-width: min(340px, 100%);
+    width: 100%;
+  }
+  .hunt-jar-glass { width: 64px; height: 88px; }
+  .hunt-jar-canvas { transform: scale(0.92); transform-origin: center top; }
   .btn-hunt, .btn-cook { font-size: 10px; padding: 14px 20px; }
+  .btn-drtoddhunt, .btn-workout { font-size: 7px; padding: 10px 14px; }
   .tenant-grid { grid-template-columns: 1fr 1fr; }
   .stats-row { gap: 10px; }
   .stat-value { font-size: 24px; }
 }
 
-/* ── Dr. Todd Hunt ─────────────────────────────────────────── */
+/* ── Dr. Todd Hunt (upload CTA — matches pixel hunt styling) ─ */
 .btn-drtoddhunt {
-  margin-top: 10px;
-  padding: 10px 24px;
+  margin-top: 0;
+  padding: 12px 20px;
   background: linear-gradient(135deg, #7c3aed, #5b21b6);
   color: #fff;
   border: none;
-  border-radius: 8px;
-  font-size: 0.85rem;
-  font-weight: 600;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  line-height: 1.5;
   cursor: pointer;
-  transition: opacity .2s;
+  transition: transform 0.15s, opacity 0.2s, box-shadow 0.15s;
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.35), 0 0 0 2px rgba(124, 58, 237, 0.15);
+  image-rendering: pixelated;
 }
-.btn-drtoddhunt:hover { opacity: .85; }
+.btn-drtoddhunt:hover {
+  opacity: 0.95;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.45), 0 0 0 2px rgba(124, 58, 237, 0.25);
+}
+.btn-drtoddhunt:active { transform: translateY(0); }
 
 #screen-drtoddhunt {
   padding: 32px 24px;
@@ -1459,20 +1731,28 @@ input:checked + .toggle-slider:before { transform:translateX(22px); background:#
    WORKOUT BUTTON (loading screen)
 ═══════════════════════════════════════════════════════════ */
 .btn-workout {
-  margin-top: 10px;
-  padding: 10px 24px;
+  margin-top: 0;
+  padding: 12px 20px;
   background: linear-gradient(135deg, #065F46, #10B981);
   color: #fff;
   border: none;
-  border-radius: 8px;
-  font-family: 'Press Start 2P', monospace;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-pixel);
   font-size: 8px;
+  font-weight: 400;
   cursor: pointer;
-  transition: opacity 0.2s, transform 0.15s;
+  transition: transform 0.15s, opacity 0.2s, box-shadow 0.15s;
   letter-spacing: 0.5px;
-  box-shadow: 0 4px 16px rgba(16,185,129,0.3);
+  line-height: 1.5;
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35), 0 0 0 2px rgba(16, 185, 129, 0.12);
+  image-rendering: pixelated;
 }
-.btn-workout:hover { opacity: 0.9; transform: translateY(-1px); }
+.btn-workout:hover {
+  opacity: 0.95;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45), 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+.btn-workout:active { transform: translateY(0); }
 
 /* ═══════════════════════════════════════════════════════════
    GYM TEACHER SCREEN

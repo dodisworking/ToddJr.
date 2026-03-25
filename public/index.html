@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=3" />
+  <link rel="stylesheet" href="style.css?v=14" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
@@ -86,34 +86,56 @@
 
     <div class="hunt-cta-wrap" id="hunt-cta-wrap">
 
-      <!-- Speed vs Accuracy toggle -->
-      <div class="scan-mode-wrap">
-        <span class="scan-mode-label">⚡ SPEED</span>
-        <label class="toggle-switch">
-          <input type="checkbox" id="accuracy-toggle" checked />
-          <span class="toggle-slider"></span>
-        </label>
-        <span class="scan-mode-label">🎯 ACCURACY</span>
-        <span class="scan-mode-hint" id="scan-mode-hint">One tenant at a time — safest, no rate limits</span>
+      <div class="hunt-cta-cluster">
+        <div class="hunt-jar-wrap" id="hunt-jar-wrap" aria-hidden="true" title="Todd reacts to your toggles">
+          <div class="hunt-jar-neck"></div>
+          <div class="hunt-jar-glass">
+            <div class="hunt-jar-liquid"></div>
+            <canvas id="hunt-jar-canvas" class="hunt-jar-canvas" width="60" height="84"></canvas>
+            <div class="hunt-jar-shine"></div>
+          </div>
+          <div class="hunt-jar-base"></div>
+        </div>
+        <div class="hunt-cta-actions">
+          <button class="btn-hunt" id="btn-hunt" type="button">
+            <span>Send Todd Junior Hunting</span>
+          </button>
+          <button type="button" class="btn-drtoddhunt" id="btn-drtoddhunt">🔬 Send Dr. Todd to Hunt</button>
+          <button type="button" class="btn-workout" id="btn-workout">🏋️ Todd Gym Teacher</button>
+          <div class="hunt-toggles-panel" aria-label="Hunt options">
+            <div class="hunt-toggle-row">
+              <div class="hunt-toggle-controls">
+                <span class="scan-mode-label hunt-tog-l">⚡ SPEED</span>
+                <label class="toggle-switch hunt-tog-switch">
+                  <input type="checkbox" id="accuracy-toggle" checked />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span class="scan-mode-label hunt-tog-r">🎯 ACCURACY</span>
+              </div>
+            </div>
+            <div class="hunt-toggle-row">
+              <div class="hunt-toggle-controls">
+                <span class="scan-mode-label hunt-tog-l">✨ SMART</span>
+                <label class="toggle-switch hunt-tog-switch">
+                  <input type="checkbox" id="cheap-mode-toggle" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span class="scan-mode-label hunt-tog-r">🪙 DUMB</span>
+              </div>
+            </div>
+            <div class="hunt-toggle-row">
+              <div class="hunt-toggle-controls">
+                <span class="scan-mode-label hunt-tog-l">PLAIN</span>
+                <label class="toggle-switch hunt-tog-switch">
+                  <input type="checkbox" id="juice-toggle" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span class="scan-mode-label hunt-tog-r">🧃 JUICE</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-
-      <div class="scan-mode-wrap">
-        <span class="scan-mode-label">✨ SMART</span>
-        <label class="toggle-switch">
-          <input type="checkbox" id="cheap-mode-toggle" />
-          <span class="toggle-slider"></span>
-        </label>
-        <span class="scan-mode-label">🪙 DUMB</span>
-        <span class="scan-mode-hint" id="cheap-mode-label">Claude Sonnet — full quality</span>
-      </div>
-
-      <button class="btn-hunt" id="btn-hunt">
-        <canvas class="btn-sprite" id="btn-sprite" width="24" height="28"></canvas>
-        <span>Send Todd Junior Hunting</span>
-      </button>
-      <button class="btn-test-mode" id="btn-test-mode">🎲 Test Mode — Scan 1 Random Tenant</button>
-      <button class="btn-drtoddhunt" id="btn-drtoddhunt">🔬 Send Dr. Todd to Hunt</button>
-      <button class="btn-workout" id="btn-workout">🏋️ Todd Gym Teacher</button>
     </div>
   </div>
 
@@ -244,7 +266,8 @@
       <div class="drtodd-learnings-cta" id="drtodd-learnings-cta">
         <div class="drtodd-learnings-cta-text">
           <strong>💡 Save learnings from this report</strong>
-          <span>Let the AI extract training rules from the diagnostic — no manual review needed</span>
+          <span>Reports are also archived on the server under <code>outputs/dr-todd-reports</code> when you generate them.</span>
+          <span>Extract saves rules into the same list as Gym — activate them in Gym → Results to use with Juice on the main hunt.</span>
         </div>
         <button class="btn-extract-learnings" id="btn-extract-learnings">🧠 Extract &amp; Save Learnings</button>
       </div>
@@ -506,6 +529,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=16"></script>
+  <script src="app.js?v=28"></script>
 </body>
 </html>

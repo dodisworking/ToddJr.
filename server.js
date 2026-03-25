@@ -28,6 +28,40 @@ const OUTPUTS_DIR = path.join(__dirname, 'outputs')
 fs.mkdirSync(UPLOADS_DIR, { recursive: true })
 fs.mkdirSync(OUTPUTS_DIR, { recursive: true })
 
+const LEARNINGS_PATH = path.join(OUTPUTS_DIR, 'learnings.json')
+const DR_TODD_REPORTS_DIR = path.join(OUTPUTS_DIR, 'dr-todd-reports')
+fs.mkdirSync(DR_TODD_REPORTS_DIR, { recursive: true })
+
+function readLearnings() {
+  try {
+    if (!fs.existsSync(LEARNINGS_PATH)) return []
+    return JSON.parse(fs.readFileSync(LEARNINGS_PATH, 'utf8'))
+  } catch { return [] }
+}
+function writeLearnings(arr) {
+  try { fs.writeFileSync(LEARNINGS_PATH, JSON.stringify(arr, null, 2)) } catch {}
+}
+
+/** Persist full Dr. Todd synthesis reports on disk (Railway outputs volume). */
+function appendDrToddReportArchive({ tenantName, folderName, reportText, sessionId }) {
+  try {
+    const id = randomUUID()
+    const safe = String(tenantName || 'tenant').replace(/[^a-z0-9-_]+/gi, '-').slice(0, 48) || 'tenant'
+    const fname = `${new Date().toISOString().replace(/[:.]/g, '-')}_${safe.slice(0, 32)}_${id.slice(0, 8)}.json`
+    const rec = {
+      id,
+      savedAt: new Date().toISOString(),
+      sessionId: sessionId || null,
+      tenantName: tenantName || '',
+      folderName: folderName || '',
+      report: reportText || ''
+    }
+    fs.writeFileSync(path.join(DR_TODD_REPORTS_DIR, fname), JSON.stringify(rec, null, 2), 'utf8')
+  } catch (e) {
+    console.error('[dr-todd-reports]', e.message)
+  }
+}
+
 function parseFolderName(name) {
   const s = name || ''
   const dashIdx = s.indexOf(' - ')
@@ -315,10 +349,15 @@ app.post('/api/upload', upload.array('files', 10000), async (req, res) => {
 // ═══════════════════════════════════════════════════════════
 
 app.get('/api/hunt', async (req, res) => {
-  const { sessionId, testTenantId, concurrency, tenantIds } = req.query
+  const { sessionId, testTenantId, concurrency, tenantIds, juiced } = req.query
   const session = sessions.get(sessionId)
 
   if (!session) return res.status(404).json({ error: 'Session not found' })
+
+  const useJuice = juiced === '1'
+  // Same learnings file as Gym: includes Dr. Todd "Extract & Save" rules + workout feedback (only l.active === true apply)
+  const learningsForHunt = useJuice ? readLearnings() : []
+  const activeLearningCount = learningsForHunt.filter(l => l.active).length
 
   // Use local copy — never mutate session.tenants so the user can re-run
   // Filter by active tenant IDs sent from frontend (respects user deletions)
@@ -354,9 +393,16 @@ app.get('/api/hunt', async (req, res) => {
   req.on('close', () => { aborted = true; clearInterval(heartbeat) })
 
   try {
+    if (!aborted) {
+      emit('hunt-start', {
+        juiced: useJuice,
+        activeLearningsApplied: activeLearningCount,
+        learningsInFile: learningsForHunt.length
+      })
+    }
     // concurrency=1 → accuracy mode (sequential), concurrency=0 → speed mode (all at once)
     const CONCURRENCY = concurrency === '0' ? tenantsToProcess.length : 1
-    console.log(`[hunt] Mode: ${CONCURRENCY === 1 ? 'ACCURACY (sequential)' : 'SPEED (parallel)'}`)
+    console.log(`[hunt] Mode: ${CONCURRENCY === 1 ? 'ACCURACY (sequential)' : 'SPEED (parallel)'}${useJuice ? ` | JUICE (${activeLearningCount} active learnings)` : ''}`)
     await runConcurrent(tenantsToProcess, CONCURRENCY, async tenant => {
       if (aborted) return
       // Emit folder-start here so it fires exactly when this tenant begins processing
@@ -364,13 +410,18 @@ app.get('/api/hunt', async (req, res) => {
         tenantId:   tenant.id,
         tenantName: tenant.tenantName,
         folderName: tenant.folderName,
-        fileCount:  tenant.fileCount
+        fileCount:  tenant.fileCount,
+        juiced:     useJuice,
+        activeLearningsApplied: activeLearningCount
       })
       const onProgress = ({ percent, message }) => {
         if (!aborted) emit('folder-progress', { tenantId: tenant.id, percent, message })
       }
       try {
-        const result = await analyzeTenant(tenant, tenant.files, onProgress, { cheapMode: isCheapMode(req) })
+        const cheapOpts = { cheapMode: isCheapMode(req) }
+        const result = useJuice
+          ? await beefedUpAnalyzeTenant(tenant, tenant.files, onProgress, learningsForHunt, cheapOpts)
+          : await analyzeTenant(tenant, tenant.files, onProgress, cheapOpts)
         session.findings.set(tenant.id, result)
         emit('folder-done', {
           tenantId:     tenant.id,
@@ -506,6 +557,13 @@ app.post('/api/drtoddhunt/synthesize', async (req, res) => {
 
     const { synthesizeDrTodd } = await import('./lib/claude.js')
     const report = await synthesizeDrTodd(tenant, pad(0), pad(1), pad(2), { cheapMode: !!cheapMode })
+
+    appendDrToddReportArchive({
+      tenantName: tenant.tenantName,
+      folderName: tenant.folderName,
+      reportText: report,
+      sessionId
+    })
 
     res.json({ report, tenantName: tenant.tenantName })
   } catch (err) {
@@ -793,20 +851,8 @@ app.get('/api/gym/analyze', async (req, res) => {
 })
 
 // ═══════════════════════════════════════════════════════════
-// GYM TEACHER — learnings persistence (outputs/learnings.json)
+// GYM TEACHER — learnings persistence (readLearnings at top of file)
 // ═══════════════════════════════════════════════════════════
-
-const LEARNINGS_PATH = path.join(__dirname, 'outputs', 'learnings.json')
-
-function readLearnings() {
-  try {
-    if (!fs.existsSync(LEARNINGS_PATH)) return []
-    return JSON.parse(fs.readFileSync(LEARNINGS_PATH, 'utf8'))
-  } catch { return [] }
-}
-function writeLearnings(arr) {
-  try { fs.writeFileSync(LEARNINGS_PATH, JSON.stringify(arr, null, 2)) } catch {}
-}
 
 app.get('/api/gym/learnings', (_req, res) => res.json(readLearnings()))
 

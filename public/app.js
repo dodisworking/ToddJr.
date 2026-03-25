@@ -198,6 +198,231 @@ function drawFrame(canvas, frame, offsetY = 0) {
   }
 }
 
+/** Later layers paint over earlier (falsy cell = keep below). */
+function mergePix(...layers) {
+  if (!layers.length) return []
+  const h = layers[0].length
+  const w = layers[0][0].length
+  const out = []
+  for (let r = 0; r < h; r++) {
+    const row = []
+    for (let c = 0; c < w; c++) {
+      let v = layers[0][r][c]
+      for (let i = 1; i < layers.length; i++) {
+        const p = layers[i][r][c]
+        if (p) v = p
+      }
+      row.push(v)
+    }
+    out.push(row)
+  }
+  return out
+}
+
+const Z = null // transparent in overlay grids
+const BR = '#78350f' // bow wood
+const ST = '#fde047' // bow string
+const LG = '#94a3b8' // glasses rim
+
+// Smart: specs on face (rows 0-indexed ~4–5)
+const GLASSES_OVL = [
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,LG,C.W,C.W,LG,C.W,C.W,LG,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,LG,LG,Z,LG,LG,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+]
+
+// Dumb: goofy eyes + tongue (overwrites face)
+const DUMB_FACE_OVL = [
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,C.H,C.H,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,C.H,C.H,C.H,C.H,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,C.S,C.E,C.S,C.E,C.S,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,C.S,C.M,C.M,C.M,C.S,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,C.S,C.S,C.S,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+]
+
+// Juice: broader chest / arms (muscle)
+const MUSCLE_OVL = [
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,Z],
+  [Z,C.B,C.B,C.A,C.B,C.B,C.B,C.B,C.B,C.A,C.B,C.B,Z],
+  [Z,C.B,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.A,C.B,Z],
+  [Z,Z,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.A,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+]
+
+// Accuracy: bow + arrow at left
+const BOW_OVL = [
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,BR,BR,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,BR,BR,BR,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [BR,Z,Z,BR,BR,BR,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,BR,BR,ST,ST,ST,ST,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,BR,BR,BR,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,BR,BR,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,BR,BR,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,BR,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+]
+
+// Speed: three running poses (full body, replaces idle legs/arms)
+const JAR_RUN_0 = [
+  [_,_,_,_,_,C.H,C.H,C.H,C.H,_,_,_,_,_,_],
+  [_,_,_,_,C.H,C.H,C.H,C.H,C.H,C.H,_,_,_,_,_],
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_],
+  [_,_,_,_,C.S,C.S,C.E,C.S,C.E,C.S,C.S,_,_,_,_],
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_],
+  [_,_,_,_,C.S,C.S,C.M,C.M,C.S,C.S,_,_,_,_,_],
+  [_,_,_,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,_,_,_,_],
+  [_,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.A,_,_,_],
+  [_,_,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.S,_,_,_],
+  [_,_,_,C.S,C.B,C.B,C.B,C.B,C.B,C.B,C.B,_,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,C.P,C.P,_,_,_,_,_,_,C.P,C.P,_,_,_,_,_],
+  [_,C.P,C.P,_,_,_,_,_,_,C.P,C.P,_,_,_,_,_],
+  [_,C.T,C.T,_,_,_,_,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,C.T,C.T,_,_,_,_,C.T,C.T,_,_,_,_,_],
+  [_,_,_,_,C.T,C.T,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+]
+const JAR_RUN_1 = [
+  [_,_,_,_,_,C.H,C.H,C.H,C.H,_,_,_,_,_,_],
+  [_,_,_,_,C.H,C.H,C.H,C.H,C.H,C.H,_,_,_,_,_],
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_],
+  [_,_,_,_,C.S,C.S,C.E,C.S,C.E,C.S,C.S,_,_,_,_],
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_],
+  [_,_,_,_,C.S,C.S,C.M,C.M,C.S,C.S,_,_,_,_,_],
+  [_,_,_,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,_,_,_,_],
+  [_,_,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.A,_,_,_],
+  [_,_,C.A,C.S,C.B,C.B,C.B,C.B,C.B,C.B,C.A,_,_,_],
+  [_,_,_,C.S,C.B,C.B,C.B,C.B,C.B,C.B,C.S,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,C.P,C.P,_,_,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,C.P,C.P,_,_,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,C.P,C.P,_,_,_,_,C.T,C.T,_,_,_,_,_],
+  [_,_,_,C.T,C.T,_,_,C.T,C.T,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+]
+const JAR_RUN_2 = [
+  [_,_,_,_,_,C.H,C.H,C.H,C.H,_,_,_,_,_,_],
+  [_,_,_,_,C.H,C.H,C.H,C.H,C.H,C.H,_,_,_,_,_],
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_],
+  [_,_,_,_,C.S,C.S,C.E,C.S,C.E,C.S,C.S,_,_,_,_],
+  [_,_,_,_,C.H,C.S,C.S,C.S,C.S,C.H,_,_,_,_,_],
+  [_,_,_,_,C.S,C.S,C.M,C.M,C.S,C.S,_,_,_,_,_],
+  [_,_,_,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,_,_,_,_],
+  [_,_,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.A,_,_],
+  [_,_,C.A,C.B,C.B,C.B,C.B,C.B,C.B,C.B,C.S,C.A,_,_],
+  [_,_,_,C.S,C.B,C.B,C.B,C.B,C.B,C.B,C.S,_,_,_],
+  [_,_,_,_,C.P,C.P,_,_,C.P,C.P,_,_,_,_,_],
+  [_,_,_,C.P,C.P,_,_,_,_,C.P,C.P,_,_,_,_],
+  [_,_,_,C.P,C.P,_,_,_,_,C.P,C.P,_,_,_,_],
+  [_,_,_,C.P,C.P,_,_,_,_,C.P,C.P,_,_,_,_],
+  [_,_,C.T,C.T,_,_,_,C.T,C.T,_,_,_,_,_,_],
+  [_,_,_,C.T,C.T,_,_,_,C.T,C.T,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+  [_,_,_,_,_,_,_,_,_,_,_,_,_,_,_],
+]
+
+const JAR_RUN_FRAMES = [JAR_RUN_0, JAR_RUN_1, JAR_RUN_2]
+
+function buildHuntJarComposite() {
+  const accOn = document.getElementById('accuracy-toggle')?.checked !== false
+  const dumb = document.getElementById('cheap-mode-toggle')?.checked === true
+  const juice = document.getElementById('juice-toggle')?.checked === true
+
+  let base
+  if (!accOn) {
+    const idx = jarRunPhase % JAR_RUN_FRAMES.length
+    base = JAR_RUN_FRAMES[idx]
+  } else {
+    base = animState.heroFrame === 0 ? IDLE1 : IDLE2
+  }
+
+  const layers = [base]
+  // Muscles only when Juice can actually apply rules (≥1 activated learning)
+  const activeN = cachedActiveLearningCount ?? 0
+  if (juice && activeN > 0) layers.push(MUSCLE_OVL)
+  if (accOn) layers.push(BOW_OVL)
+  if (dumb) layers.push(DUMB_FACE_OVL)
+  else layers.push(GLASSES_OVL)
+  return mergePix(...layers)
+}
+
+let jarRunPhase = 0
+let jarRunTimer = 0
+
 /** 9×13 @ 4px = 36×52 — Isaac (kipah, shades, tzitzit) */
 const ISAAC_PS = 4
 const ISAAC_COL = {
@@ -279,21 +504,37 @@ const animState = {
   isaacTimer:   0,
 }
 
-const HERO_CANVAS   = document.getElementById('hero-canvas')
-const BTN_SPRITE    = document.getElementById('btn-sprite')
-const COOK_CANVAS   = document.getElementById('cook-canvas')
-const REPORT_CANVAS = document.getElementById('report-canvas')
+const HERO_CANVAS    = document.getElementById('hero-canvas')
+const HUNT_JAR_CANVAS = document.getElementById('hunt-jar-canvas')
+const HUNT_JAR_WRAP = document.getElementById('hunt-jar-wrap')
+const COOK_CANVAS    = document.getElementById('cook-canvas')
+const REPORT_CANVAS  = document.getElementById('report-canvas')
+
+/** Redraw jar Todd right away when toggles change (don’t wait for next animation frame). */
+function refreshHuntJarSprite() {
+  if (!HUNT_JAR_CANVAS) return
+  drawFrame(HUNT_JAR_CANVAS, buildHuntJarComposite())
+}
 
 function animLoop() {
   const now = performance.now()
 
-  // Hero sprite (upload screen)
+  // Hero sprite (upload screen logo)
   if (animState.heroTimer < now) {
     animState.heroFrame = animState.heroFrame === 0 ? 1 : 0
     drawFrame(HERO_CANVAS,   animState.heroFrame === 0 ? IDLE1 : IDLE2)
-    drawFrame(BTN_SPRITE,    animState.heroFrame === 0 ? IDLE1 : IDLE2)
     drawFrame(REPORT_CANVAS, animState.heroFrame === 0 ? VIC1 : IDLE1)
     animState.heroTimer = now + 500
+  }
+
+  // Hunt CTA — Todd in a jar (on loading screen; toggles: speed/accuracy, smart/dumb, plain/juice)
+  if (state.screen === 'loading' && HUNT_JAR_CANVAS) {
+    const accOn = document.getElementById('accuracy-toggle')?.checked !== false
+    if (!accOn && now > jarRunTimer) {
+      jarRunPhase++
+      jarRunTimer = now + 90
+    }
+    drawFrame(HUNT_JAR_CANVAS, buildHuntJarComposite())
   }
 
   if (state.screen === 'upload' && ISAAC_CANVAS && animState.isaacTimer < now) {
@@ -846,19 +1087,15 @@ async function uploadFolderAdd(dirHandle) {
   await addUpload(fileList)
 }
 
-// ── Speed vs Accuracy toggle ──────────────────────────────────
+// ── Speed vs Accuracy ─────────────────────────────────────────
 const accuracyToggle = document.getElementById('accuracy-toggle')
-const scanModeHint   = document.getElementById('scan-mode-hint')
-accuracyToggle.addEventListener('change', () => {
-  scanModeHint.textContent = accuracyToggle.checked
-    ? 'One tenant at a time — safest, no rate limits'
-    : 'All tenants at once — faster but may hit rate limits'
+accuracyToggle?.addEventListener('change', () => {
+  refreshHuntJarSprite()
 })
 
-// ── Dumb mode (cheap Haiku) — same slide toggle as Speed/Accuracy ──
+// ── Smart / Dumb (model tier) ─────────────────────────────────
 const CHEAP_MODE_KEY = 'toddCheapMode'
 const cheapModeToggle = document.getElementById('cheap-mode-toggle')
-const cheapModeLabel  = document.getElementById('cheap-mode-label')
 
 function isCheapModeActive() {
   return cheapModeToggle?.checked === true
@@ -872,21 +1109,104 @@ function cheapJsonExtra() {
   return { cheapMode: isCheapModeActive() }
 }
 
-function updateCheapModeLabel() {
-  if (!cheapModeLabel || !cheapModeToggle) return
-  cheapModeLabel.textContent = cheapModeToggle.checked
-    ? 'Haiku 4.5 — cheap API, good for testing features'
-    : 'Claude Sonnet — full quality'
-}
-
 if (cheapModeToggle) {
   cheapModeToggle.checked = localStorage.getItem(CHEAP_MODE_KEY) === '1'
-  updateCheapModeLabel()
   cheapModeToggle.addEventListener('change', () => {
     localStorage.setItem(CHEAP_MODE_KEY, cheapModeToggle.checked ? '1' : '0')
-    updateCheapModeLabel()
+    refreshHuntJarSprite()
   })
 }
+
+// ── Juice (active learnings on main hunt) ───────────────────
+const JUICE_MODE_KEY = 'toddJuiceMode'
+const juiceToggle = document.getElementById('juice-toggle')
+
+function syncJuiceJarGlow({ flash = false } = {}) {
+  if (!HUNT_JAR_WRAP || !juiceToggle) return
+  const on = juiceToggle.checked
+  HUNT_JAR_WRAP.classList.toggle('hunt-jar-wrap--juice', on)
+  if (!on) {
+    HUNT_JAR_WRAP.classList.remove('hunt-jar-wrap--juice-flash')
+    return
+  }
+  if (flash) {
+    HUNT_JAR_WRAP.classList.remove('hunt-jar-wrap--juice-flash')
+    void HUNT_JAR_WRAP.offsetWidth
+    HUNT_JAR_WRAP.classList.add('hunt-jar-wrap--juice-flash')
+  }
+}
+
+HUNT_JAR_WRAP?.addEventListener('animationend', (e) => {
+  if (e.animationName === 'huntJarJuiceFlash') {
+    HUNT_JAR_WRAP.classList.remove('hunt-jar-wrap--juice-flash')
+  }
+})
+
+let cachedActiveLearningCount = null
+let cachedTotalLearnings = null
+
+function juiceQs() {
+  return juiceToggle?.checked ? '&juiced=1' : ''
+}
+
+async function prefetchLearningsCount() {
+  try {
+    const res = await fetch('/api/gym/learnings')
+    const list = await res.json()
+    const arr = Array.isArray(list) ? list : []
+    cachedTotalLearnings = arr.length
+    cachedActiveLearningCount = arr.filter(l => l.active).length
+  } catch {
+    cachedActiveLearningCount = null
+    cachedTotalLearnings = null
+  }
+}
+
+/** Only when Juice is turned on: tell user if the hunt will use saved learnings. */
+function toastJuiceLearningsStatus() {
+  const n = cachedActiveLearningCount ?? 0
+  const total = cachedTotalLearnings ?? 0
+  if (n > 0) {
+    toast(
+      `Juice on — this hunt will use ${n} activated saved rule${n !== 1 ? 's' : ''} from your learnings (Gym / Dr. Todd).`,
+      'success'
+    )
+  } else if (total > 0) {
+    toast(
+      'Juice on — you have saved rules, but none are activated. Open Results and turn rules ON to apply them on hunts.',
+      'info'
+    )
+  } else if (total === 0) {
+    toast(
+      'Juice on — no saved learnings yet. Extract rules from Gym Teacher or Dr. Todd, then activate them in Results.',
+      'info'
+    )
+  } else {
+    toast(
+      'Juice on — could not check learnings. If the hunt uses saved rules, they still apply when the server is reachable.',
+      'info'
+    )
+  }
+}
+
+if (juiceToggle) {
+  juiceToggle.checked = localStorage.getItem(JUICE_MODE_KEY) === '1'
+  syncJuiceJarGlow({ flash: false })
+  juiceToggle.addEventListener('change', () => {
+    localStorage.setItem(JUICE_MODE_KEY, juiceToggle.checked ? '1' : '0')
+    const turnedOn = juiceToggle.checked
+    syncJuiceJarGlow({ flash: turnedOn })
+    prefetchLearningsCount().then(() => {
+      refreshHuntJarSprite()
+      if (turnedOn) toastJuiceLearningsStatus()
+    })
+  })
+}
+
+// Restore jar overlays (glasses/dumb, muscles when juice + active rules) after localStorage init
+prefetchLearningsCount().then(() => {
+  requestAnimationFrame(() => refreshHuntJarSprite())
+})
 
 function showOversizeWarnings(tenants) {
   const warn = document.getElementById('oversize-warning')
@@ -903,6 +1223,8 @@ function showOversizeWarnings(tenants) {
 function showHuntCta() {
   const wrap = document.getElementById('hunt-cta-wrap')
   wrap.classList.add('ready')
+  syncJuiceJarGlow({ flash: false })
+  prefetchLearningsCount().then(() => refreshHuntJarSprite())
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -934,11 +1256,6 @@ document.getElementById('btn-kill-hunt').addEventListener('click', () => {
   goTo('upload')
   toast('Hunt stopped — ready for a new session', 'info')
 })
-document.getElementById('btn-test-mode').addEventListener('click', () => {
-  const random = state.tenants[Math.floor(Math.random() * state.tenants.length)]
-  if (random) startHunt(random.id)
-})
-
 document.getElementById('btn-drtoddhunt').addEventListener('click', () => {
   startDrToddHunt()
 })
@@ -1232,9 +1549,21 @@ function startHunt(testTenantId = null) {
   // Start SSE — pass accuracy mode (sequential=1, speed=parallel)
   const accuracyMode = document.getElementById('accuracy-toggle')?.checked !== false
   const base = `/api/hunt?sessionId=${encodeURIComponent(state.sessionId)}&concurrency=${accuracyMode ? 1 : 0}&tenantIds=${encodeURIComponent(activeTenantIds)}`
-  const url = (testTenantId ? `${base}&testTenantId=${encodeURIComponent(testTenantId)}` : base) + cheapQs()
+  const url = (testTenantId ? `${base}&testTenantId=${encodeURIComponent(testTenantId)}` : base) + cheapQs() + juiceQs()
   const es = new EventSource(url)
   state.eventSource = es
+
+  es.addEventListener('hunt-start', e => {
+    const d = JSON.parse(e.data)
+    if (d.juiced && (d.activeLearningsApplied || 0) === 0) {
+      toast(
+        'Juice on but no rules activated — standard Todd this run. Turn ON in Gym → Results (Gym or Dr. Todd learnings).',
+        'info'
+      )
+    } else if (d.juiced && (d.activeLearningsApplied || 0) > 0) {
+      updateHuntSubtitle(`🧃 Juiced — ${d.activeLearningsApplied} rule${d.activeLearningsApplied !== 1 ? 's' : ''} (Gym / Dr. Todd)`)
+    }
+  })
 
   es.addEventListener('folder-start', e => {
     const d = JSON.parse(e.data)
@@ -2035,10 +2364,10 @@ function sleep(ms) {
 }
 
 // ── Initial draw ─────────────────────────────────────────────
-drawFrame(HERO_CANVAS,   IDLE1)
-drawFrame(BTN_SPRITE,    IDLE1)
-drawFrame(COOK_CANVAS,   ATK1)
-drawFrame(REPORT_CANVAS, VIC1)
+drawFrame(HERO_CANVAS,    IDLE1)
+if (HUNT_JAR_CANVAS) drawFrame(HUNT_JAR_CANVAS, buildHuntJarComposite())
+drawFrame(COOK_CANVAS,    ATK1)
+drawFrame(REPORT_CANVAS,  VIC1)
 
 // ═══════════════════════════════════════════════════════════
 // GYM TEACHER MODE
@@ -3167,7 +3496,7 @@ function gymShowResults(data) {
           <input type="checkbox" class="gym-activate-cb" data-id="${l.id}" />
           <span class="gym-activate-slider"></span>
         </label>
-        <span class="gym-activate-label">Activate for Beefed-Up Todd</span>
+        <span class="gym-activate-label">Activate for Juice hunts &amp; Beefed-Up Todd</span>
       </div>
     </div>
   `).join('')
@@ -3181,6 +3510,7 @@ function gymShowResults(data) {
           body: JSON.stringify({ active: cb.checked })
         })
         toast(cb.checked ? '✅ Learning activated' : 'Learning deactivated', 'success')
+        prefetchLearningsCount().then(() => refreshHuntJarSprite())
       } catch {
         toast('Could not save — try again', 'error')
         cb.checked = !cb.checked
