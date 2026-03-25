@@ -1091,6 +1091,54 @@ app.get('/api/modelcompare', async (req, res) => {
   }
 })
 
+/** Keep OpenAI Test Lab SSE `sbs-complete` under typical proxy/browser line limits (large PDF folders). */
+function slimOpenAiTestMetaForSse(meta) {
+  if (meta == null || typeof meta !== 'object') return meta
+  let m
+  try {
+    m = JSON.parse(JSON.stringify(meta))
+  } catch {
+    return { note: 'Pipeline metadata could not be cloned for the stream' }
+  }
+  if (Array.isArray(m.batches)) {
+    m.batches = m.batches.map(b => ({
+      batchIndex: b.batchIndex,
+      logicalGroup: b.logicalGroup,
+      pdfCount: b.pdfCount,
+      approxBase64Chars: b.approxBase64Chars,
+      note: b.note,
+      filenameCount: Array.isArray(b.filenames) ? b.filenames.length : 0
+    }))
+  }
+  if (Array.isArray(m.nativePdfFiles) && m.nativePdfFiles.length > 48) {
+    const n = m.nativePdfFiles.length
+    m.nativePdfFiles = m.nativePdfFiles.slice(0, 48)
+    m.nativePdfFilesNote = `List truncated (${n} files — first 48 shown)`
+  }
+  try {
+    const json = JSON.stringify(m)
+    if (json.length > 350_000) {
+      return {
+        api: m.api,
+        model: m.model,
+        cheapMode: m.cheapMode,
+        openaiKeySource: m.openaiKeySource,
+        analysisPath: m.analysisPath,
+        tenantFilesTotal: m.tenantFilesTotal,
+        pdfBatchesPlanned: m.pdfBatchesPlanned,
+        apiCallsForOpenAI: m.apiCallsForOpenAI,
+        mergePasses: m.mergePasses,
+        note:
+          'Pipeline metadata was very large and was trimmed so results can reach the browser. Check server logs for the full run.',
+        trimmedJsonCharsApprox: json.length
+      }
+    }
+  } catch {
+    return { note: 'Pipeline metadata failed JSON check — see server logs' }
+  }
+  return m
+}
+
 // ═══════════════════════════════════════════════════════════
 // GET /api/openaitest — OpenAI only (debug pipeline; no Claude)
 // ═══════════════════════════════════════════════════════════
@@ -1273,8 +1321,11 @@ app.get('/api/openaitest', async (req, res) => {
 
       const meta = openaiResult._openaiDebug
       delete openaiResult._openaiDebug
-      const openaiTestMeta =
-        meta == null ? { note: 'Debug metadata missing' } : cloneJsonSafe(meta, 'Pipeline metadata') || { note: 'Debug metadata missing' }
+      const openaiTestMeta = slimOpenAiTestMetaForSse(
+        meta == null
+          ? { note: 'Debug metadata missing' }
+          : cloneJsonSafe(meta, 'Pipeline metadata') || { note: 'Debug metadata missing' }
+      )
 
       if (!aborted) {
         emit('sbs-complete', {

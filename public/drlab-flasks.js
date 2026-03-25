@@ -198,13 +198,23 @@
       img.alt = ''
       img.width = 86
       img.height = 86
+      img.decoding = 'sync'
       jarEl.appendChild(img)
     }
     const prev = blobUrls.get(img)
-    if (prev) URL.revokeObjectURL(prev)
-    const url = URL.createObjectURL(new Blob([svgString], { type: 'image/svg+xml' }))
-    blobUrls.set(img, url)
-    img.src = url
+    if (prev) {
+      URL.revokeObjectURL(prev)
+      blobUrls.delete(img)
+    }
+    const encoded = encodeURIComponent(svgString)
+    /* data: URLs render more reliably than blob: for inline SVG in some browsers / embed contexts */
+    if (encoded.length < 900_000) {
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encoded
+    } else {
+      const url = URL.createObjectURL(new Blob([svgString], { type: 'image/svg+xml' }))
+      blobUrls.set(img, url)
+      img.src = url
+    }
   }
 
   function removeBrewLayer(jar) {
@@ -255,8 +265,33 @@
     document.documentElement.style.removeProperty('--drlab-flask-glow')
   }
 
+  /** Side-by-side OpenAI Test Lab loading screen — same pixel flask + brew as Dr. Lab. */
+  function paintOpenAiFlaskInto(jarEl) {
+    if (!jarEl) return
+    removeBrewLayer(jarEl)
+    const s = settingsForMode('openai')
+    jarEl.style.setProperty('--drlab-flask-glow', glowHexForSettings(s))
+    setJarImg(jarEl, buildFlaskSvg(s))
+    ensureOpenAiBrew(jarEl)
+  }
+
+  function clearOpenAiFlaskPaint(jarEl) {
+    if (!jarEl) return
+    removeBrewLayer(jarEl)
+    const img = jarEl.querySelector('img.drlab-flask-sprite')
+    if (img) {
+      const u = blobUrls.get(img)
+      if (u) URL.revokeObjectURL(u)
+      blobUrls.delete(img)
+      img.remove()
+    }
+    jarEl.style.removeProperty('--drlab-flask-glow')
+  }
+
   function init() {
     window.__refreshLabFlasks = refreshAllLabFlasks
+    window.__paintOpenAiFlaskInto = paintOpenAiFlaskInto
+    window.__clearOpenAiFlaskPaint = clearOpenAiFlaskPaint
     if (document.querySelector('.drlab-tube-jar')) refreshAllLabFlasks()
   }
 

@@ -1868,6 +1868,9 @@ input:checked + .toggle-slider:before { transform:translateX(22px); background:#
   padding: 6px 8px 2px;
   grid-column: 1 / -1;
   grid-row: 1;
+  position: relative;
+  z-index: 2;
+  min-height: 168px;
 }
 .sbs-openai-brew-hero.hidden {
   display: none !important;
@@ -1909,15 +1912,33 @@ input:checked + .toggle-slider:before { transform:translateX(22px); background:#
   width: 120px;
   height: 120px;
 }
+/* Avoid color-mix() inside filter (drops entire filter in older Safari) — use rgba only */
+@keyframes sbs-openai-flask-glow {
+  from {
+    filter:
+      drop-shadow(0 0 4px var(--drlab-flask-glow, #34d399))
+      drop-shadow(0 0 14px rgba(52, 211, 153, 0.55));
+  }
+  to {
+    filter:
+      drop-shadow(0 0 10px var(--drlab-flask-glow, #34d399))
+      drop-shadow(0 0 26px rgba(16, 185, 129, 0.72));
+  }
+}
 .sbs-openai-brew-jar img.drlab-flask-sprite {
   width: 112px !important;
   height: 112px !important;
   max-width: none;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: relative;
+  z-index: 1;
   animation:
     drlab-openai-flask-wobble 2.5s ease-in-out infinite,
-    drlab-flask-dropglow 1.1s ease-in-out infinite alternate;
+    sbs-openai-flask-glow 1.1s ease-in-out infinite alternate;
 }
 .sbs-openai-brew-jar--hero img.drlab-flask-sprite {
   width: 140px !important;
@@ -1977,6 +1998,7 @@ input:checked + .toggle-slider:before { transform:translateX(22px); background:#
   opacity: 0.35;
 }
 .sbs-loading--openaitest .sbs-arena-canvas {
+  overflow: visible;
   border-color: #0f766e;
   box-shadow:
     inset 0 0 0 2px #042f2e,

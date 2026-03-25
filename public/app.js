@@ -726,7 +726,12 @@ function updateSbsOpenAiLoadingChrome(show) {
   if (mirror) mirror.classList.toggle('hidden', isOai)
   if (vs) vs.textContent = 'VS'
   if (isOai) {
-    window.__paintOpenAiFlaskInto?.(jar)
+    const paint = () => window.__paintOpenAiFlaskInto?.(jar)
+    paint()
+    requestAnimationFrame(() => {
+      paint()
+      window.setTimeout(paint, 60)
+    })
   } else {
     window.__clearOpenAiFlaskPaint?.(jar)
   }
