@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=45" />
+  <link rel="stylesheet" href="style.css?v=46" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
@@ -437,6 +437,11 @@
         <div class="sbs-arena-canvas">
           <div class="sbs-arena-rope sbs-arena-rope--back"></div>
           <div class="sbs-loading-cols sbs-loading-cols--arena">
+            <div class="sbs-openai-brew-hero hidden" id="sbs-openai-brew-hero" aria-hidden="true">
+              <div class="drlab-tube-jar sbs-openai-brew-jar sbs-openai-brew-jar--hero" id="sbs-openai-brew-jar"></div>
+              <p class="sbs-openai-brew-headline">OpenAI test is brewing</p>
+              <p class="sbs-openai-brew-sub" id="sbs-openai-brew-sub">Starting…</p>
+            </div>
             <div class="sbs-loading-col">
               <div class="sbs-boxer-slot sbs-boxer-slot--left">
                 <canvas id="sbs-boxer-canvas-left" width="64" height="72" class="sbs-boxer-canvas"></canvas>
@@ -450,9 +455,6 @@
             </div>
             <div class="sbs-loading-col">
               <div class="sbs-boxer-slot sbs-boxer-slot--right">
-                <div class="sbs-openai-brew-wrap hidden" id="sbs-openai-brew-wrap" aria-hidden="true">
-                  <div class="drlab-tube-jar sbs-openai-brew-jar" id="sbs-openai-brew-jar"></div>
-                </div>
                 <div class="sbs-boxer-mirror" id="sbs-boxer-mirror-right">
                   <canvas id="sbs-boxer-canvas-right" width="64" height="72" class="sbs-boxer-canvas"></canvas>
                 </div>
@@ -744,7 +746,7 @@
   </div>
 
   <script src="drlab-flasks.js?v=4"></script>
-  <script src="sbs-boxing.js?v=2"></script>
-  <script src="app.js?v=59"></script>
+  <script src="sbs-boxing.js?v=3"></script>
+  <script src="app.js?v=60"></script>
 </body>
 </html>

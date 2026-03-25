@@ -50,11 +50,22 @@
       return
     }
 
+    const openAiTest = document.getElementById('sbs-loading')?.classList.contains('sbs-loading--openaitest')
+    if (openAiTest) {
+      slotL.style.transform = ''
+      slotR.style.transform = ''
+      leftCv.getContext('2d').clearRect(0, 0, W, H)
+      rightCv.getContext('2d').clearRect(0, 0, W, H)
+      raf = requestAnimationFrame(frame)
+      return
+    }
+
     const t = (now - t0) / 1000
     const walkDur = 1.6
     const w = Math.min(1, t / walkDur)
     const ease = 1 - (1 - w) * (1 - w)
     const bob = Math.sin(t * 10) * 2
+
     slotL.style.transform = `translateX(${ease * 24}px) translateY(${bob}px)`
     slotR.style.transform = `translateX(${-ease * 24}px) translateY(${Math.sin(t * 10 + 0.8) * 2}px)`
 

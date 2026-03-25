@@ -712,16 +712,19 @@ function updateGlobalNav() {
 
 function updateSbsOpenAiLoadingChrome(show) {
   const loadEl = document.getElementById('sbs-loading')
-  const brewWrap = document.getElementById('sbs-openai-brew-wrap')
+  const brewHero = document.getElementById('sbs-openai-brew-hero')
   const mirror = document.getElementById('sbs-boxer-mirror-right')
   const jar = document.getElementById('sbs-openai-brew-jar')
   const vs = document.getElementById('sbs-vs-pixel')
   if (!loadEl) return
   const isOai = !!show && state.sbsMode === 'openaitest'
   loadEl.classList.toggle('sbs-loading--openaitest', isOai)
-  if (brewWrap) brewWrap.classList.toggle('hidden', !isOai)
+  if (brewHero) {
+    brewHero.classList.toggle('hidden', !isOai)
+    brewHero.setAttribute('aria-hidden', isOai ? 'false' : 'true')
+  }
   if (mirror) mirror.classList.toggle('hidden', isOai)
-  if (vs) vs.textContent = isOai ? '⚗' : 'VS'
+  if (vs) vs.textContent = 'VS'
   if (isOai) {
     window.__paintOpenAiFlaskInto?.(jar)
   } else {
@@ -2172,7 +2175,10 @@ async function startSideBySide(tenantId = null, mode = 'juice', _probeRetry = fa
   document.getElementById('sbs-beefed-fill').style.width = '0%'
   document.getElementById('sbs-raw-msg').textContent     =
     mode === 'openaitest' ? 'OpenAI only — Claude not used' : 'Waiting for stream…'
-  document.getElementById('sbs-beefed-msg').textContent  = 'Waiting for stream…'
+  document.getElementById('sbs-beefed-msg').textContent  =
+    mode === 'openaitest' ? 'Starting…' : 'Waiting for stream…'
+  const brewSub = document.getElementById('sbs-openai-brew-sub')
+  if (brewSub) brewSub.textContent = mode === 'openaitest' ? 'Starting…' : ''
 
   let qs = `sessionId=${encodeURIComponent(state.sessionId)}`
   if (tenantId) qs += `&tenantId=${encodeURIComponent(tenantId)}`
@@ -2228,6 +2234,10 @@ async function startSideBySide(tenantId = null, mode = 'juice', _probeRetry = fa
     const msg  = document.getElementById(`sbs-${d.side}-msg`)
     if (fill) fill.style.width = d.percent + '%'
     if (msg)  msg.textContent  = d.message || ''
+    if (mode === 'openaitest' && d.side === 'beefed') {
+      const sub = document.getElementById('sbs-openai-brew-sub')
+      if (sub) sub.textContent = d.message || ''
+    }
   })
 
   es.addEventListener('sbs-complete', e => {
