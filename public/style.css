@@ -3034,6 +3034,37 @@ a.isaac-download-link:hover { text-decoration: underline; color: #c4b5fd; }
   opacity: 0.92;
 }
 
+.juice-modal-edit-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin: 10px 0 0;
+}
+.juice-8bit-edit-toggle {
+  font-family: var(--font-pixel);
+  font-size: 6px;
+  letter-spacing: 1px;
+  padding: 10px 18px;
+  border-radius: 4px;
+  border: 3px solid #f59e0b;
+  cursor: pointer;
+  image-rendering: pixelated;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
+  background: linear-gradient(180deg, #b45309, #92400e);
+  color: #fef3c7;
+  text-shadow: 1px 1px 0 #451a03;
+  transition: transform 0.1s, filter 0.1s;
+}
+.juice-8bit-edit-toggle:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+.juice-8bit-edit-toggle[aria-pressed="true"] {
+  border-color: #86efac;
+  background: linear-gradient(180deg, #166534, #14532d);
+  color: #dcfce7;
+  text-shadow: 1px 1px 0 #052e16;
+}
+
 .juice-8bit-global-bar {
   display: flex;
   flex-wrap: wrap;
@@ -3111,13 +3142,15 @@ a.isaac-download-link:hover { text-decoration: underline; color: #c4b5fd; }
   border-radius: 4px;
   cursor: pointer;
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.15s, transform 0.1s, filter 0.1s;
+  transition: opacity 0.15s, visibility 0.15s, transform 0.1s, filter 0.1s;
   box-shadow: 0 2px 0 #7f1d1d, inset 0 1px 0 rgba(255, 255, 255, 0.08);
   image-rendering: pixelated;
 }
-.juice-8bit-group:hover .juice-8bit-delete {
+#juice-learnings-modal.juice-modal--delete-edit .juice-8bit-delete {
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
 }
 .juice-8bit-delete:hover {
@@ -3126,15 +3159,6 @@ a.isaac-download-link:hover { text-decoration: underline; color: #c4b5fd; }
 }
 .juice-8bit-delete:active {
   transform: scale(0.98);
-}
-@media (hover: none) {
-  .juice-8bit-delete {
-    opacity: 0.5;
-    pointer-events: auto;
-  }
-  .juice-8bit-group:hover .juice-8bit-delete {
-    opacity: 0.65;
-  }
 }
 
 /* 8-bit confirm — delete Juice batch (above learnings modal) */
@@ -3399,7 +3423,7 @@ a.isaac-download-link:hover { text-decoration: underline; color: #c4b5fd; }
   border: 2px solid #334155;
   border-radius: 4px;
 }
-/* Per-rule delete: red circle with minus — visible on row hover (touch: always tappable) */
+/* Per-rule delete: red circle with minus — only when modal EDIT is on */
 .juice-8bit-rule-delete {
   position: absolute;
   top: 6px;
@@ -3421,13 +3445,15 @@ a.isaac-download-link:hover { text-decoration: underline; color: #c4b5fd; }
   border-radius: 50%;
   cursor: pointer;
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.15s, transform 0.1s, filter 0.1s;
+  transition: opacity 0.15s, visibility 0.15s, transform 0.1s, filter 0.1s;
   box-shadow: 0 2px 0 #450a0a, inset 0 1px 0 rgba(255, 255, 255, 0.2);
   image-rendering: pixelated;
 }
-.juice-8bit-rule:hover .juice-8bit-rule-delete {
+#juice-learnings-modal.juice-modal--delete-edit .juice-8bit-rule-delete {
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
 }
 .juice-8bit-rule-delete:hover {
@@ -3437,14 +3463,9 @@ a.isaac-download-link:hover { text-decoration: underline; color: #c4b5fd; }
 .juice-8bit-rule-delete:active {
   transform: scale(0.96);
 }
-@media (hover: none) {
-  .juice-8bit-rule-delete {
-    opacity: 0.45;
-    pointer-events: auto;
-  }
-  .juice-8bit-rule:hover .juice-8bit-rule-delete {
-    opacity: 0.6;
-  }
+
+#juice-learnings-modal:not(.juice-modal--delete-edit) .juice-8bit-rule {
+  padding-right: 10px;
 }
 .juice-8bit-rule-type {
   font-family: var(--font-pixel);

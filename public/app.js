@@ -1392,6 +1392,19 @@ document.getElementById('juice-del-yes')?.addEventListener('click', async () => 
   }
 })
 
+function juiceLearningsDeleteEditActive() {
+  return document.getElementById('juice-learnings-modal')?.classList.contains('juice-modal--delete-edit') === true
+}
+
+function setJuiceLearningsDeleteEdit(on) {
+  const modal = document.getElementById('juice-learnings-modal')
+  const btn = document.getElementById('juice-learnings-edit-toggle')
+  if (!modal || !btn) return
+  modal.classList.toggle('juice-modal--delete-edit', on)
+  btn.setAttribute('aria-pressed', on ? 'true' : 'false')
+  btn.textContent = on ? 'DONE' : 'EDIT'
+}
+
 let juiceLearningsBodyDelegated = false
 function ensureJuiceLearningsDelegation() {
   const body = document.getElementById('juice-learnings-body')
@@ -1400,6 +1413,7 @@ function ensureJuiceLearningsDelegation() {
   body.addEventListener('click', async (e) => {
     const ruleDel = e.target.closest('.juice-8bit-rule-delete')
     if (ruleDel) {
+      if (!juiceLearningsDeleteEditActive()) return
       e.preventDefault()
       e.stopPropagation()
       const ids = (ruleDel.dataset.ids || '').split(',').map(s => s.trim()).filter(Boolean)
@@ -1410,6 +1424,7 @@ function ensureJuiceLearningsDelegation() {
     }
     const delBtn = e.target.closest('.juice-8bit-delete')
     if (delBtn) {
+      if (!juiceLearningsDeleteEditActive()) return
       e.preventDefault()
       e.stopPropagation()
       const ids = (delBtn.dataset.ids || '').split(',').map(s => s.trim()).filter(Boolean)
@@ -1521,6 +1536,7 @@ async function openJuiceLearningsModal() {
   const modal = document.getElementById('juice-learnings-modal')
   const body = document.getElementById('juice-learnings-body')
   if (!modal || !body) return
+  setJuiceLearningsDeleteEdit(false)
   ensureJuiceLearningsDelegation()
   body.innerHTML = '<p class="gym-no-learnings">Loading…</p>'
   modal.classList.remove('hidden')
@@ -1612,7 +1628,12 @@ if (juiceToggle) {
 document.getElementById('juice-home-manage')?.addEventListener('click', () => openJuiceLearningsModal())
 document.getElementById('juice-easter')?.addEventListener('click', () => openJuiceLearningsModal())
 document.getElementById('juice-loading-manage')?.addEventListener('click', () => openJuiceLearningsModal())
+document.getElementById('juice-learnings-edit-toggle')?.addEventListener('click', () => {
+  setJuiceLearningsDeleteEdit(!juiceLearningsDeleteEditActive())
+})
+
 document.getElementById('juice-learnings-close')?.addEventListener('click', () => {
+  setJuiceLearningsDeleteEdit(false)
   document.getElementById('juice-learnings-modal')?.classList.add('hidden')
   void refreshJuiceHomePanel()
 })
