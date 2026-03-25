@@ -1186,11 +1186,6 @@ function toastJuiceLearningsStatus() {
   }
 }
 
-function learningSourceLabel(l) {
-  if (l.source === 'dr-todd-diagnostic') return 'Dr. Todd extract'
-  return 'Gym Teacher'
-}
-
 function formatLearningBatchDate(iso) {
   if (!iso) return 'unknown date'
   try {
@@ -1274,41 +1269,114 @@ async function juiceBulkSetActive(bodyEl, cbs, active) {
   }
 }
 
+function truncateJuiceText(str, max) {
+  const s = String(str || '').trim()
+  if (s.length <= max) return s
+  return `${s.slice(0, max - 1)}…`
+}
+
+function syncJuiceGroupMaster(groupEl) {
+  const cbs = [...groupEl.querySelectorAll('input.juice-learning-cb')]
+  const master = groupEl.querySelector('.juice-master-cb')
+  if (!master || cbs.length === 0) return
+  const nOn = cbs.filter(c => c.checked).length
+  master.indeterminate = nOn > 0 && nOn < cbs.length
+  master.checked = nOn === cbs.length && cbs.length > 0
+}
+
+function syncAllJuiceGroupMasters(bodyEl) {
+  bodyEl.querySelectorAll('[data-juice-group]').forEach(g => syncJuiceGroupMaster(g))
+}
+
+async function juiceBulkSetMaster(bodyEl, ids, active) {
+  const targets = []
+  for (const id of ids) {
+    const el = bodyEl.querySelector(`input.juice-learning-cb[data-id="${id}"]`)
+    if (el && el.checked !== active) targets.push(el)
+  }
+  if (targets.length === 0) {
+    toast(active ? 'Already all ON for this report' : 'Already all OFF', 'info')
+    syncAllJuiceGroupMasters(bodyEl)
+    return
+  }
+  try {
+    for (const el of targets) {
+      await juicePatchLearningActive(el.dataset.id, active)
+      el.checked = active
+    }
+    toast(active ? `✅ ${targets.length} rules juiced` : `${targets.length} OFF`, 'success')
+    await prefetchLearningsCount()
+    refreshHuntJarSprite()
+    await refreshJuiceHomePanel()
+    syncAllJuiceGroupMasters(bodyEl)
+  } catch {
+    toast('Could not update — try again', 'error')
+    await juiceRefreshModalAfterChange(bodyEl)
+  }
+}
+
+function renderJuiceRuleRowHtml(l) {
+  const ct = escHtml(l.checkType || 'RULE')
+  const hint = escHtml(truncateJuiceText(l.suggestion || l.rationale || '', 140))
+  const on = l.active ? 'checked' : ''
+  const id = String(l.id).replace(/"/g, '')
+  return `
+    <div class="juice-8bit-rule">
+      <label class="juice-8bit-toggle juice-8bit-toggle--sm" title="Juice this rule">
+        <input type="checkbox" class="juice-learning-cb" data-id="${id}" ${on} />
+        <span class="juice-8bit-slider"></span>
+      </label>
+      <span class="juice-8bit-rule-type">${ct}</span>
+      <span class="juice-8bit-rule-hint">${hint}</span>
+    </div>`
+}
+
 let juiceLearningsBodyDelegated = false
 function ensureJuiceLearningsDelegation() {
   const body = document.getElementById('juice-learnings-body')
   if (!body || juiceLearningsBodyDelegated) return
   juiceLearningsBodyDelegated = true
   body.addEventListener('click', async (e) => {
-    const gOn = e.target.closest('.juice-bulk-on.juice-bulk-group')
-    if (gOn) {
-      const group = gOn.closest('.juice-learnings-group')
-      await juiceBulkSetActive(body, [...group.querySelectorAll('.juice-learning-cb')], true)
-      return
-    }
-    const gOff = e.target.closest('.juice-bulk-off.juice-bulk-group')
-    if (gOff) {
-      const group = gOff.closest('.juice-learnings-group')
-      await juiceBulkSetActive(body, [...group.querySelectorAll('.juice-learning-cb')], false)
+    const expand = e.target.closest('.juice-8bit-expand')
+    if (expand) {
+      const group = expand.closest('[data-juice-group]')
+      const det = group?.querySelector('.juice-8bit-details')
+      if (!det || !group) return
+      det.classList.toggle('hidden')
+      const open = !det.classList.contains('hidden')
+      expand.setAttribute('aria-expanded', String(open))
+      const n = group.dataset.ruleCount || '0'
+      expand.textContent = open
+        ? `HIDE RULES (${n})`
+        : `SEE RULES (${n})`
       return
     }
     if (e.target.closest('.juice-bulk-on.juice-bulk-global')) {
-      await juiceBulkSetActive(body, [...body.querySelectorAll('.juice-learning-cb')], true)
+      await juiceBulkSetActive(body, [...body.querySelectorAll('input.juice-learning-cb')], true)
       return
     }
     if (e.target.closest('.juice-bulk-off.juice-bulk-global')) {
-      await juiceBulkSetActive(body, [...body.querySelectorAll('.juice-learning-cb')], false)
+      await juiceBulkSetActive(body, [...body.querySelectorAll('input.juice-learning-cb')], false)
     }
   })
   body.addEventListener('change', async (e) => {
-    const cb = e.target.closest('.juice-learning-cb')
-    if (!cb || e.target !== cb) return
+    const master = e.target.closest('.juice-master-cb')
+    if (master && e.target === master) {
+      master.indeterminate = false
+      const ids = (master.dataset.ids || '').split(',').map(s => s.trim()).filter(Boolean)
+      await juiceBulkSetMaster(body, ids, master.checked)
+      return
+    }
+    const cb = e.target.closest('input.juice-learning-cb')
+    if (!cb || e.target !== cb || cb.classList.contains('juice-master-cb')) return
     try {
       await juicePatchLearningActive(cb.dataset.id, cb.checked)
-      toast(cb.checked ? '✅ Rule ON for Juice' : 'Rule OFF', 'success')
+      toast(cb.checked ? '✅ Juiced' : 'OFF', 'success')
       await prefetchLearningsCount()
       refreshHuntJarSprite()
       await refreshJuiceHomePanel()
+      const group = cb.closest('[data-juice-group]')
+      if (group) syncJuiceGroupMaster(group)
     } catch {
       toast('Could not save — try again', 'error')
       cb.checked = !cb.checked
@@ -1316,69 +1384,55 @@ function ensureJuiceLearningsDelegation() {
   })
 }
 
-function renderJuiceLearningCardHtml(l) {
-  const ct = escHtml(l.checkType || 'Rule')
-  const conf = escHtml(l.confidence || 'medium')
-  const sug = escHtml(l.suggestion || '')
-  const rat = escHtml(l.rationale || '')
-  const src = escHtml(learningSourceLabel(l))
-  const when = escHtml((l.createdAt || l.created_at || '').slice(0, 10))
-  const on = l.active ? 'checked' : ''
-  const safeId = String(l.id).replace(/[^a-zA-Z0-9_-]/g, '')
-  return `
-    <div class="gym-learning-card" id="juice-learning-${safeId}">
-      <div class="gym-learning-top">
-        <span class="gym-learning-check">${ct}</span>
-        <span class="gym-learning-confidence confidence-${escHtml((l.confidence || 'medium').toLowerCase())}">${conf}</span>
-      </div>
-      <div class="gym-learning-suggestion">${sug}</div>
-      <div class="gym-learning-rationale">${rat}</div>
-      <p class="juice-learning-source">${src}${when ? ` · ${when}` : ''}</p>
-      <div class="gym-learning-activate">
-        <label class="gym-activate-toggle">
-          <input type="checkbox" class="gym-activate-cb juice-learning-cb" data-id="${String(l.id).replace(/"/g, '')}" ${on} />
-          <span class="gym-activate-slider"></span>
-        </label>
-        <span class="gym-activate-label">ON for Juice hunts</span>
-      </div>
-    </div>`
-}
-
 function renderJuiceLearningsListInto(container, learnings) {
   if (learnings.length === 0) {
     container.innerHTML =
-      '<p class="gym-no-learnings">No learnings saved yet. Run Gym Teacher → Analysis Workout or Dr. Todd → Extract learnings.</p>'
+      '<p class="gym-no-learnings">No learnings yet. Gym Teacher → Analysis or Dr. Todd → Extract.</p>'
     return
   }
   const groups = buildJuiceLearningGroups(learnings)
-  const toolbar = `
-    <div class="juice-learnings-toolbar">
-      <span class="juice-toolbar-label">EVERYTHING</span>
-      <button type="button" class="juice-bulk-on juice-bulk-global">ALL ON</button>
-      <button type="button" class="juice-bulk-off juice-bulk-global">ALL OFF</button>
+  const globalBar = `
+    <div class="juice-8bit-global-bar">
+      <span class="juice-8bit-pixel-label">ALL SAVED RULES</span>
+      <button type="button" class="juice-8bit-chip juice-bulk-on juice-bulk-global">ALL ON</button>
+      <button type="button" class="juice-8bit-chip juice-bulk-off juice-bulk-global">ALL OFF</button>
     </div>`
   const sections = groups.map(g => {
-    const kindLabel = g.kind === 'dr-todd' ? 'DR. TODD — ONE EXTRACT' : 'GYM — ONE REPORT'
-    const subLabel = g.kind === 'dr-todd' ? 'Whole diagnostic extract' : 'Whole workout analysis'
     const sorted = sortLearningsForDisplay(g.items)
-    const cards = sorted.map(renderJuiceLearningCardHtml).join('')
+    const ids = sorted.map(x => String(x.id).replace(/,/g, '')).join(',')
+    const n = sorted.length
+    const badgeClass = g.kind === 'dr-todd' ? 'juice-8bit-badge--extract' : 'juice-8bit-badge--gym'
+    const badgeText = g.kind === 'dr-todd' ? 'EXTRACT' : 'GYM REPORT'
+    const subBits = [
+      g.kind === 'dr-todd' ? 'DR TODD' : 'WORKOUT',
+      formatLearningBatchDate(g.when),
+      `${n} RULE${n !== 1 ? 'S' : ''}`
+    ]
+    const rows = sorted.map(renderJuiceRuleRowHtml).join('')
+    const allActive = sorted.length > 0 && sorted.every(x => x.active)
+    const masterChecked = allActive ? 'checked' : ''
     return `
-    <section class="juice-learnings-group">
-      <header class="juice-group-head">
-        <div class="juice-group-title">
-          <span class="juice-group-kind">${kindLabel}</span>
-          <h5 class="juice-group-heading">${escHtml(g.tenant)}</h5>
-          <span class="juice-group-meta">${escHtml(subLabel)} · ${escHtml(formatLearningBatchDate(g.when))} · ${sorted.length} rule${sorted.length !== 1 ? 's' : ''}</span>
+    <section class="juice-8bit-group" data-juice-group data-rule-count="${n}">
+      <div class="juice-8bit-group-bar">
+        <div class="juice-8bit-group-info">
+          <span class="juice-8bit-badge ${badgeClass}">${badgeText}</span>
+          <span class="juice-8bit-tenant">${escHtml(g.tenant)}</span>
+          <span class="juice-8bit-sub">${escHtml(subBits.join(' · '))}</span>
         </div>
-        <div class="juice-group-actions">
-          <button type="button" class="juice-bulk-on juice-bulk-group">ALL ON</button>
-          <button type="button" class="juice-bulk-off juice-bulk-group">ALL OFF</button>
+        <div class="juice-8bit-group-juice">
+          <span class="juice-8bit-juice-word">JUICE</span>
+          <label class="juice-8bit-toggle" title="Whole report / whole extract">
+            <input type="checkbox" class="juice-master-cb" data-ids="${ids}" ${masterChecked} />
+            <span class="juice-8bit-slider"></span>
+          </label>
         </div>
-      </header>
-      <div class="juice-group-cards">${cards}</div>
+      </div>
+      <button type="button" class="juice-8bit-expand" aria-expanded="false">SEE RULES (${n})</button>
+      <div class="juice-8bit-details hidden">${rows}</div>
     </section>`
   }).join('')
-  container.innerHTML = toolbar + `<div class="juice-learnings-groups">${sections}</div>`
+  container.innerHTML = globalBar + `<div class="juice-learnings-groups-8bit">${sections}</div>`
+  container.querySelectorAll('[data-juice-group]').forEach(g => syncJuiceGroupMaster(g))
 }
 
 async function openJuiceLearningsModal() {
