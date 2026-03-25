@@ -12,6 +12,10 @@ const state = {
   downloadUrl:      null,
   allResults:       [],        // final compiled results for preview table
   singleTenantMode: false,     // if true, auto-run test mode after upload
+  sbsMode:          'juice',
+  /** Screen we were on before opening side-by-side (for Back / errors). */
+  sbsSourceScreen:  null,
+  drlabMode:        null,
 }
 
 /** Same-origin API URL (avoids edge cases with relative resolution). */
@@ -28,6 +32,7 @@ const screens = {
   hunt:        document.getElementById('screen-hunt'),
   cooking:     document.getElementById('screen-cooking'),
   report:      document.getElementById('screen-report'),
+  drtoddlab:   document.getElementById('screen-drtoddlab'),
   drtoddhunt:  document.getElementById('screen-drtoddhunt'),
   gym:         document.getElementById('screen-gym'),
   sidebyside:  document.getElementById('screen-sidebyside'),
@@ -220,8 +225,12 @@ function mergePix(...layers) {
 }
 
 const Z = null // transparent in overlay grids
-const BR = '#78350f' // bow wood
-const ST = '#fde047' // bow string
+const BO = '#3f1f0f' // bow outline
+const BR = '#8b5a2b' // bow wood
+const ST = '#fef08a' // bow string
+const AS = '#d1d5db' // arrow shaft
+const AH = '#e5e7eb' // arrow head
+const AF = '#fbbf24' // arrow fletch
 const LG = '#94a3b8' // glasses rim
 
 // Smart: specs on face (rows 0-indexed ~4–5)
@@ -299,21 +308,23 @@ const MUSCLE_OVL = [
   [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
 ]
 
-// Accuracy: bow + arrow at left
+// Accuracy: pixel bow + arrow (Minecraft-ish) at left
 const BOW_OVL = [
   [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
   [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
   [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
   [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
   [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
-  [Z,BR,BR,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
-  [Z,Z,BR,BR,BR,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
-  [BR,Z,Z,BR,BR,BR,Z,Z,Z,Z,Z,Z,Z,Z,Z],
-  [Z,BR,BR,ST,ST,ST,ST,Z,Z,Z,Z,Z,Z,Z,Z],
-  [Z,Z,BR,BR,BR,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
-  [Z,Z,Z,BR,BR,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
-  [Z,Z,Z,Z,BR,BR,Z,Z,Z,Z,Z,Z,Z,Z,Z],
-  [Z,Z,Z,Z,Z,BR,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,BO,BR,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [BO,Z,BR,BO,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [BO,Z,Z,BR,BO,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [BO,Z,Z,BR,ST,AS,AS,AS,AH,Z,Z,Z,Z,Z,Z],
+  [BO,Z,Z,BR,BO,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [BO,Z,BR,BO,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,BO,BR,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,AF,AS,AS,AS,AH,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
+  [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
   [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
   [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
   [Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z,Z],
@@ -563,6 +574,7 @@ const btnGlobalHome = document.getElementById('btn-global-home')
 
 function updateGlobalNav() {
   if (!btnGlobalBack || !btnGlobalHome) return
+  btnGlobalHome.hidden = state.screen === 'upload'
   btnGlobalBack.hidden = state.screen === 'upload'
   const busyCook = state.screen === 'cooking'
   btnGlobalBack.disabled = busyCook
@@ -573,6 +585,16 @@ function goTo(screenName) {
   Object.values(screens).forEach(s => s.classList.remove('active'))
   screens[screenName].classList.add('active')
   state.screen = screenName
+  if (screenName === 'drtoddlab') {
+    state.drlabMode = null
+    const drInit = document.getElementById('btn-drlab-initiate')
+    if (drInit) {
+      drInit.disabled = true
+      drInit.setAttribute('aria-label', 'Initiate Dr. Todd — pick a test flask first')
+    }
+    document.querySelectorAll('.drlab-tube').forEach(el => el.classList.remove('selected'))
+    window.__refreshLabFlasks?.()
+  }
   updateGlobalNav()
   if (screenName === 'upload' || screenName === 'loading') void refreshJuiceHomePanel()
 }
@@ -860,7 +882,7 @@ async function startUpload(files) {
     const result = await uploadWithProgress(formData, pct => setProgress(pct, `Uploading... ${pct}%`))
 
     state.tenants = result.tenants
-    setProgress(100, `${result.tenants.length} tenant folders loaded`)
+    setProgress(100, '')
     renderTenantCards(result.tenants)
     showOversizeWarnings(result.tenants)
     showHuntCta()
@@ -1677,12 +1699,69 @@ document.getElementById('btn-kill-hunt').addEventListener('click', () => {
   goTo('upload')
   toast('Hunt stopped — ready for a new session', 'info')
 })
-document.getElementById('btn-drtoddhunt').addEventListener('click', () => {
-  startDrToddHunt()
-})
+document.getElementById('btn-drtoddhunt').addEventListener('click', () => goTo('drtoddlab'))
+document.getElementById('btn-drlab-back')?.addEventListener('click', () => navigateGlobalBack())
+function setDrLabMode(mode) {
+  state.drlabMode = mode
+  document.querySelectorAll('.drlab-tube').forEach(el => el.classList.remove('selected'))
+  const byMode = {
+    juice: 'btn-drlab-juice',
+    triple: 'btn-drlab-triple',
+    doublecheck: 'btn-drlab-double',
+    modelcompare: 'btn-drlab-api'
+  }
+  document.getElementById(byMode[mode])?.classList.add('selected')
+  const drInit = document.getElementById('btn-drlab-initiate')
+  if (drInit) {
+    drInit.disabled = false
+    drInit.setAttribute('aria-label', 'Initiate Dr. Todd with selected test')
+  }
+}
+function launchDrLabMode() {
+  if (!state.drlabMode) return toast('Pick a flask first', 'info')
+  if (!state.tenants?.length) {
+    return toast('Load tenant folders on the Hunt screen first — these tests need documents in your session.', 'info')
+  }
+  if (state.drlabMode === 'triple') return startDrToddHunt()
+  void startSideBySide(null, state.drlabMode)
+}
+document.getElementById('btn-drlab-juice')?.addEventListener('click', () => setDrLabMode('juice'))
+document.getElementById('btn-drlab-triple')?.addEventListener('click', () => setDrLabMode('triple'))
+document.getElementById('btn-drlab-double')?.addEventListener('click', () => setDrLabMode('doublecheck'))
+document.getElementById('btn-drlab-api')?.addEventListener('click', () => setDrLabMode('modelcompare'))
+document.getElementById('btn-drlab-initiate')?.addEventListener('click', launchDrLabMode)
 
 document.getElementById('btn-generate-report').addEventListener('click', () => {
   requestDrToddReport()
+})
+
+document.getElementById('btn-drtodd-dumbdown')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btn-drtodd-dumbdown')
+  const reportText = document.getElementById('drtoddhunt-report-text')?.textContent?.trim() || ''
+  const tenantName = document.getElementById('drtoddhunt-sub')?.textContent || ''
+  if (!reportText) return toast('Generate a Dr. Todd report first', 'info')
+  btn.disabled = true
+  const prev = btn.textContent
+  btn.textContent = '🧃 Cooking TL;DR...'
+  try {
+    const res = await fetch('/api/drtoddhunt/tldr', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reportText, tenantName, ...cheapJsonExtra() })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Could not create TL;DR')
+    const wrap = document.getElementById('drtodd-tldr')
+    const textEl = document.getElementById('drtodd-tldr-text')
+    if (textEl) textEl.textContent = data.tldr || 'No TL;DR returned.'
+    wrap?.classList.remove('hidden')
+    toast('TL;DR ready', 'success')
+  } catch (err) {
+    toast('TL;DR error: ' + err.message, 'error')
+  } finally {
+    btn.disabled = false
+    btn.textContent = prev
+  }
 })
 
 document.getElementById('btn-copy-report').addEventListener('click', () => {
@@ -1749,36 +1828,145 @@ document.getElementById('btn-extract-learnings')?.addEventListener('click', asyn
 
 // ── Side-by-Side button (from Dr. Todd results) ────────────
 document.getElementById('btn-sidebyside')?.addEventListener('click', () => {
-  // Use first tenant in session (or whichever Dr. Todd just ran on)
-  startSideBySide()
+  void startSideBySide()
 })
 
 // ── Back from side-by-side ─────────────────────────────────
-document.getElementById('sbs-back')?.addEventListener('click', () => goTo('drtoddhunt'))
+document.getElementById('sbs-back')?.addEventListener('click', () => {
+  if (state.eventSource) {
+    state.eventSource.close()
+    state.eventSource = null
+  }
+  goTo(state.sbsSourceScreen || 'drtoddlab')
+})
 
 // ── Side-by-Side logic ─────────────────────────────────────
-function startSideBySide(tenantId = null) {
+function getSbsModeConfig(mode = 'juice') {
+  if (mode === 'modelcompare') {
+    return {
+      title: '🧪 API Battle: Claude vs OpenAI',
+      leftLabel: 'CLAUDE API',
+      rightLabel: 'OPENAI API',
+      verdictTitle: '🔬 Run API Verdict',
+      verdictCopy: 'Dr. Verdict compares Claude output vs OpenAI output and calls a winner for this folder.',
+      endpoint: '/api/modelcompare'
+    }
+  }
+  if (mode === 'doublecheck') {
+    return {
+      title: '🧪 Double Check Test',
+      leftLabel: 'REGULAR MODEL',
+      rightLabel: 'REVIEWER PASS',
+      verdictTitle: '🔬 Run Reviewer Verdict',
+      verdictCopy: 'Compare first-pass findings with the reviewer second pass to see what changed.',
+      endpoint: '/api/doublecheck'
+    }
+  }
+  return {
+    title: '🥊 Juice Tester',
+    leftLabel: 'RAW TODD',
+    rightLabel: 'BEEFED-UP TODD',
+    verdictTitle: '🔬 Run Dr. Verdict',
+    verdictCopy: 'Let Dr. Todd compare both results and tell you if the learnings helped, hurt, or need revision.',
+    endpoint: '/api/sidebyside'
+  }
+}
+
+function applySbsModeUi(cfg) {
+  document.getElementById('sbs-title').textContent = cfg.title
+  document.getElementById('sbs-loading-left-label').textContent = cfg.leftLabel
+  document.getElementById('sbs-loading-right-label').textContent = cfg.rightLabel
+  document.getElementById('sbs-left-label').textContent = cfg.leftLabel
+  document.getElementById('sbs-right-label').textContent = cfg.rightLabel
+  document.getElementById('sbs-verdict-title').textContent = cfg.verdictTitle
+  document.getElementById('sbs-verdict-copy').textContent = cfg.verdictCopy
+}
+
+async function startSideBySide(tenantId = null, mode = 'juice') {
+  state.sbsSourceScreen = state.screen
+  state.sbsMode = mode
+  const cfg = getSbsModeConfig(mode)
+
+  let check
+  try {
+    const r = await fetch(
+      sameOriginApi(`/api/session/check?sessionId=${encodeURIComponent(state.sessionId)}`)
+    )
+    check = await r.json()
+    if (!r.ok || !check.ok) {
+      toast(check.error || `Server check failed (${r.status})`, 'error')
+      return
+    }
+  } catch {
+    toast(
+      'Cannot reach the Todd server. Open this app from the same URL as server.js (e.g. http://localhost:3000), not a downloaded HTML file.',
+      'error'
+    )
+    return
+  }
+
+  if (!check.anthropicConfigured) {
+    toast(
+      'ANTHROPIC_API_KEY is not set on the server — Claude cannot run. Add it in .env or Railway Variables and restart.',
+      'error'
+    )
+    return
+  }
+  if (mode === 'modelcompare' && !check.openAIConfigured) {
+    toast('OPENAI_API_KEY not set — only the Claude column will run. Add the key on Railway or .env for OpenAI.', 'info')
+  }
+
+  applySbsModeUi(cfg)
   goTo('sidebyside')
-  document.getElementById('sbs-subtitle').textContent = ''
+  document.getElementById('sbs-subtitle').textContent =
+    `Connected — ${check.tenantCount} tenant(s) in session · starting live stream…`
   document.getElementById('sbs-loading').classList.remove('hidden')
   document.getElementById('sbs-results').classList.add('hidden')
   document.getElementById('sbs-raw-fill').style.width    = '0%'
   document.getElementById('sbs-beefed-fill').style.width = '0%'
-  document.getElementById('sbs-raw-msg').textContent     = 'Waiting...'
-  document.getElementById('sbs-beefed-msg').textContent  = 'Waiting...'
+  document.getElementById('sbs-raw-msg').textContent     = 'Waiting for stream…'
+  document.getElementById('sbs-beefed-msg').textContent  = 'Waiting for stream…'
 
-  const url = `/api/sidebyside?sessionId=${encodeURIComponent(state.sessionId)}` +
-    (tenantId ? `&tenantId=${encodeURIComponent(tenantId)}` : '') +
-    cheapQs()
+  let qs = `sessionId=${encodeURIComponent(state.sessionId)}`
+  if (tenantId) qs += `&tenantId=${encodeURIComponent(tenantId)}`
+  qs += cheapQs()
+  const url = sameOriginApi(`${cfg.endpoint}?${qs}`)
 
   if (state.eventSource) { state.eventSource.close() }
   const es = new EventSource(url)
   state.eventSource = es
 
+  let sbsStreamAck = false
+  const markSbsAck = () => { sbsStreamAck = true }
+  const sbsFailTimer = window.setTimeout(() => {
+    if (sbsStreamAck) return
+    if (state.eventSource !== es) return
+    if (state.screen !== 'sidebyside') return
+    try { es.close() } catch {}
+    state.eventSource = null
+    toast(
+      'Comparison did not start. Use your server URL, load tenant folders on the Hunt screen first, and ensure ANTHROPIC_API_KEY is set.',
+      'error'
+    )
+    document.getElementById('sbs-loading')?.classList.add('hidden')
+    goTo(state.sbsSourceScreen || 'loading')
+  }, 15000)
+
   es.addEventListener('sbs-start', e => {
+    markSbsAck()
+    window.clearTimeout(sbsFailTimer)
     const d = JSON.parse(e.data)
-    document.getElementById('sbs-subtitle').textContent =
-      `${d.tenantName} — ${d.activeLearningCount} active learning${d.activeLearningCount !== 1 ? 's' : ''} applied`
+    const sub = document.getElementById('sbs-subtitle')
+    if (mode === 'modelcompare') {
+      sub.textContent = d.openaiEnabled === false
+        ? `${d.tenantName} — Claude API (OpenAI not configured on server)`
+        : `${d.tenantName} — Claude API vs OpenAI API (parallel runs)`
+    } else if (mode === 'doublecheck') {
+      sub.textContent = `${d.tenantName} — independent reviewer pass enabled`
+    } else {
+      sub.textContent =
+        `${d.tenantName} — ${d.activeLearningCount} active learning${d.activeLearningCount !== 1 ? 's' : ''} applied`
+    }
   })
 
   es.addEventListener('sbs-progress', e => {
@@ -1790,6 +1978,8 @@ function startSideBySide(tenantId = null) {
   })
 
   es.addEventListener('sbs-complete', e => {
+    markSbsAck()
+    window.clearTimeout(sbsFailTimer)
     es.close()
     state.eventSource = null
     const d = JSON.parse(e.data)
@@ -1807,11 +1997,30 @@ function startSideBySide(tenantId = null) {
   })
 
   es.addEventListener('sbs-error', e => {
+    markSbsAck()
+    window.clearTimeout(sbsFailTimer)
     es.close()
     state.eventSource = null
     const d = JSON.parse(e.data)
     toast('Side-by-side error: ' + (d.error || 'Unknown'), 'error')
-    goTo('drtoddhunt')
+    document.getElementById('sbs-loading')?.classList.add('hidden')
+    goTo(state.sbsSourceScreen || 'loading')
+  })
+
+  es.addEventListener('error', () => {
+    window.setTimeout(() => {
+      if (sbsStreamAck) return
+      if (state.eventSource !== es) return
+      if (es.readyState !== EventSource.CLOSED) return
+      window.clearTimeout(sbsFailTimer)
+      state.eventSource = null
+      toast(
+        'Lost connection to the server before the run started. Reload, confirm folders are loaded, and check the server is running.',
+        'error'
+      )
+      document.getElementById('sbs-loading')?.classList.add('hidden')
+      goTo(state.sbsSourceScreen || 'loading')
+    }, 80)
   })
 }
 
@@ -1823,6 +2032,8 @@ const CHECK_LABELS_SBS = {
 }
 
 function renderSideBySide(data) {
+  const mode = state.sbsMode || 'juice'
+  const rightNoun = mode === 'doublecheck' ? 'reviewer pass' : 'learning'
   const raw    = data.raw    || {}
   const beefed = data.beefed || {}
   const rawF   = raw.findings    || []
@@ -1830,12 +2041,25 @@ function renderSideBySide(data) {
 
   // Learnings bar
   const bar = document.getElementById('sbs-learnings-bar')
-  if (data.activeLearnings && data.activeLearnings.length > 0) {
+  if (mode === 'modelcompare') {
+    if (beefed.openaiSkipped) {
+      bar.textContent =
+        '⚠️ OpenAI not configured — Claude results on the left. Set OPENAI_API_KEY on the server (Railway Variables or .env) for the right column.'
+    } else if (beefed.openaiError) {
+      bar.textContent = '⚠️ OpenAI failed — see right column. Claude results on the left are still valid.'
+    } else {
+      bar.textContent = '⚔️ Model battle mode: left = Claude API, right = OpenAI API.'
+    }
+    bar.classList.remove('hidden')
+  } else if (mode === 'doublecheck') {
+    bar.textContent = '🧪 Reviewer pass runs as a separate confirmation analysis against the regular model.'
+    bar.classList.remove('hidden')
+  } else if (data.activeLearnings && data.activeLearnings.length > 0) {
     bar.textContent = `🧠 ${data.activeLearnings.length} active learning${data.activeLearnings.length !== 1 ? 's' : ''} applied to Beefed-Up Todd: ` +
       data.activeLearnings.map(l => l.checkType).join(' · ')
     bar.classList.remove('hidden')
   } else {
-    bar.textContent = '⚠️ No active learnings — activate some in the Learnings panel to see the difference'
+    bar.textContent = `⚠️ No active ${rightNoun}s — activate some in the Learnings panel to see the difference`
   }
 
   // Build sets for uniqueness highlighting
@@ -2043,6 +2267,8 @@ function startDrToddHunt() {
   document.getElementById('drtoddhunt-synthesis').classList.add('hidden')
   document.getElementById('drtoddhunt-report').classList.add('hidden')
   document.getElementById('drtoddhunt-report-text').textContent = ''
+  document.getElementById('drtodd-tldr')?.classList.add('hidden')
+  document.getElementById('drtodd-tldr-text').textContent = ''
   document.getElementById('drtoddhunt-cta').classList.add('hidden')
   const genBtn = document.getElementById('btn-generate-report')
   if (genBtn) { genBtn.disabled = false; genBtn.textContent = '📊 Generate Analysis Report' }
@@ -2826,6 +3052,9 @@ function navigateGlobalBack() {
       if (state.eventSource) { state.eventSource.close(); state.eventSource = null }
       goTo('loading')
       break
+    case 'drtoddlab':
+      goTo(state.tenants.length ? 'loading' : 'upload')
+      break
     case 'gym':
       if (state.eventSource) { state.eventSource.close(); state.eventSource = null }
       gymReset()
@@ -2833,7 +3062,7 @@ function navigateGlobalBack() {
       break
     case 'sidebyside':
       if (state.eventSource) { state.eventSource.close(); state.eventSource = null }
-      goTo('drtoddhunt')
+      goTo(state.sbsSourceScreen || 'loading')
       break
     default:
       break

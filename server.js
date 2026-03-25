@@ -1,3 +1,6 @@
+// Local dev: load `.env` into process.env (same keys as Railway). Does not override vars already set by the host.
+import 'dotenv/config'
+
 import express from 'express'
 import multer from 'multer'
 import { randomUUID } from 'crypto'
@@ -6,6 +9,7 @@ import { fileURLToPath } from 'url'
 import fs from 'fs'
 import unzipper from 'unzipper'
 import { analyzeTenant, gymAnalyzeTenant, beefedUpAnalyzeTenant } from './lib/analyzer.js'
+import { openaiAnalyzeTenant } from './lib/openai.js'
 import { generateReport } from './lib/reporter.js'
 import { mountIsaacRoutes } from './lib/isaac-routes.js'
 
@@ -86,6 +90,8 @@ app.get('/api/health', (_req, res) => {
     ok: true,
     service: 'todd-jr',
     isaacRoutes: true,
+    claudeConfigured: !!process.env.ANTHROPIC_API_KEY?.trim(),
+    openaiConfigured: !!process.env.OPENAI_API_KEY?.trim(),
     /** Set by Railway on deploy — compare to GitHub to confirm the live build */
     gitCommit: process.env.RAILWAY_GIT_COMMIT_SHA || null,
     time: new Date().toISOString()
@@ -117,6 +123,32 @@ const upload = multer({
   storage,
   limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB per file
   fileFilter: (_req, file, cb) => cb(null, true) // Accept all — let parser handle unknown types
+})
+
+// GET /api/session/check — Preflight before EventSource (side-by-side / model compare)
+app.get('/api/session/check', (req, res) => {
+  const sessionId = String(req.query.sessionId || '').trim()
+  if (!sessionId) {
+    return res.status(400).json({ ok: false, error: 'Missing sessionId query parameter.' })
+  }
+  const session = sessions.get(sessionId)
+  if (!session) {
+    return res.status(404).json({
+      ok: false,
+      error:
+        'This browser is not connected to a live session on the server. Upload tenant folders from the Hunt screen again, or the server restarted (sessions are stored in memory only).'
+    })
+  }
+  const tenantCount = Array.isArray(session.tenants) ? session.tenants.length : 0
+  if (tenantCount === 0) {
+    return res.status(400).json({ ok: false, error: 'Session has no tenants — upload folders again.' })
+  }
+  res.json({
+    ok: true,
+    tenantCount,
+    anthropicConfigured: !!process.env.ANTHROPIC_API_KEY?.trim(),
+    openAIConfigured: !!process.env.OPENAI_API_KEY?.trim()
+  })
 })
 
 // ═══════════════════════════════════════════════════════════
@@ -609,6 +641,22 @@ app.post('/api/drtoddhunt/extract-learnings', async (req, res) => {
   }
 })
 
+// POST /api/drtoddhunt/tldr
+app.post('/api/drtoddhunt/tldr', async (req, res) => {
+  try {
+    const { reportText, tenantName, cheapMode } = req.body || {}
+    if (!reportText || !String(reportText).trim()) {
+      return res.status(400).json({ error: 'reportText is required' })
+    }
+    const { dumbDownDrToddReport } = await import('./lib/gym-trainer.js')
+    const tldr = await dumbDownDrToddReport(String(reportText), String(tenantName || ''), !!cheapMode)
+    res.json({ tldr })
+  } catch (err) {
+    console.error('[drtoddhunt/tldr]', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ═══════════════════════════════════════════════════════════
 // GET /api/sidebyside — Raw Todd vs Beefed-Up Todd, SSE stream
 // ═══════════════════════════════════════════════════════════
@@ -670,6 +718,216 @@ app.get('/api/sidebyside', async (req, res) => {
     }
   } catch (err) {
     console.error('[sidebyside]', err)
+    if (!aborted) emit('sbs-error', { error: err.message })
+  } finally {
+    clearInterval(heartbeat)
+    res.end()
+  }
+})
+
+// ═══════════════════════════════════════════════════════════
+// GET /api/doublecheck — Regular vs Reviewer second pass (SSE)
+// ═══════════════════════════════════════════════════════════
+
+app.get('/api/doublecheck', async (req, res) => {
+  const { sessionId, tenantId } = req.query
+  const session = sessions.get(sessionId)
+  if (!session) return res.status(404).json({ error: 'Session not found' })
+
+  const tenant = tenantId
+    ? session.tenants.find(t => t.id === tenantId)
+    : session.tenants[0]
+  if (!tenant) return res.status(404).json({ error: 'Tenant not found' })
+
+  res.writeHead(200, {
+    'Content-Type':  'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection':    'keep-alive',
+    'X-Accel-Buffering': 'no'
+  })
+  res.flushHeaders()
+
+  const emit = (event, data) => {
+    try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`) } catch {}
+  }
+  const heartbeat = setInterval(() => {
+    try { res.write(': ping\n\n') } catch { clearInterval(heartbeat) }
+  }, 15000)
+  let aborted = false
+  req.on('close', () => { aborted = true; clearInterval(heartbeat) })
+
+  try {
+    const cheapOpts = { cheapMode: isCheapMode(req) }
+
+    emit('sbs-start', {
+      tenantName: tenant.tenantName,
+      activeLearningCount: 0
+    })
+
+    // Two independent passes:
+    // 1) Regular model baseline
+    // 2) Reviewer pass (same engine, separate run for confirmation)
+    const [rawResult, reviewResult] = await Promise.all([
+      analyzeTenant(tenant, tenant.files, ({ percent, message }) => {
+        if (!aborted) emit('sbs-progress', { side: 'raw', percent, message })
+      }, cheapOpts),
+      analyzeTenant(tenant, tenant.files, ({ percent, message }) => {
+        const reviewMsg = message ? `Reviewer: ${message}` : 'Reviewer pass running...'
+        if (!aborted) emit('sbs-progress', { side: 'beefed', percent, message: reviewMsg })
+      }, cheapOpts)
+    ])
+
+    if (!aborted) {
+      emit('sbs-complete', {
+        tenantName: tenant.tenantName,
+        raw: rawResult,
+        beefed: reviewResult,
+        activeLearnings: [],
+        mode: 'doublecheck'
+      })
+    }
+  } catch (err) {
+    console.error('[doublecheck]', err)
+    if (!aborted) emit('sbs-error', { error: err.message })
+  } finally {
+    clearInterval(heartbeat)
+    res.end()
+  }
+})
+
+// ═══════════════════════════════════════════════════════════
+// GET /api/modelcompare — Claude API vs OpenAI API (SSE)
+// ═══════════════════════════════════════════════════════════
+app.get('/api/modelcompare', async (req, res) => {
+  const { sessionId, tenantId } = req.query
+  const session = sessions.get(sessionId)
+  if (!session) return res.status(404).json({ error: 'Session not found' })
+
+  const tenant = tenantId
+    ? session.tenants.find(t => t.id === tenantId)
+    : session.tenants[0]
+  if (!tenant) return res.status(404).json({ error: 'Tenant not found' })
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  })
+  res.flushHeaders()
+
+  const emit = (event, data) => {
+    try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`) } catch {}
+  }
+  const heartbeat = setInterval(() => {
+    try { res.write(': ping\n\n') } catch { clearInterval(heartbeat) }
+  }, 15000)
+  let aborted = false
+  req.on('close', () => { aborted = true; clearInterval(heartbeat) })
+
+  const openaiKey = process.env.OPENAI_API_KEY?.trim()
+
+  function skippedOpenaiResult(reason) {
+    return {
+      tenantNameInDocuments: tenant.tenantName,
+      mostRecentDocumentDate: null,
+      leaseExpirationDate: null,
+      findings: [
+        {
+          checkType: 'SPECIAL_AGREEMENT',
+          severity: 'LOW',
+          missingDocument: 'OpenAI API',
+          comment: `Not run — ${reason}. Add OPENAI_API_KEY (Railway Variables or .env) and restart.`,
+          evidence: ''
+        }
+      ],
+      allClear: false,
+      openaiSkipped: true,
+      openaiSkipReason: reason
+    }
+  }
+
+  try {
+    emit('sbs-start', {
+      tenantName: tenant.tenantName,
+      activeLearningCount: 0,
+      mode: 'modelcompare',
+      openaiEnabled: !!openaiKey
+    })
+    const cheapOpts = { cheapMode: isCheapMode(req) }
+
+    if (!aborted) {
+      emit('sbs-progress', { side: 'raw', percent: 1, message: 'Claude API engaged' })
+      if (openaiKey) {
+        emit('sbs-progress', { side: 'beefed', percent: 1, message: 'OpenAI API engaged' })
+      } else {
+        emit('sbs-progress', {
+          side: 'beefed',
+          percent: 5,
+          message: 'OpenAI skipped — OPENAI_API_KEY not set (Claude runs on the left)'
+        })
+      }
+    }
+
+    const claudePromise = analyzeTenant(tenant, tenant.files, ({ percent, message }) => {
+      if (!aborted) {
+        emit('sbs-progress', {
+          side: 'raw',
+          percent,
+          message: message ? `Claude · ${message}` : 'Claude API engaged'
+        })
+      }
+    }, cheapOpts)
+
+    const openaiPromise = (async () => {
+      if (!openaiKey) {
+        return skippedOpenaiResult('OPENAI_API_KEY not set on server')
+      }
+      try {
+        return await openaiAnalyzeTenant(tenant, tenant.files, ({ percent, message }) => {
+          if (!aborted) emit('sbs-progress', { side: 'beefed', percent, message })
+        }, cheapOpts)
+      } catch (openaiErr) {
+        console.error('[modelcompare] OpenAI failed:', openaiErr.message)
+        if (!aborted) {
+          emit('sbs-progress', {
+            side: 'beefed',
+            percent: 100,
+            message: `OpenAI error: ${openaiErr.message}`
+          })
+        }
+        return {
+          tenantNameInDocuments: tenant.tenantName,
+          mostRecentDocumentDate: null,
+          leaseExpirationDate: null,
+          findings: [
+            {
+              checkType: 'REFERENCED_DOC',
+              severity: 'HIGH',
+              missingDocument: 'OpenAI API run',
+              comment: String(openaiErr.message || 'OpenAI request failed'),
+              evidence: ''
+            }
+          ],
+          allClear: false,
+          openaiError: true
+        }
+      }
+    })()
+
+    const [claudeResult, openaiResult] = await Promise.all([claudePromise, openaiPromise])
+
+    if (!aborted) {
+      emit('sbs-complete', {
+        tenantName: tenant.tenantName,
+        raw: claudeResult,
+        beefed: openaiResult,
+        activeLearnings: [],
+        mode: 'modelcompare'
+      })
+    }
+  } catch (err) {
+    console.error('[modelcompare]', err)
     if (!aborted) emit('sbs-error', { error: err.message })
   } finally {
     clearInterval(heartbeat)
@@ -962,7 +1220,14 @@ setInterval(() => {
 if (!process.env.ANTHROPIC_API_KEY?.trim()) {
   console.error(`
 ⚠️  ANTHROPIC_API_KEY is missing or empty — Claude analysis will fail with connection/auth errors.
-   Railway: Service → Variables (or Project → Shared Variables), add ANTHROPIC_API_KEY, then redeploy.
+   Local: copy .env.example → .env and set ANTHROPIC_API_KEY (same value as Railway if you like).
+   Railway: Service → Variables, add ANTHROPIC_API_KEY, then redeploy.
+`)
+}
+if (!process.env.OPENAI_API_KEY?.trim()) {
+  console.warn(`
+ℹ️  OPENAI_API_KEY is missing — "Claude vs OpenAI" test mode will error until this is set.
+   Local: add OPENAI_API_KEY to .env (gitignored). Railway: Service → Variables, then redeploy.
 `)
 }
 

@@ -122,6 +122,8 @@ html, body {
   opacity: 0.4;
 }
 .pixel-nav-back {
+  order: 2;
+  margin-left: auto;
   background: #1e293b;
   border-color: #64748b;
   color: #e2e8f0;
@@ -132,6 +134,7 @@ html, body {
   box-shadow: 0 3px 0 #0f172a, 0 0 12px rgba(148, 163, 184, 0.25);
 }
 .pixel-nav-home {
+  order: 1;
   background: linear-gradient(180deg, #1d4ed8, #1e3a8a);
   border-color: #60a5fa;
   color: #f8fafc;
@@ -1472,6 +1475,230 @@ input:checked + .toggle-slider:before { transform:translateX(22px); background:#
 }
 .btn-drtoddhunt:active { transform: translateY(0); }
 
+/* ═══════════════════════════════════════════════════════════
+   DR. TODD TEST LAB (mode selector)
+═══════════════════════════════════════════════════════════ */
+#screen-drtoddlab {
+  justify-content: center;
+}
+.drlab-wrap {
+  width: min(980px, 96vw);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  align-items: center;
+}
+.drlab-header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.drlab-title {
+  margin: 0 0 8px;
+  font-family: var(--font-pixel);
+  font-size: 14px;
+  letter-spacing: 1px;
+  color: #93c5fd;
+  text-shadow: 0 0 16px rgba(59, 130, 246, 0.4);
+}
+.drlab-sub {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 13px;
+}
+.drlab-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  gap: 14px;
+}
+.drlab-tube {
+  border: 3px solid #1e3a5f;
+  background: linear-gradient(180deg, #0f172a 0%, #0b1120 100%);
+  border-radius: 10px;
+  padding: 22px 14px 14px;
+  min-height: 178px;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  text-align: center;
+  color: #e2e8f0;
+  cursor: pointer;
+  box-shadow: 0 5px 0 #020617, inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+  image-rendering: pixelated;
+  --lab-glow: rgba(96, 165, 250, 0.42);
+  --flask-hi: #bbf7d0;
+  --flask-mid: #4ade80;
+  --flask-low: #15803d;
+}
+.drlab-tube:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.06);
+}
+.drlab-tube:active {
+  transform: translateY(1px);
+  box-shadow: 0 2px 0 #020617, inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.drlab-tube-jar {
+  flex-shrink: 0;
+  width: 86px;
+  height: 86px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  position: relative;
+  overflow: visible;
+  image-rendering: pixelated;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: none;
+}
+.drlab-tube-jar img.drlab-flask-sprite {
+  display: block;
+  width: 86px;
+  height: 86px;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+.drlab-tube-jar::before {
+  content: none;
+}
+.drlab-tube-jar::after {
+  content: none;
+}
+/* Selection glow lives on the flask only — not the whole card */
+.drlab-tube.selected {
+  box-shadow: 0 5px 0 #020617, inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.drlab-tube.selected .drlab-tube-jar {
+  z-index: 1;
+  border-radius: 0;
+  animation: none;
+}
+/* Silhouette glow: follows non-transparent flask pixels (not the square box) */
+.drlab-tube.selected .drlab-tube-jar img.drlab-flask-sprite {
+  animation: drlab-flask-dropglow 1s ease-in-out infinite alternate;
+}
+@keyframes drlab-flask-dropglow {
+  from {
+    filter:
+      drop-shadow(0 0 3px var(--drlab-flask-glow, #5bc97e))
+      drop-shadow(0 0 10px var(--drlab-flask-glow, #5bc97e))
+      drop-shadow(0 0 20px color-mix(in srgb, var(--drlab-flask-glow, #5bc97e) 55%, transparent));
+  }
+  to {
+    filter:
+      drop-shadow(0 0 8px var(--drlab-flask-glow, #5bc97e))
+      drop-shadow(0 0 18px var(--drlab-flask-glow, #5bc97e))
+      drop-shadow(0 0 36px color-mix(in srgb, var(--drlab-flask-glow, #5bc97e) 70%, transparent));
+  }
+}
+.drlab-tube-title {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  letter-spacing: 0.6px;
+}
+.drlab-tube-desc {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #94a3b8;
+}
+.drlab-tube-juice {
+  border-color: #16a34a;
+  --lab-glow: rgba(34, 197, 94, 0.58);
+  --flask-hi: #bbf7d0;
+  --flask-mid: #4ade80;
+  --flask-low: #15803d;
+  --drlab-flask-glow: #5bc97e;
+}
+.drlab-tube-juice .drlab-tube-jar,
+.drlab-tube-triple .drlab-tube-jar,
+.drlab-tube-double .drlab-tube-jar,
+.drlab-tube-api .drlab-tube-jar {
+  filter: none;
+}
+.drlab-tube-triple {
+  border-color: #7c3aed;
+  --lab-glow: rgba(124, 58, 237, 0.6);
+  --flask-hi: #ddd6fe;
+  --flask-mid: #a78bfa;
+  --flask-low: #6d28d9;
+}
+.drlab-tube-double {
+  border-color: #0ea5e9;
+  --lab-glow: rgba(14, 165, 233, 0.6);
+  --flask-hi: #bae6fd;
+  --flask-mid: #38bdf8;
+  --flask-low: #0369a1;
+  --drlab-flask-glow: #38bdf8;
+}
+.drlab-tube-api {
+  border-color: #f59e0b;
+  --lab-glow: rgba(245, 158, 11, 0.6);
+  --flask-hi: #fde68a;
+  --flask-mid: #fbbf24;
+  --flask-low: #b45309;
+  --drlab-flask-glow: #fbbf24;
+}
+.drlab-initiate {
+  margin-top: 4px;
+  min-width: 280px;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  letter-spacing: 0.6px;
+  transition:
+    opacity 0.22s ease,
+    filter 0.22s ease,
+    box-shadow 0.28s ease,
+    transform 0.15s ease;
+}
+/* Dimmed — always on screen until a flask is picked */
+.drlab-initiate:disabled {
+  opacity: 0.38;
+  filter: grayscale(0.45) brightness(0.78);
+  box-shadow: 0 4px 0 #0a0f1c, 0 0 4px rgba(236, 72, 153, 0.06);
+  cursor: not-allowed;
+}
+.drlab-initiate:disabled:hover {
+  transform: none;
+  box-shadow: 0 4px 0 #0a0f1c, 0 0 4px rgba(236, 72, 153, 0.06);
+}
+/* Lit after selecting a test */
+.drlab-initiate:not(:disabled) {
+  opacity: 1;
+  filter: none;
+  cursor: pointer;
+  animation: drlab-initiate-lit 1.25s ease-in-out infinite alternate;
+}
+@keyframes drlab-initiate-lit {
+  from {
+    box-shadow:
+      0 0 0 2px rgba(236, 72, 153, 0.22),
+      0 0 16px rgba(236, 72, 153, 0.32),
+      0 5px 0 #172554;
+  }
+  to {
+    box-shadow:
+      0 0 0 3px rgba(244, 114, 182, 0.5),
+      0 0 28px rgba(236, 72, 153, 0.52),
+      0 0 44px rgba(236, 72, 153, 0.22),
+      0 5px 0 #172554;
+  }
+}
+.drlab-back {
+  margin-top: 4px;
+}
+@media (max-width: 880px) {
+  .drlab-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 #screen-drtoddhunt {
   padding: 32px 24px;
   max-width: 760px;
@@ -1558,6 +1785,47 @@ input:checked + .toggle-slider:before { transform:translateX(22px); background:#
 }
 .btn-copy-report:hover { opacity: .85; }
 .btn-copy-report.copied { background: #16a34a; }
+
+.drtodd-tldr-cta {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-start;
+}
+.btn-dumbdown {
+  padding: 8px 14px;
+  border: 2px solid #f59e0b;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #f59e0b, #b45309);
+  color: #1f2937;
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  image-rendering: pixelated;
+}
+.btn-dumbdown:hover { filter: brightness(1.08); }
+.btn-dumbdown:disabled { opacity: 0.65; cursor: wait; }
+
+.drtodd-tldr {
+  margin-top: 10px;
+  border: 1px solid #f59e0b;
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.08);
+  padding: 12px 14px;
+}
+.drtodd-tldr h4 {
+  margin: 0 0 8px;
+  color: #fcd34d;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+}
+.drtodd-tldr-text {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 12px;
+  color: #e5e7eb;
+  line-height: 1.5;
+}
 
 .drtoddhunt-cta {
   text-align: center;

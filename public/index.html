@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=27" />
+  <link rel="stylesheet" href="style.css?v=39" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
@@ -115,7 +115,7 @@
           <button class="btn-hunt" id="btn-hunt" type="button">
             <span>Send Todd Junior Hunting</span>
           </button>
-          <button type="button" class="btn-drtoddhunt" id="btn-drtoddhunt">🔬 Send Dr. Todd to Hunt</button>
+          <button type="button" class="btn-drtoddhunt" id="btn-drtoddhunt">🔬 Send Dr. Todd to Test</button>
           <button type="button" class="btn-workout" id="btn-workout">🏋️ Todd Gym Teacher</button>
           <div class="hunt-toggles-panel" aria-label="Hunt options">
             <div class="hunt-toggle-row">
@@ -233,6 +233,47 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════
+       SCREEN: DR. TODD TEST LAB (mode select before testing)
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="screen-drtoddlab" class="screen">
+    <div class="drlab-wrap">
+      <div class="drlab-header">
+        <h2 class="drlab-title">🧪 Dr. Todd Test Lab</h2>
+        <p class="drlab-sub">Pick a potion tube, then launch your test mode.</p>
+      </div>
+
+      <div class="drlab-grid">
+        <button type="button" class="drlab-tube drlab-tube-juice" id="btn-drlab-juice">
+          <span class="drlab-tube-jar" aria-hidden="true"></span>
+          <span class="drlab-tube-title">JUICE TESTER</span>
+          <span class="drlab-tube-desc">Regular model vs Juiced model, with Dr. Verdict and Save to Juice.</span>
+        </button>
+
+        <button type="button" class="drlab-tube drlab-tube-triple" id="btn-drlab-triple">
+          <span class="drlab-tube-jar" aria-hidden="true"></span>
+          <span class="drlab-tube-title">TRIPLE TEST</span>
+          <span class="drlab-tube-desc">Run 3 independent diagnostics and synthesize one report.</span>
+        </button>
+
+        <button type="button" class="drlab-tube drlab-tube-double" id="btn-drlab-double">
+          <span class="drlab-tube-jar" aria-hidden="true"></span>
+          <span class="drlab-tube-title">DOUBLE CHECK TEST</span>
+          <span class="drlab-tube-desc">Regular model vs second-pass reviewer model for confirmation.</span>
+        </button>
+        <button type="button" class="drlab-tube drlab-tube-api" id="btn-drlab-api">
+          <span class="drlab-tube-jar" aria-hidden="true"></span>
+          <span class="drlab-tube-title">CLAUDE VS OPENAI</span>
+          <span class="drlab-tube-desc">Compare Anthropic Claude API output against OpenAI API output.</span>
+        </button>
+      </div>
+
+      <button type="button" class="btn-hunt drlab-initiate" id="btn-drlab-initiate" disabled aria-label="Initiate Dr. Todd — pick a test flask first">⚡ INITIATE DR.TODD</button>
+
+      <button class="btn-restart drlab-back" id="btn-drlab-back">← Back to Hunt Controls</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
        SCREEN: DR. TODD REPORT
   ═══════════════════════════════════════════════════════════ -->
   <div id="screen-drtoddhunt" class="screen">
@@ -276,6 +317,13 @@
         <button class="btn-copy-report" id="btn-copy-report">📋 Copy Report</button>
       </div>
       <pre class="report-text" id="drtoddhunt-report-text"></pre>
+      <div class="drtodd-tldr-cta">
+        <button class="btn-dumbdown" id="btn-drtodd-dumbdown">🤪 Dumb It Down (TL;DR)</button>
+      </div>
+      <div class="drtodd-tldr hidden" id="drtodd-tldr">
+        <h4>🍼 Super High-Level</h4>
+        <pre class="drtodd-tldr-text" id="drtodd-tldr-text"></pre>
+      </div>
 
       <!-- Extract learnings CTA -->
       <div class="drtodd-learnings-cta" id="drtodd-learnings-cta">
@@ -304,7 +352,7 @@
   <div id="screen-sidebyside" class="screen">
     <div class="sbs-header">
       <button class="sbs-back-btn" id="sbs-back">← Back</button>
-      <h2 class="sbs-title">🥊 Side-by-Side Comparison</h2>
+      <h2 class="sbs-title" id="sbs-title">🥊 Side-by-Side Comparison</h2>
       <span class="sbs-subtitle" id="sbs-subtitle"></span>
     </div>
 
@@ -312,13 +360,13 @@
     <div class="sbs-loading" id="sbs-loading">
       <div class="sbs-loading-cols">
         <div class="sbs-loading-col">
-          <div class="sbs-col-badge raw">RAW TODD</div>
+          <div class="sbs-col-badge raw" id="sbs-loading-left-label">RAW TODD</div>
           <p class="sbs-loading-label" id="sbs-raw-msg">Waiting...</p>
           <div class="sbs-bar-wrap"><div class="sbs-bar-fill" id="sbs-raw-fill" style="width:0%"></div></div>
         </div>
         <div class="sbs-loading-divider">VS</div>
         <div class="sbs-loading-col">
-          <div class="sbs-col-badge beefed">BEEFED-UP TODD</div>
+          <div class="sbs-col-badge beefed" id="sbs-loading-right-label">BEEFED-UP TODD</div>
           <p class="sbs-loading-label" id="sbs-beefed-msg">Waiting...</p>
           <div class="sbs-bar-wrap"><div class="sbs-bar-fill beefed" id="sbs-beefed-fill" style="width:0%"></div></div>
         </div>
@@ -332,7 +380,7 @@
         <!-- Raw Todd column -->
         <div class="sbs-col">
           <div class="sbs-col-header">
-            <span class="sbs-col-badge raw">RAW TODD</span>
+            <span class="sbs-col-badge raw" id="sbs-left-label">RAW TODD</span>
             <span class="sbs-col-count" id="sbs-raw-count"></span>
           </div>
           <div class="sbs-findings-list" id="sbs-raw-findings"></div>
@@ -341,7 +389,7 @@
         <!-- Beefed-Up Todd column -->
         <div class="sbs-col">
           <div class="sbs-col-header">
-            <span class="sbs-col-badge beefed">BEEFED-UP TODD</span>
+            <span class="sbs-col-badge beefed" id="sbs-right-label">BEEFED-UP TODD</span>
             <span class="sbs-col-count" id="sbs-beefed-count"></span>
           </div>
           <div class="sbs-findings-list" id="sbs-beefed-findings"></div>
@@ -351,8 +399,8 @@
       <!-- Dr. Verdict CTA -->
       <div class="sbs-verdict-cta" id="sbs-verdict-cta">
         <div class="sbs-verdict-cta-text">
-          <strong>🔬 Run Dr. Verdict</strong>
-          <span>Let Dr. Todd compare both results and tell you if the learnings helped, hurt, or need revision</span>
+          <strong id="sbs-verdict-title">🔬 Run Dr. Verdict</strong>
+          <span id="sbs-verdict-copy">Let Dr. Todd compare both results and tell you if the learnings helped, hurt, or need revision</span>
         </div>
         <button class="btn-run-verdict" id="btn-run-verdict">🔬 Generate Verdict</button>
       </div>
@@ -570,6 +618,7 @@
     </div>
   </div>
 
-  <script src="app.js?v=37"></script>
+  <script src="drlab-flasks.js?v=1"></script>
+  <script src="app.js?v=49"></script>
 </body>
 </html>
