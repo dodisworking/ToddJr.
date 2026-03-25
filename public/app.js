@@ -37,9 +37,10 @@ function normalizeToddApiBase(input) {
 }
 
 /**
- * API base for /api/* fetch and XHR.
- * 1) <meta name="todd-api-base" content="https://…"> (optional — split UI vs API)
- * 2) Same origin as this page (typical: open the URL from `npm start`)
+ * API base for every Todd request (fetch, XHR, EventSource, downloads).
+ * 1) <meta name="todd-api-base" content="https://your-api-host"> when the HTML is NOT served by Todd (e.g. Live Server + Railway API).
+ * 2) Otherwise: same origin as this page (open the URL from `npm start` or your Railway app URL).
+ * Always use sameOriginApi('/api/...') or toddApiUrl(...) — never raw fetch('/api/...') or EventSource('/api/...').
  */
 function getApiOrigin() {
   if (typeof window === 'undefined') return ''
@@ -68,6 +69,18 @@ function sameOriginApi(path) {
   } catch {
     return `/${slug}`
   }
+}
+
+/**
+ * Server often returns path-only URLs (e.g. /api/report.xlsx). Always resolve against API base
+ * so downloads and links work when UI is on another host or <meta name="todd-api-base"> points at Railway.
+ */
+function toddApiUrl(pathOrAbsolute) {
+  const s = String(pathOrAbsolute || '').trim()
+  if (!s) return s
+  if (/^https?:\/\//i.test(s)) return s
+  const path = s.startsWith('/') ? s : `/${s}`
+  return sameOriginApi(path)
 }
 
 // ── DOM refs ─────────────────────────────────────────────────
@@ -1184,7 +1197,7 @@ async function addUpload(files) {
   }
   try {
     // Must send session ID as header — multer reads it before body is parsed
-    const res = await fetch('/api/upload', {
+    const res = await fetch(sameOriginApi('/api/upload'), {
       method: 'POST',
       headers: { 'X-Session-Id': tempSession },
       body: formData
@@ -1304,7 +1317,7 @@ function juiceQs() {
 
 async function prefetchLearningsCount() {
   try {
-    const res = await fetch('/api/gym/learnings')
+    const res = await fetch(sameOriginApi('/api/gym/learnings'))
     const list = await res.json()
     const arr = Array.isArray(list) ? list : []
     cachedTotalLearnings = arr.length
@@ -1372,7 +1385,7 @@ function sortLearningsForDisplay(items) {
 }
 
 async function juicePatchLearningActive(id, active) {
-  const res = await fetch(`/api/gym/learnings/${encodeURIComponent(id)}`, {
+  const res = await fetch(sameOriginApi(`/api/gym/learnings/${encodeURIComponent(id)}`), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ active })
@@ -1381,7 +1394,7 @@ async function juicePatchLearningActive(id, active) {
 }
 
 async function juiceRefreshModalAfterChange(bodyEl) {
-  const res = await fetch('/api/gym/learnings')
+  const res = await fetch(sameOriginApi('/api/gym/learnings'))
   const list = await res.json()
   if (!res.ok) throw new Error(list.error || 'Failed to load')
   const arr = Array.isArray(list) ? list : []
@@ -1514,7 +1527,7 @@ document.getElementById('juice-del-yes')?.addEventListener('click', async () => 
   closeJuiceDeleteConfirm()
   try {
     for (const id of ids) {
-      const res = await fetch(`/api/gym/learnings/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      const res = await fetch(sameOriginApi(`/api/gym/learnings/${encodeURIComponent(id)}`), { method: 'DELETE' })
       if (!res.ok) throw new Error('delete failed')
     }
     toast('SCRAPPED ✓', 'success')
@@ -1678,7 +1691,7 @@ async function openJuiceLearningsModal() {
   body.innerHTML = '<p class="gym-no-learnings">Loading…</p>'
   modal.classList.remove('hidden')
   try {
-    const res = await fetch('/api/gym/learnings')
+    const res = await fetch(sameOriginApi('/api/gym/learnings'))
     const list = await res.json()
     if (!res.ok) throw new Error(list.error || 'Failed to load')
     const arr = Array.isArray(list) ? list : []
@@ -1861,7 +1874,7 @@ document.getElementById('btn-drtodd-dumbdown')?.addEventListener('click', async 
   const prev = btn.textContent
   btn.textContent = '🧃 Cooking TL;DR...'
   try {
-    const res = await fetch('/api/drtoddhunt/tldr', {
+    const res = await fetch(sameOriginApi('/api/drtoddhunt/tldr'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reportText, tenantName, ...cheapJsonExtra() })
@@ -1909,7 +1922,7 @@ document.getElementById('btn-extract-learnings')?.addEventListener('click', asyn
   btn.textContent = '⏳ Extracting...'
 
   try {
-    const res  = await fetch('/api/drtoddhunt/extract-learnings', {
+    const res  = await fetch(sameOriginApi('/api/drtoddhunt/extract-learnings'), {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ sessionId: state.sessionId, reportText, tenantName, ...cheapJsonExtra() })
@@ -2467,7 +2480,7 @@ document.getElementById('btn-run-verdict')?.addEventListener('click', async () =
   document.getElementById('sbs-verdict-report').classList.add('hidden')
 
   try {
-    const res = await fetch('/api/sidebyside/verdict', {
+    const res = await fetch(sameOriginApi('/api/sidebyside/verdict'), {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({
@@ -2549,8 +2562,8 @@ function startHunt(testTenantId = null) {
   // Start SSE — pass accuracy mode (sequential=1, speed=parallel)
   const accuracyMode = document.getElementById('accuracy-toggle')?.checked !== false
   const base = `/api/hunt?sessionId=${encodeURIComponent(state.sessionId)}&concurrency=${accuracyMode ? 1 : 0}&tenantIds=${encodeURIComponent(activeTenantIds)}`
-  const url = (testTenantId ? `${base}&testTenantId=${encodeURIComponent(testTenantId)}` : base) + cheapQs() + juiceQs()
-  const es = new EventSource(url)
+  const rel = (testTenantId ? `${base}&testTenantId=${encodeURIComponent(testTenantId)}` : base) + cheapQs() + juiceQs()
+  const es = new EventSource(sameOriginApi(rel))
   state.eventSource = es
 
   es.addEventListener('hunt-start', e => {
@@ -2631,7 +2644,7 @@ function startDrToddHunt() {
 
   goTo('drtoddhunt')
 
-  const url = `/api/drtoddhunt?sessionId=${encodeURIComponent(state.sessionId)}${cheapQs()}`
+  const url = sameOriginApi(`/api/drtoddhunt?sessionId=${encodeURIComponent(state.sessionId)}${cheapQs()}`)
   const es = new EventSource(url)
   state.eventSource = es
 
@@ -2707,7 +2720,7 @@ function requestDrToddReport() {
   document.getElementById('drtoddhunt-synthesis').classList.remove('hidden')
   document.getElementById('drtoddhunt-sub').textContent = 'Synthesizing findings across all 3 runs...'
 
-  fetch('/api/drtoddhunt/synthesize', {
+  fetch(sameOriginApi('/api/drtoddhunt/synthesize'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId: state.sessionId, ...cheapJsonExtra() })
@@ -2809,7 +2822,7 @@ async function startCook() {
   }, 400)
 
   try {
-    const res = await fetch('/api/cook', {
+    const res = await fetch(sameOriginApi('/api/cook'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId: state.sessionId })
@@ -2821,7 +2834,7 @@ async function startCook() {
 
     if (!res.ok) throw new Error(data.error || 'Cook failed')
 
-    state.downloadUrl = data.downloadUrl
+    state.downloadUrl = data.downloadUrl ? toddApiUrl(data.downloadUrl) : null
 
     // Brief delay for satisfying animation
     await sleep(700)
@@ -2944,7 +2957,7 @@ function buildFindingsTable() {
 // Download
 document.getElementById('btn-download').addEventListener('click', () => {
   if (state.downloadUrl) {
-    window.location.href = state.downloadUrl
+    window.location.href = toddApiUrl(state.downloadUrl)
   } else {
     toast('No report available. Please cook first.', 'error')
   }
@@ -3681,7 +3694,9 @@ document.getElementById('gym-start-btn').addEventListener('click', () => {
   document.getElementById('gym-progress-fill').style.width = '0%'
   document.getElementById('gym-loading-msg').textContent = 'Starting analysis...'
 
-  const url = `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenantId)}${cheapQs()}`
+  const url = sameOriginApi(
+    `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenantId)}${cheapQs()}`
+  )
   const es = new EventSource(url)
   state.eventSource = es
 
@@ -4036,7 +4051,7 @@ document.getElementById('gym-save-isaac-btn')?.addEventListener('click', async (
     toast('Teacher Todd Excel saved ✓', 'success')
     if (data.downloadUrl) {
       const a = document.createElement('a')
-      a.href = data.downloadUrl.startsWith('http') ? data.downloadUrl : data.downloadUrl
+      a.href = toddApiUrl(data.downloadUrl)
       a.rel = 'noopener'
       document.body.appendChild(a)
       a.click()
@@ -4056,7 +4071,7 @@ function renderIsaacLogsHtml(entries) {
   return entries.map(entry => {
     const dt = new Date(entry.savedAt).toLocaleString()
     const id = entry.id || ''
-    const href = id ? `/api/gym/isaac-download/${encodeURIComponent(id)}` : '#'
+    const href = id ? toddApiUrl(`/api/gym/isaac-download/${encodeURIComponent(id)}`) : '#'
     return `<div class="isaac-log-card">
       <div class="isaac-log-meta">${escHtml(dt)} · ${escHtml(entry.tenantName || '')} · ${escHtml(entry.folderName || '')}</div>
       <a class="isaac-download-link" href="${href}" download>⬇ Download Teacher Todd .xlsx</a>
@@ -4571,7 +4586,7 @@ document.getElementById('gym-submit-btn').addEventListener('click', async () => 
   const feedbacksArr = gymFeedbacksArray()
 
   try {
-    const res = await fetch('/api/gym/workout-feedback', {
+    const res = await fetch(sameOriginApi('/api/gym/workout-feedback'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -4633,7 +4648,7 @@ function gymShowResults(data) {
   list.querySelectorAll('.gym-activate-cb').forEach(cb => {
     cb.addEventListener('change', async () => {
       try {
-        await fetch(`/api/gym/learnings/${cb.dataset.id}`, {
+        await fetch(sameOriginApi(`/api/gym/learnings/${cb.dataset.id}`), {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ active: cb.checked })

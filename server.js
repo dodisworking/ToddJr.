@@ -1143,9 +1143,10 @@ app.get('/api/openaitest', async (req, res) => {
       console.error('[openaitest] SSE write failed', event, writeErr)
     }
   }
+  /* Shorter ping helps proxies (e.g. Railway) keep the SSE alive during long OpenAI calls. */
   const heartbeat = setInterval(() => {
     try { res.write(': ping\n\n') } catch { clearInterval(heartbeat) }
-  }, 15000)
+  }, 5000)
   let aborted = false
   req.on('close', () => { aborted = true; clearInterval(heartbeat) })
 
