@@ -1318,13 +1318,16 @@ async function juiceBulkSetMaster(bodyEl, ids, active) {
   }
 }
 
-function renderJuiceRuleRowHtml(l) {
+function renderJuiceRuleRowHtml(l, ctx = {}) {
   const ct = escHtml(l.checkType || 'RULE')
   const hint = escHtml(truncateJuiceText(l.suggestion || l.rationale || '', 140))
   const on = l.active ? 'checked' : ''
   const id = String(l.id).replace(/"/g, '')
+  const tenantAttr = escHtml(String(ctx.tenant || 'RULE'))
+  const kind = ctx.kind === 'dr-todd' ? 'dr-todd' : 'gym'
   return `
     <div class="juice-8bit-rule">
+      <button type="button" class="juice-8bit-rule-delete" data-ids="${id}" data-tenant="${tenantAttr}" data-kind="${kind}" title="Delete this rule from the server">−</button>
       <label class="juice-8bit-toggle juice-8bit-toggle--sm" title="Juice this rule">
         <input type="checkbox" class="juice-learning-cb" data-id="${id}" ${on} />
         <span class="juice-8bit-slider"></span>
@@ -1341,11 +1344,16 @@ function openJuiceDeleteConfirm(ids, bodyEl, tenant, kind) {
   const kindLine = kind === 'dr-todd' ? 'DR TODD EXTRACT' : 'GYM REPORT'
   const msg = document.getElementById('juice-del-modal-msg')
   if (msg) {
+    const head = ids.length === 1 ? 'SCRAP THIS ONE RULE?' : 'SCRAP THIS WHOLE BATCH?'
+    const tail =
+      ids.length === 1
+        ? 'Removed from the database — no undo.'
+        : `${ids.length} RULE${ids.length !== 1 ? 'S' : ''} — GONE 4EVER`
     msg.textContent =
-      `SCRAP THIS WHOLE BATCH?\n\n` +
+      `${head}\n\n` +
       `${String(tenant || 'RULES').slice(0, 80)}\n` +
       `${kindLine}\n\n` +
-      `${ids.length} RULE${ids.length !== 1 ? 'S' : ''} — GONE 4EVER`
+      tail
   }
   document.getElementById('juice-delete-confirm-modal')?.classList.remove('hidden')
 }
@@ -1390,6 +1398,16 @@ function ensureJuiceLearningsDelegation() {
   if (!body || juiceLearningsBodyDelegated) return
   juiceLearningsBodyDelegated = true
   body.addEventListener('click', async (e) => {
+    const ruleDel = e.target.closest('.juice-8bit-rule-delete')
+    if (ruleDel) {
+      e.preventDefault()
+      e.stopPropagation()
+      const ids = (ruleDel.dataset.ids || '').split(',').map(s => s.trim()).filter(Boolean)
+      const tenant = ruleDel.getAttribute('data-tenant') || ''
+      const kind = ruleDel.getAttribute('data-kind') || ''
+      openJuiceDeleteConfirm(ids, body, tenant, kind)
+      return
+    }
     const delBtn = e.target.closest('.juice-8bit-delete')
     if (delBtn) {
       e.preventDefault()
@@ -1471,7 +1489,7 @@ function renderJuiceLearningsListInto(container, learnings) {
       formatLearningBatchDate(g.when),
       `${n} RULE${n !== 1 ? 'S' : ''}`
     ]
-    const rows = sorted.map(renderJuiceRuleRowHtml).join('')
+    const rows = sorted.map(l => renderJuiceRuleRowHtml(l, { tenant: g.tenant, kind: g.kind })).join('')
     const allActive = sorted.length > 0 && sorted.every(x => x.active)
     const masterChecked = allActive ? 'checked' : ''
     return `

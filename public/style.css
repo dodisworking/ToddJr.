@@ -3399,13 +3399,61 @@ a.isaac-download-link:hover { text-decoration: underline; color: #c4b5fd; }
 }
 
 .juice-8bit-rule {
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 8px 36px 8px 10px;
   background: #0f172a;
   border: 2px solid #334155;
   border-radius: 4px;
+}
+/* Per-rule delete: red circle with minus — visible on row hover (touch: always tappable) */
+.juice-8bit-rule-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 3;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-pixel);
+  font-size: 12px;
+  line-height: 1;
+  color: #fff;
+  background: #b91c1c;
+  border: 3px solid #fecaca;
+  border-radius: 50%;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s, transform 0.1s, filter 0.1s;
+  box-shadow: 0 2px 0 #450a0a, inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  image-rendering: pixelated;
+}
+.juice-8bit-rule:hover .juice-8bit-rule-delete {
+  opacity: 1;
+  pointer-events: auto;
+}
+.juice-8bit-rule-delete:hover {
+  filter: brightness(1.1);
+  transform: scale(1.06);
+}
+.juice-8bit-rule-delete:active {
+  transform: scale(0.96);
+}
+@media (hover: none) {
+  .juice-8bit-rule-delete {
+    opacity: 0.45;
+    pointer-events: auto;
+  }
+  .juice-8bit-rule:hover .juice-8bit-rule-delete {
+    opacity: 0.6;
+  }
 }
 .juice-8bit-rule-type {
   font-family: var(--font-pixel);
