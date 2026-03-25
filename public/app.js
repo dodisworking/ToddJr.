@@ -18,13 +18,31 @@ const state = {
   drlabMode:        null,
 }
 
+/** Saved from Upload screen — points /api/* at a Todd server (e.g. http://localhost:3001 or Railway). */
+const TODD_API_BASE_STORAGE_KEY = 'toddJrApiBase'
+
+function readStoredApiBase() {
+  try {
+    const s = localStorage.getItem(TODD_API_BASE_STORAGE_KEY)?.trim()
+    if (!s) return ''
+    const u = new URL(s)
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return ''
+    return u.origin
+  } catch {
+    return ''
+  }
+}
+
 /**
- * API origin for /api/* calls. Default: current page origin (Express + static on same host).
- * If you serve the HTML from somewhere else, set <meta name="todd-api-base" content="https://your-railway-app.up.railway.app">
+ * API origin for /api/* calls.
+ * 1) localStorage `toddJrApiBase` (set on Upload → “Local / API connection”)
+ * 2) <meta name="todd-api-base" content="https://…">
+ * 3) Same as the page (correct when you run `npm start` and open the URL it prints)
  */
 function getApiOrigin() {
   if (typeof window === 'undefined') return ''
-  if (window.location.protocol === 'file:') return ''
+  const fromLs = readStoredApiBase()
+  if (fromLs) return fromLs
   const raw = document.querySelector('meta[name="todd-api-base"]')?.getAttribute('content')?.trim()
   if (raw) {
     try {
@@ -33,6 +51,7 @@ function getApiOrigin() {
       /* fall through */
     }
   }
+  if (window.location.protocol === 'file:') return ''
   return window.location.origin
 }
 
@@ -43,6 +62,77 @@ function sameOriginApi(path) {
   const origin = getApiOrigin()
   if (!origin) return p
   return new URL(p, origin).href
+}
+
+/** Ports to try when this browser tab is on the wrong process (e.g. :3000 = another app). Default Todd local port is 3456. */
+const TODD_PROBE_PORTS = [3456, 3001, 3080, 3847, 5000, 8787, 3000]
+
+async function tryProbeAndSaveToddApiBase() {
+  if (typeof window === 'undefined') return false
+  if (readStoredApiBase()) return false
+  const hosts = ['127.0.0.1', 'localhost']
+  for (const host of hosts) {
+    for (const port of TODD_PROBE_PORTS) {
+      const origin = `http://${host}:${port}`
+      try {
+        const r = await fetch(`${origin}/api/health`, { cache: 'no-store' })
+        const text = await r.text()
+        let j = null
+        try {
+          j = JSON.parse(text)
+        } catch {
+          j = null
+        }
+        if (r.ok && j && j.ok === true && j.service === 'todd-jr') {
+          localStorage.setItem(TODD_API_BASE_STORAGE_KEY, origin)
+          return true
+        }
+      } catch {
+        /* try next */
+      }
+    }
+  }
+  return false
+}
+
+/** Once per load: if /api/health on the page origin is not Todd, scan localhost for a real Todd server. */
+async function verifyToddBackendOrProbe() {
+  if (typeof window === 'undefined') return
+  if (window.location.protocol === 'file:') return
+  if (window.__toddAutoProbeDone) return
+  if (readStoredApiBase()) {
+    window.__toddAutoProbeDone = true
+    return
+  }
+  const origin = getApiOrigin()
+  if (!origin) return
+  let looksLikeTodd = false
+  try {
+    const r = await fetch(`${origin}/api/health`, { cache: 'no-store' })
+    const text = await r.text()
+    let j = null
+    try {
+      j = JSON.parse(text)
+    } catch {
+      j = null
+    }
+    looksLikeTodd = !!(r.ok && j && j.ok === true && j.service === 'todd-jr')
+  } catch {
+    looksLikeTodd = false
+  }
+  if (looksLikeTodd) {
+    window.__toddAutoProbeDone = true
+    return
+  }
+  const patched = await tryProbeAndSaveToddApiBase()
+  window.__toddAutoProbeDone = true
+  if (patched) {
+    refreshApiDevPanel()
+    toast(
+      `Todd Jr. is running at ${getApiOrigin()} — not on this tab’s port. API calls now use that URL. Open it in the browser (see terminal after npm start) so the UI matches the server.`,
+      'info'
+    )
+  }
 }
 
 // ── DOM refs ─────────────────────────────────────────────────
@@ -635,6 +725,10 @@ function goTo(screenName) {
   }
   updateGlobalNav()
   if (screenName === 'upload' || screenName === 'loading') void refreshJuiceHomePanel()
+  if (screenName === 'upload') {
+    refreshApiDevPanel()
+    void verifyToddBackendOrProbe()
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1746,7 +1840,8 @@ function setDrLabMode(mode) {
     juice: 'btn-drlab-juice',
     triple: 'btn-drlab-triple',
     doublecheck: 'btn-drlab-double',
-    modelcompare: 'btn-drlab-api'
+    modelcompare: 'btn-drlab-api',
+    openaitest: 'btn-drlab-openaitest'
   }
   document.getElementById(byMode[mode])?.classList.add('selected')
   const drInit = document.getElementById('btn-drlab-initiate')
@@ -1767,6 +1862,7 @@ document.getElementById('btn-drlab-juice')?.addEventListener('click', () => setD
 document.getElementById('btn-drlab-triple')?.addEventListener('click', () => setDrLabMode('triple'))
 document.getElementById('btn-drlab-double')?.addEventListener('click', () => setDrLabMode('doublecheck'))
 document.getElementById('btn-drlab-api')?.addEventListener('click', () => setDrLabMode('modelcompare'))
+document.getElementById('btn-drlab-openaitest')?.addEventListener('click', () => setDrLabMode('openaitest'))
 document.getElementById('btn-drlab-initiate')?.addEventListener('click', launchDrLabMode)
 
 document.getElementById('btn-generate-report').addEventListener('click', () => {
@@ -1880,6 +1976,16 @@ document.getElementById('sbs-back')?.addEventListener('click', () => {
 
 // ── Side-by-Side logic ─────────────────────────────────────
 function getSbsModeConfig(mode = 'juice') {
+  if (mode === 'openaitest') {
+    return {
+      title: '🤖 OpenAI API Test Lab',
+      leftLabel: 'HOW IT WAS SENT',
+      rightLabel: 'OPENAI FINDINGS',
+      verdictTitle: '🔬 Run Dr. Verdict',
+      verdictCopy: 'Not used in OpenAI Test Lab.',
+      endpoint: '/api/openaitest'
+    }
+  }
   if (mode === 'modelcompare') {
     return {
       title: '🧪 API Battle: Claude vs OpenAI',
@@ -1920,14 +2026,14 @@ function applySbsModeUi(cfg) {
   document.getElementById('sbs-verdict-copy').textContent = cfg.verdictCopy
 }
 
-async function startSideBySide(tenantId = null, mode = 'juice') {
+async function startSideBySide(tenantId = null, mode = 'juice', _probeRetry = false) {
   state.sbsSourceScreen = state.screen
   state.sbsMode = mode
   const cfg = getSbsModeConfig(mode)
 
   if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
     toast(
-      'Do not open index.html from the file system. Run `npm start` and use http://localhost:3000 (or your Railway URL in the browser).',
+      'Do not open index.html from the file system. Run `npm start` and open the URL shown in the terminal (default http://127.0.0.1:3456), or your Railway URL.',
       'error'
     )
     return
@@ -1944,14 +2050,21 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
         data = JSON.parse(text)
       } catch {
         const looksHtml = /<\!DOCTYPE|<html|Cannot GET/i.test(text)
+        if (!_probeRetry && (r.status === 404 || looksHtml)) {
+          const patched = await tryProbeAndSaveToddApiBase()
+          if (patched) {
+            toast(`Found Todd Jr. at ${getApiOrigin()} — retrying…`, 'success')
+            return startSideBySide(tenantId, mode, true)
+          }
+        }
         if (r.status === 404 && looksHtml) {
           toast(
-            'Port 3000 is not running the Todd Jr. server (404 HTML, not the API). In the project folder run `npm start`, use only that tab, or free port 3000 from another app.',
+            'This browser tab is not talking to Todd Jr. (the server returned HTML, not JSON). Run `npm start` in the project folder and open the URL it prints (port 3456 by default), or expand “Local / API connection” on the home screen and set the API URL.',
             'error'
           )
         } else {
           toast(
-            `Server returned ${r.status} with non-JSON. Open ${getApiOrigin()}/api/health — if that is not JSON, restart Todd with \`npm start\` from this repo.`,
+            `Server returned ${r.status} with non-JSON. Open ${getApiOrigin()}/api/health — you should see JSON with "service":"todd-jr".`,
             'error'
           )
         }
@@ -1972,13 +2085,18 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
   } catch (e) {
     const origin = getApiOrigin() || '(unknown)'
     const hint =
-      'Failed to connect. Use the URL where Node serves the app (e.g. http://localhost:3000). ' +
-      'If the page is hosted separately from the API, set <meta name="todd-api-base" content="https://YOUR-RAILWAY-APP.up.railway.app"> in index.html and redeploy.'
+      'Failed to connect. Run `npm start` and use the URL in the terminal (e.g. http://127.0.0.1:3456). ' +
+      'If the UI is hosted separately, set the API base under “Local / API connection” or todd-api-base meta to your Railway URL.'
     toast(`${e?.message || 'Network error'} — API base: ${origin}. ${hint}`, 'error')
     return
   }
 
-  if (!check.anthropicConfigured) {
+  if (mode === 'openaitest') {
+    if (!check.openAIConfigured) {
+      toast('OpenAI Test Lab needs OPENAI_API_KEY on the server (Railway Variables or .env).', 'error')
+      return
+    }
+  } else if (!check.anthropicConfigured) {
     toast(
       'ANTHROPIC_API_KEY is not set on the server — Claude cannot run. Add it in .env or Railway Variables and restart.',
       'error'
@@ -1997,7 +2115,8 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
   document.getElementById('sbs-results').classList.add('hidden')
   document.getElementById('sbs-raw-fill').style.width    = '0%'
   document.getElementById('sbs-beefed-fill').style.width = '0%'
-  document.getElementById('sbs-raw-msg').textContent     = 'Waiting for stream…'
+  document.getElementById('sbs-raw-msg').textContent     =
+    mode === 'openaitest' ? 'OpenAI only — Claude not used' : 'Waiting for stream…'
   document.getElementById('sbs-beefed-msg').textContent  = 'Waiting for stream…'
 
   let qs = `sessionId=${encodeURIComponent(state.sessionId)}`
@@ -2018,7 +2137,9 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
     try { es.close() } catch {}
     state.eventSource = null
     toast(
-      'Comparison did not start. Use your server URL, load tenant folders on the Hunt screen first, and ensure ANTHROPIC_API_KEY is set.',
+      mode === 'openaitest'
+        ? 'OpenAI test did not start. Confirm folders are loaded, OPENAI_API_KEY is set, and the server is running.'
+        : 'Comparison did not start. Use your server URL, load tenant folders on the Hunt screen first, and ensure ANTHROPIC_API_KEY is set.',
       'error'
     )
     setSideBySideLoadingVisible(false)
@@ -2030,7 +2151,11 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
     window.clearTimeout(sbsFailTimer)
     const d = JSON.parse(e.data)
     const sub = document.getElementById('sbs-subtitle')
-    if (mode === 'modelcompare') {
+    if (mode === 'openaitest') {
+      sub.textContent = d.openaiEnabled === false
+        ? `${d.tenantName} — OpenAI Test Lab (API key missing on server)`
+        : `${d.tenantName} — OpenAI Responses API only (native PDF input_file path)`
+    } else if (mode === 'modelcompare') {
       sub.textContent = d.openaiEnabled === false
         ? `${d.tenantName} — Claude API (OpenAI not configured on server)`
         : `${d.tenantName} — Claude API vs OpenAI API (parallel runs)`
@@ -2060,8 +2185,7 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
     state.sbsLastResult = d
     setSideBySideLoadingVisible(false)
     document.getElementById('sbs-results').classList.remove('hidden')
-    // Reset verdict panel
-    document.getElementById('sbs-verdict-cta').classList.remove('hidden')
+    // Reset verdict panel (CTA visibility set in renderSideBySide for openaitest)
     document.getElementById('sbs-verdict-loading').classList.add('hidden')
     document.getElementById('sbs-verdict-report').classList.add('hidden')
     document.getElementById('btn-run-verdict').disabled = false
@@ -2104,6 +2228,43 @@ const CHECK_LABELS_SBS = {
   NAME_MISMATCH:'Name Mismatch'
 }
 
+function renderOpenAiTestLeftColumn(meta) {
+  if (!meta || typeof meta !== 'object') {
+    return '<p class="sbs-openai-summary-empty">No pipeline metadata returned.</p>'
+  }
+  const rows = []
+  if (meta.error) {
+    rows.push(`<li><strong>Error</strong>: ${escHtml(String(meta.error))}</li>`)
+  }
+  if (meta.model) rows.push(`<li><strong>Model</strong>: ${escHtml(String(meta.model))}${meta.cheapMode ? ' <em>(cheap mode)</em>' : ''}</li>`)
+  if (meta.analysisPath) rows.push(`<li><strong>Request shape</strong>: ${escHtml(String(meta.analysisPath))}</li>`)
+  if (meta.tenantFilesTotal != null) {
+    rows.push(`<li><strong>Files in tenant folder</strong>: ${escHtml(String(meta.tenantFilesTotal))}</li>`)
+  }
+  if (Array.isArray(meta.nativePdfFiles)) {
+    rows.push(`<li><strong>PDFs sent as <code>input_file</code></strong>: ${meta.nativePdfFiles.length}</li>`)
+  }
+  if (meta.apiCallsForOpenAI != null) {
+    rows.push(`<li><strong>OpenAI API calls</strong>: ${escHtml(String(meta.apiCallsForOpenAI))}</li>`)
+  }
+  if (meta.pdfBatchesPlanned != null) {
+    rows.push(`<li><strong>Batches planned</strong>: ${escHtml(String(meta.pdfBatchesPlanned))}</li>`)
+  }
+  if (Array.isArray(meta.split413Notes) && meta.split413Notes.length) {
+    rows.push(`<li><strong>Size recovery</strong>: ${escHtml(meta.split413Notes.join(' '))}</li>`)
+  }
+  if (Array.isArray(meta.textDocsAppendedToEachBatch) && meta.textDocsAppendedToEachBatch.length) {
+    rows.push(
+      `<li><strong>Text blocks repeated each batch</strong>: ${escHtml(meta.textDocsAppendedToEachBatch.join(', '))}</li>`
+    )
+  }
+  if (rows.length === 0 && meta.note) {
+    rows.push(`<li>${escHtml(String(meta.note))}</li>`)
+  }
+  const explain = meta.explanation ? `<p class="sbs-openai-summary-explain">${escHtml(String(meta.explanation))}</p>` : ''
+  return `<ul class="sbs-openai-summary-list">${rows.join('')}</ul>${explain}`
+}
+
 function renderSideBySide(data) {
   const mode = state.sbsMode || 'juice'
   const rightNoun = mode === 'doublecheck' ? 'reviewer pass' : 'learning'
@@ -2112,9 +2273,29 @@ function renderSideBySide(data) {
   const rawF   = raw.findings    || []
   const beefedF = beefed.findings || []
 
+  const verdictCta = document.getElementById('sbs-verdict-cta')
+  if (verdictCta) {
+    if (mode === 'openaitest') verdictCta.classList.add('hidden')
+    else verdictCta.classList.remove('hidden')
+  }
+
+  const debugPanel = document.getElementById('sbs-openai-debug')
+  const debugPre = document.getElementById('sbs-openai-debug-pre')
+  if (mode === 'openaitest' && data.openaiTestMeta) {
+    debugPanel?.classList.remove('hidden')
+    if (debugPre) debugPre.textContent = JSON.stringify(data.openaiTestMeta, null, 2)
+  } else {
+    debugPanel?.classList.add('hidden')
+    if (debugPre) debugPre.textContent = ''
+  }
+
   // Learnings bar
   const bar = document.getElementById('sbs-learnings-bar')
-  if (mode === 'modelcompare') {
+  if (mode === 'openaitest') {
+    bar.textContent =
+      '🤖 OpenAI Test Lab — left: pipeline summary; below: full debug JSON. Right: OpenAI findings. Claude is not called.'
+    bar.classList.remove('hidden')
+  } else if (mode === 'modelcompare') {
     if (beefed.openaiSkipped) {
       bar.textContent =
         '⚠️ OpenAI not configured — Claude results on the left. Set OPENAI_API_KEY on the server (Railway Variables or .env) for the right column.'
@@ -2138,6 +2319,38 @@ function renderSideBySide(data) {
   // Build sets for uniqueness highlighting
   const rawKeys    = new Set(rawF.map(f    => `${f.checkType}||${(f.missingDocument||'').toLowerCase().trim()}`))
   const beefedKeys = new Set(beefedF.map(f => `${f.checkType}||${(f.missingDocument||'').toLowerCase().trim()}`))
+
+  if (mode === 'openaitest') {
+    document.getElementById('sbs-raw-count').textContent = 'summary'
+    document.getElementById('sbs-beefed-count').textContent =
+      beefedF.length + ' finding' + (beefedF.length !== 1 ? 's' : '')
+    document.getElementById('sbs-raw-findings').innerHTML = renderOpenAiTestLeftColumn(data.openaiTestMeta)
+    const renderFindingsOai = (findings, otherKeys, isBeefed) => {
+      if (!findings || findings.length === 0) {
+        return '<div class="sbs-finding-card all-clear"><span class="sbs-card-doc">✅ All Clear — no findings</span></div>'
+      }
+      return findings.map(f => {
+        const key = `${f.checkType}||${(f.missingDocument || '').toLowerCase().trim()}`
+        const isUnique = !otherKeys.has(key)
+        const sevClass = (f.severity || 'low').toLowerCase()
+        const uniqueTag = isUnique
+          ? `<span class="sbs-unique-badge ${isBeefed ? 'only-beefed' : 'only-raw'}">${isBeefed ? '🆕 New find' : '⚠️ Raw only'}</span>`
+          : ''
+        return `
+        <div class="sbs-finding-card sev-${sevClass}">
+          <div class="sbs-card-top">
+            <span class="sbs-card-check">${escHtml(CHECK_LABELS_SBS[f.checkType] || f.checkType || '')}</span>
+            <span class="sev-pill sev-${sevClass}">${escHtml(f.severity || 'LOW')}</span>
+            ${uniqueTag}
+          </div>
+          <div class="sbs-card-doc">${escHtml(f.missingDocument || 'N/A')}</div>
+          <div class="sbs-card-comment">${escHtml(f.comment || '')}</div>
+        </div>`
+      }).join('')
+    }
+    document.getElementById('sbs-beefed-findings').innerHTML = renderFindingsOai(beefedF, rawKeys, true)
+    return
+  }
 
   const renderFindings = (findings, otherKeys, isBeefed) => {
     if (!findings || findings.length === 0) {
@@ -4371,3 +4584,60 @@ function gymShowResults(data) {
 document.getElementById('gym-results-back').addEventListener('click', () => {
   gymOpenPicker()
 })
+
+// ── Upload screen: local API base (fixes wrong process on :3000 or UI on another port) ──
+function refreshApiDevPanel() {
+  const show = document.getElementById('api-dev-showing')
+  const input = document.getElementById('api-dev-input')
+  if (!show || !input) return
+  const o = getApiOrigin()
+  show.textContent = o || '(none — set below, or run npm start and use that URL)'
+  const stored = readStoredApiBase()
+  input.value = stored || (window.location.protocol !== 'file:' ? window.location.origin : '')
+}
+
+document.getElementById('api-dev-save')?.addEventListener('click', () => {
+  const input = document.getElementById('api-dev-input')
+  const v = input?.value?.trim()
+  if (!v) {
+    toast('Enter your Todd server URL, e.g. http://127.0.0.1:3456', 'info')
+    return
+  }
+  try {
+    const origin = new URL(v).origin
+    localStorage.setItem(TODD_API_BASE_STORAGE_KEY, origin)
+    toast('API base saved — using ' + origin, 'success')
+    refreshApiDevPanel()
+  } catch {
+    toast('Invalid URL', 'error')
+  }
+})
+
+document.getElementById('api-dev-clear')?.addEventListener('click', () => {
+  localStorage.removeItem(TODD_API_BASE_STORAGE_KEY)
+  window.__toddAutoProbeDone = false
+  toast('Cleared saved API base — using same origin as this page', 'success')
+  refreshApiDevPanel()
+  void verifyToddBackendOrProbe()
+})
+
+document.getElementById('api-dev-test')?.addEventListener('click', async () => {
+  try {
+    const url = sameOriginApi('/api/health')
+    const r = await fetch(url, { cache: 'no-store' })
+    const text = await r.text()
+    if (!r.ok) throw new Error(`${r.status} — ${text.slice(0, 120)}`)
+    let j
+    try {
+      j = JSON.parse(text)
+    } catch {
+      throw new Error('Response is not JSON — another app may be on this URL (not Todd Jr.)')
+    }
+    toast(`Todd API OK (${j.service || 'todd-jr'})`, 'success')
+  } catch (e) {
+    toast('Health check failed: ' + (e?.message || e), 'error')
+  }
+})
+
+refreshApiDevPanel()
+void verifyToddBackendOrProbe()

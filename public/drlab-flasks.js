@@ -49,6 +49,14 @@
       highlightColor: '#FFFBEB',
       glowColor: '',
     },
+    openai: {
+      emptyTop: '#D1FAE5',
+      emptyBottom: '#6EE7B7',
+      liquidTop: '#34D399',
+      liquidBottom: '#047857',
+      highlightColor: '#ECFDF5',
+      glowColor: '',
+    },
   }
 
   function labModeFromTube(tube) {
@@ -56,6 +64,7 @@
     if (tube.classList.contains('drlab-tube-triple')) return 'triple'
     if (tube.classList.contains('drlab-tube-double')) return 'double'
     if (tube.classList.contains('drlab-tube-api')) return 'api'
+    if (tube.classList.contains('drlab-tube-openai')) return 'openai'
     return 'juice'
   }
 

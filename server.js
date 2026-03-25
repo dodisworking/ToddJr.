@@ -17,7 +17,13 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname  = path.dirname(__filename)
 
 const app  = express()
-const PORT = process.env.PORT || 3000
+/** Local default avoids clashing with Next/React/other stacks on 3000. Railway sets PORT automatically. */
+const PORT = process.env.PORT || 3456
+/** Bind all interfaces so the API is reachable on your LAN / from another local port (with LOCAL_DEV_CORS). */
+const HOST = process.env.HOST?.trim() || '0.0.0.0'
+
+const CORS_ORIGIN_FIXED = process.env.CORS_ORIGIN?.trim()
+const LOCAL_DEV_CORS = ['1', 'true', 'yes'].includes(String(process.env.LOCAL_DEV_CORS || '').toLowerCase())
 
 /** UI "Dumb mode" — Haiku instead of Sonnet (query: cheap=1 or JSON cheapMode: true) */
 function isCheapMode(req) {
@@ -82,6 +88,27 @@ function parseFolderName(name) {
 
 app.use(express.json({ limit: '50mb' }))
 
+// CORS must be registered *before* /api/* routes, or browsers get no ACAO headers on cross-origin calls
+// (e.g. UI on http://127.0.0.1:3456, API on https://*.up.railway.app with LOCAL_DEV_CORS=1 on Railway).
+if (CORS_ORIGIN_FIXED || LOCAL_DEV_CORS) {
+  app.use((req, res, next) => {
+    const origin = req.headers.origin || ''
+    let allow = ''
+    if (CORS_ORIGIN_FIXED && origin === CORS_ORIGIN_FIXED) allow = CORS_ORIGIN_FIXED
+    else if (LOCAL_DEV_CORS && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) allow = origin
+    if (allow) {
+      res.setHeader('Access-Control-Allow-Origin', allow)
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Session-Id')
+    }
+    if (req.method === 'OPTIONS' && allow) return res.sendStatus(204)
+    next()
+  })
+  if (LOCAL_DEV_CORS) {
+    console.log('[cors] LOCAL_DEV_CORS — allowing browser Origin http://localhost:* and http://127.0.0.1:*')
+  }
+}
+
 // Isaac / Teacher Excel — registered immediately after body parser (must not depend on later server.js code)
 mountIsaacRoutes(app, { outputsDir: OUTPUTS_DIR, parseFolderName })
 
@@ -92,6 +119,7 @@ app.get('/api/health', (_req, res) => {
     isaacRoutes: true,
     claudeConfigured: !!process.env.ANTHROPIC_API_KEY?.trim(),
     openaiConfigured: !!process.env.OPENAI_API_KEY?.trim(),
+    localDevCors: LOCAL_DEV_CORS,
     /** Set by Railway on deploy — compare to GitHub to confirm the live build */
     gitCommit: process.env.RAILWAY_GIT_COMMIT_SHA || null,
     time: new Date().toISOString()
@@ -936,6 +964,136 @@ app.get('/api/modelcompare', async (req, res) => {
 })
 
 // ═══════════════════════════════════════════════════════════
+// GET /api/openaitest — OpenAI only (debug pipeline; no Claude)
+// ═══════════════════════════════════════════════════════════
+app.get('/api/openaitest', async (req, res) => {
+  const { sessionId, tenantId } = req.query
+  const session = sessions.get(sessionId)
+  if (!session) return res.status(404).json({ error: 'Session not found' })
+
+  const tenant = tenantId
+    ? session.tenants.find(t => t.id === tenantId)
+    : session.tenants[0]
+  if (!tenant) return res.status(404).json({ error: 'Tenant not found' })
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  })
+  res.flushHeaders()
+
+  const emit = (event, data) => {
+    try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`) } catch {}
+  }
+  const heartbeat = setInterval(() => {
+    try { res.write(': ping\n\n') } catch { clearInterval(heartbeat) }
+  }, 15000)
+  let aborted = false
+  req.on('close', () => { aborted = true; clearInterval(heartbeat) })
+
+  const openaiKey = process.env.OPENAI_API_KEY?.trim()
+
+  try {
+    emit('sbs-start', {
+      tenantName: tenant.tenantName,
+      activeLearningCount: 0,
+      mode: 'openaitest',
+      openaiEnabled: !!openaiKey
+    })
+    const cheapOpts = { cheapMode: isCheapMode(req), includeDebug: true }
+
+    if (!aborted) {
+      emit('sbs-progress', {
+        side: 'raw',
+        percent: 0,
+        message: 'OpenAI-only test — Claude not called'
+      })
+      if (openaiKey) {
+        emit('sbs-progress', { side: 'beefed', percent: 2, message: 'OpenAI: starting…' })
+      } else {
+        emit('sbs-progress', {
+          side: 'beefed',
+          percent: 100,
+          message: 'OPENAI_API_KEY not set — cannot run OpenAI Test Lab'
+        })
+      }
+    }
+
+    if (!openaiKey) {
+      if (!aborted) {
+        emit('sbs-complete', {
+          tenantName: tenant.tenantName,
+          mode: 'openaitest',
+          openaiTestMeta: {
+            api: 'OpenAI Responses API',
+            error: 'OPENAI_API_KEY missing on server'
+          },
+          raw: {
+            tenantNameInDocuments: tenant.tenantName,
+            findings: [],
+            allClear: true,
+            openaiTestPlaceholder: true
+          },
+          beefed: {
+            tenantNameInDocuments: tenant.tenantName,
+            mostRecentDocumentDate: null,
+            leaseExpirationDate: null,
+            findings: [
+              {
+                checkType: 'SPECIAL_AGREEMENT',
+                severity: 'LOW',
+                missingDocument: 'OpenAI API',
+                comment: 'Set OPENAI_API_KEY in Railway Variables or .env and restart the server.',
+                evidence: ''
+              }
+            ],
+            allClear: false,
+            openaiSkipped: true
+          },
+          activeLearnings: []
+        })
+      }
+    } else {
+      const openaiResult = await openaiAnalyzeTenant(
+        tenant,
+        tenant.files,
+        ({ percent, message }) => {
+          if (!aborted) emit('sbs-progress', { side: 'beefed', percent, message })
+        },
+        cheapOpts
+      )
+
+      const meta = openaiResult._openaiDebug
+      delete openaiResult._openaiDebug
+
+      if (!aborted) {
+        emit('sbs-complete', {
+          tenantName: tenant.tenantName,
+          mode: 'openaitest',
+          openaiTestMeta: meta || { note: 'Debug metadata missing' },
+          raw: {
+            tenantNameInDocuments: tenant.tenantName,
+            findings: [],
+            allClear: true,
+            openaiTestPlaceholder: true
+          },
+          beefed: openaiResult,
+          activeLearnings: []
+        })
+      }
+    }
+  } catch (err) {
+    console.error('[openaitest]', err)
+    if (!aborted) emit('sbs-error', { error: err.message })
+  } finally {
+    clearInterval(heartbeat)
+    res.end()
+  }
+})
+
+// ═══════════════════════════════════════════════════════════
 // POST /api/sidebyside/verdict — Dr. Verdict on Raw vs Beefed-Up
 // ═══════════════════════════════════════════════════════════
 
@@ -1231,26 +1389,11 @@ if (!process.env.OPENAI_API_KEY?.trim()) {
 `)
 }
 
-// Optional: UI on another origin — set CORS_ORIGIN to that site’s URL (e.g. https://app.pages.dev)
-if (process.env.CORS_ORIGIN?.trim()) {
-  const origin = process.env.CORS_ORIGIN.trim()
-  app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', origin)
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Session-Id')
-    if (req.method === 'OPTIONS') return res.sendStatus(204)
-    next()
-  })
-}
-
 // Static assets LAST so every /api/* route is registered first
 app.use(express.static(path.join(__dirname, 'public')))
 
-app.listen(PORT, () => {
-  console.log(`
-╔══════════════════════════════════════════════╗
-║         Todd Jr. is ready to hunt 🏹         ║
-║         Port ${PORT}                              ║
-╚══════════════════════════════════════════════╝
-`)
+app.listen(PORT, HOST, () => {
+  const browse =
+    HOST === '0.0.0.0' || HOST === '::' ? `http://127.0.0.1:${PORT}` : `http://${HOST}:${PORT}`
+  console.log(`[todd-jr] listening ${HOST}:${PORT} — open ${browse} in your browser`)
 })

@@ -3,13 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <!-- API base for /api/* (default: same as this page). If HTML is ever hosted separately, set to your Railway URL, e.g. https://your-service.up.railway.app -->
+  <!--
+    API base for /api/* (optional).
+    • Same machine as Todd: leave empty — open the URL from `npm start`.
+    • API on Railway, UI local: set content="https://YOUR-SERVICE.up.railway.app" OR use Home → “Local / API connection” → Save (stored in browser).
+    On Railway Variables add LOCAL_DEV_CORS=1 so localhost can call your deployed API.
+  -->
   <meta name="todd-api-base" content="" />
   <title>Todd Jr. — Real Estate Document Hunter</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=40" />
+  <link rel="stylesheet" href="style.css?v=42" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
@@ -49,6 +54,33 @@
           <input type="file" id="file-input-zip" accept=".zip,.ZIP" style="display:none" />
         </div>
       </div>
+
+      <details class="api-dev-panel" id="api-dev-panel">
+        <summary class="api-dev-summary">Local / API connection</summary>
+        <div class="api-dev-body">
+          <p class="api-dev-line">
+            <strong>API requests go to:</strong>
+            <code id="api-dev-showing" class="api-dev-code">…</code>
+          </p>
+          <p class="api-dev-hint">
+            Todd Jr. defaults to port <strong>3456</strong> locally (so <code>:3000</code> can be another app). Run <code>npm start</code> and open the exact URL printed in the terminal. Override with <code>PORT=3000 npm start</code> if you prefer.
+          </p>
+          <label class="api-dev-label">
+            API base URL
+            <input type="url" id="api-dev-input" class="api-dev-input" placeholder="http://127.0.0.1:3456" autocomplete="off" />
+          </label>
+          <div class="api-dev-actions">
+            <button type="button" class="api-dev-btn" id="api-dev-save">Save</button>
+            <button type="button" class="api-dev-btn api-dev-btn-ghost" id="api-dev-clear">Clear saved</button>
+            <button type="button" class="api-dev-btn" id="api-dev-test">Test /api/health</button>
+          </div>
+          <p class="api-dev-railway">
+            <strong>Railway API, browser on this Mac:</strong> paste your app root
+            <code>https://YOUR-SERVICE.up.railway.app</code> (no trailing slash) → Save. In
+            <strong>Railway → Variables</strong> on that service add <code>LOCAL_DEV_CORS=1</code> and redeploy so localhost is allowed by CORS.
+          </p>
+        </div>
+      </details>
 
       <div class="upload-corner-easter" aria-hidden="false">
         <button type="button" class="juice-easter" id="juice-easter" title="Juice — saved learnings (activate for hunts)">
@@ -265,6 +297,12 @@
           <span class="drlab-tube-title">CLAUDE VS OPENAI</span>
           <span class="drlab-tube-desc">Compare Anthropic Claude API output against OpenAI API output.</span>
         </button>
+
+        <button type="button" class="drlab-tube drlab-tube-openai" id="btn-drlab-openaitest">
+          <span class="drlab-tube-jar" aria-hidden="true"></span>
+          <span class="drlab-tube-title">OPENAI TEST LAB</span>
+          <span class="drlab-tube-desc">OpenAI only — no Claude. Confirms PDFs go as native files and shows batch/debug details.</span>
+        </button>
       </div>
 
       <button type="button" class="btn-hunt drlab-initiate" id="btn-drlab-initiate" disabled aria-label="Initiate Dr. Todd — pick a test flask first">⚡ INITIATE DR.TODD</button>
@@ -394,6 +432,10 @@
     <!-- Results state -->
     <div class="sbs-results hidden" id="sbs-results">
       <div class="sbs-learnings-bar" id="sbs-learnings-bar"></div>
+      <div class="sbs-openai-debug hidden" id="sbs-openai-debug">
+        <div class="sbs-openai-debug-head">OpenAI pipeline — full debug JSON</div>
+        <pre class="sbs-openai-debug-pre" id="sbs-openai-debug-pre"></pre>
+      </div>
       <div class="sbs-cols">
         <!-- Raw Todd column -->
         <div class="sbs-col">
@@ -636,8 +678,8 @@
     </div>
   </div>
 
-  <script src="drlab-flasks.js?v=1"></script>
+  <script src="drlab-flasks.js?v=2"></script>
   <script src="sbs-boxing.js?v=1"></script>
-  <script src="app.js?v=52"></script>
+  <script src="app.js?v=56"></script>
 </body>
 </html>
