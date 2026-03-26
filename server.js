@@ -704,6 +704,45 @@ app.post('/api/drtoddhunt/extract-learnings', async (req, res) => {
   }
 })
 
+// POST /api/sidebyside/extract-learnings
+// Pulls juice learnings from a Dr. Verdict report (juice, doublecheck, or modelcompare)
+// ═══════════════════════════════════════════════════════════
+
+app.post('/api/sidebyside/extract-learnings', async (req, res) => {
+  try {
+    const { verdictText, tenantName, mode, cheapMode } = req.body
+    if (!verdictText) return res.status(400).json({ error: 'verdictText is required' })
+
+    const { extractLearningsFromVerdict } = await import('./lib/gym-trainer.js')
+    const result = await extractLearningsFromVerdict(
+      verdictText,
+      tenantName || 'Unknown',
+      mode || 'juice',
+      !!cheapMode
+    )
+
+    const batchId  = `verdict-${Date.now()}`
+    const savedAt  = new Date().toISOString()
+    const newLearnings = (result.learnings || []).map(l => ({
+      ...l,
+      id:         `learning-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      createdAt:  savedAt,
+      batchId,
+      tenantName: tenantName || 'Unknown',
+      source:     `verdict-${mode || 'juice'}`,
+      active:     false,
+    }))
+
+    const existing = readLearnings()
+    writeLearnings([...existing, ...newLearnings])
+
+    res.json({ learnings: newLearnings, summary: result.summary })
+  } catch (err) {
+    console.error('[sidebyside/extract-learnings]', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // POST /api/drtoddhunt/tldr
 app.post('/api/drtoddhunt/tldr', async (req, res) => {
   try {
@@ -1300,11 +1339,11 @@ app.get('/api/openaitest', async (req, res) => {
 
 app.post('/api/sidebyside/verdict', async (req, res) => {
   try {
-    const { rawResult, beefedResult, activeLearnings, tenantName, cheapMode } = req.body
+    const { rawResult, beefedResult, activeLearnings, tenantName, cheapMode, mode } = req.body
     if (!rawResult || !beefedResult) return res.status(400).json({ error: 'rawResult and beefedResult are required' })
 
     const { evaluateSideBySide } = await import('./lib/gym-trainer.js')
-    const verdict = await evaluateSideBySide({ rawResult, beefedResult, activeLearnings, tenantName, cheapMode: !!cheapMode })
+    const verdict = await evaluateSideBySide({ rawResult, beefedResult, activeLearnings, tenantName, cheapMode: !!cheapMode, mode })
 
     res.json({ verdict })
   } catch (err) {

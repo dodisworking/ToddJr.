@@ -1,4 +1,223 @@
 // ═══════════════════════════════════════════════════════════
+// 8-BIT SOUND ENGINE — Web Audio API, no files needed
+// ═══════════════════════════════════════════════════════════
+
+const _sfxCtx = (() => {
+  try { return new (window.AudioContext || window.webkitAudioContext)() } catch { return null }
+})()
+
+// ── Mute state (persisted in localStorage) ──────────────────
+let _sfxMuted = localStorage.getItem('toddSfxMuted') === '1'
+
+function _sfxNote(freq, startT, durSec, type = 'square', vol = 0.18) {
+  if (!_sfxCtx || _sfxMuted) return
+  const g = _sfxCtx.createGain()
+  g.gain.setValueAtTime(vol, startT)
+  g.gain.exponentialRampToValueAtTime(0.001, startT + durSec)
+  const o = _sfxCtx.createOscillator()
+  o.type = type
+  o.frequency.setValueAtTime(freq, startT)
+  o.connect(g)
+  g.connect(_sfxCtx.destination)
+  o.start(startT)
+  o.stop(startT + durSec + 0.05)
+}
+
+function _sfxResume() {
+  if (_sfxCtx && _sfxCtx.state === 'suspended') _sfxCtx.resume()
+}
+
+/** 🔊 Toggle mute — called by speaker button */
+function sfxToggleMute() {
+  _sfxMuted = !_sfxMuted
+  localStorage.setItem('toddSfxMuted', _sfxMuted ? '1' : '0')
+  if (_sfxMuted) sfxStopBgLoop()
+  updateSpeakerIcon()
+}
+
+function updateSpeakerIcon() {
+  const btn = document.getElementById('btn-sfx-toggle')
+  if (!btn) return
+  btn.classList.toggle('muted', _sfxMuted)
+  btn.title = _sfxMuted ? 'Sound OFF — click to unmute' : 'Sound ON — click to mute'
+}
+
+/** 🎵 Button click — quick square blip */
+function sfxBtnClick() {
+  if (_sfxMuted) return
+  _sfxResume()
+  const t = _sfxCtx?.currentTime || 0
+  _sfxNote(440, t, 0.04, 'square', 0.09)
+}
+
+/** 🎵 Hunt complete — ascending 4-note 8-bit fanfare */
+function sfxHuntComplete() {
+  if (_sfxMuted) return
+  _sfxResume()
+  const t = _sfxCtx?.currentTime || 0
+  _sfxNote(523,  t + 0.00, 0.12)   // C5
+  _sfxNote(659,  t + 0.13, 0.12)   // E5
+  _sfxNote(784,  t + 0.26, 0.12)   // G5
+  _sfxNote(1047, t + 0.39, 0.25)   // C6
+}
+
+/** 🎵 All clear — clean 3-note chime */
+function sfxAllClear() {
+  if (_sfxMuted) return
+  _sfxResume()
+  const t = _sfxCtx?.currentTime || 0
+  _sfxNote(784,  t + 0.00, 0.15, 'sine', 0.14)  // G5
+  _sfxNote(988,  t + 0.16, 0.15, 'sine', 0.14)  // B5
+  _sfxNote(1175, t + 0.32, 0.28, 'sine', 0.14)  // D6
+}
+
+/** 🎵 Test/verdict ready — 2-tone notification ping */
+function sfxReady() {
+  if (_sfxMuted) return
+  _sfxResume()
+  const t = _sfxCtx?.currentTime || 0
+  _sfxNote(880,  t + 0.00, 0.10, 'square', 0.12) // A5
+  _sfxNote(1175, t + 0.12, 0.18, 'square', 0.12) // D6
+}
+
+/** 🎵 Error — low descending buzz */
+function sfxError() {
+  if (_sfxMuted) return
+  _sfxResume()
+  const t = _sfxCtx?.currentTime || 0
+  _sfxNote(220, t + 0.00, 0.12, 'sawtooth', 0.15)
+  _sfxNote(165, t + 0.13, 0.20, 'sawtooth', 0.13)
+}
+
+/** 🎵 Juice saved — quick bloop */
+function sfxJuice() {
+  if (_sfxMuted) return
+  _sfxResume()
+  const t = _sfxCtx?.currentTime || 0
+  _sfxNote(440, t + 0.00, 0.07, 'square', 0.1)
+  _sfxNote(659, t + 0.08, 0.12, 'square', 0.1)
+}
+
+// ── Background loop engine ───────────────────────────────────
+let _bgLoopTimer = null
+let _bgLoopActive = false
+
+function sfxStopBgLoop() {
+  _bgLoopActive = false
+  if (_bgLoopTimer !== null) { clearTimeout(_bgLoopTimer); _bgLoopTimer = null }
+}
+
+/**
+ * 🎵 Hunt loop — suspenseful Am pentatonic 8-bit melody (~130 BPM)
+ * Notes: A3 C4 D4 E4 G4 A4  (minor pentatonic, loop of 16 steps)
+ */
+function sfxStartHuntLoop() {
+  sfxStopBgLoop()
+  if (_sfxMuted || !_sfxCtx) return
+  _bgLoopActive = true
+  _sfxResume()
+
+  // Am pentatonic: A3=220, C4=261, D4=293, E4=329, G4=392, A4=440
+  const seq = [220, 261, 293, 329, 261, 392, 329, 261,
+               440, 392, 329, 293, 261, 220, 293, 220]
+  const stepMs = 462  // ~130 BPM sixteenth notes
+  let step = 0
+
+  function playStep() {
+    if (!_bgLoopActive || _sfxMuted) return
+    const t = _sfxCtx.currentTime
+    const freq = seq[step % seq.length]
+    _sfxNote(freq, t, 0.18, 'square', 0.07)
+    // Every 4th beat add a soft kick-like low thud
+    if (step % 4 === 0) _sfxNote(55, t, 0.12, 'sawtooth', 0.05)
+    step++
+    _bgLoopTimer = setTimeout(playStep, stepMs)
+  }
+  playStep()
+}
+
+/**
+ * 🎵 Cook / bubbling loop — whimsical C major arpeggio (~110 BPM)
+ * Notes: C4 E4 G4 C5 G4 E4  cycling
+ */
+function sfxStartCookLoop() {
+  sfxStopBgLoop()
+  if (_sfxMuted || !_sfxCtx) return
+  _bgLoopActive = true
+  _sfxResume()
+
+  const seq = [261, 329, 392, 523, 392, 329, 261, 329,
+               392, 440, 523, 440, 392, 329, 261, 196]
+  const stepMs = 545  // ~110 BPM
+  let step = 0
+
+  function playStep() {
+    if (!_bgLoopActive || _sfxMuted) return
+    const t = _sfxCtx.currentTime
+    const freq = seq[step % seq.length]
+    _sfxNote(freq, t, 0.22, 'sine', 0.06)
+    // Occasional blip accent on beat 1 and 9
+    if (step % 16 === 0 || step % 16 === 8) _sfxNote(freq * 2, t, 0.08, 'square', 0.04)
+    step++
+    _bgLoopTimer = setTimeout(playStep, stepMs)
+  }
+  playStep()
+}
+
+// ═══════════════════════════════════════════════════════════
+// 8-BIT PIXEL CONFIRM DIALOG
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Replaces window.confirm() with a pixel-art dialog.
+ * Returns a Promise<boolean> — true = YES, false = NO/dismissed.
+ */
+function pixelConfirm(message, title = 'WARNING') {
+  return new Promise(resolve => {
+    const overlay = document.getElementById('pixel-confirm-overlay')
+    const msgEl   = document.getElementById('pixel-confirm-msg')
+    const titleEl = document.getElementById('pixel-confirm-title')
+    const yesBtn  = document.getElementById('pixel-confirm-yes')
+    const noBtn   = document.getElementById('pixel-confirm-no')
+    if (!overlay) { resolve(window.confirm(message)); return }
+
+    titleEl.textContent = title
+    msgEl.textContent   = message
+    overlay.classList.remove('hidden')
+    noBtn.focus()
+
+    function cleanup(result) {
+      overlay.classList.add('hidden')
+      yesBtn.removeEventListener('click', onYes)
+      noBtn.removeEventListener('click', onNo)
+      overlay.removeEventListener('click', onBackdrop)
+      document.removeEventListener('keydown', onKey)
+      resolve(result)
+    }
+    function onYes()          { cleanup(true) }
+    function onNo()           { cleanup(false) }
+    function onBackdrop(e)    { if (e.target === overlay) cleanup(false) }
+    function onKey(e) {
+      if (e.key === 'Enter')  { cleanup(true);  e.preventDefault() }
+      if (e.key === 'Escape') { cleanup(false); e.preventDefault() }
+    }
+    yesBtn.addEventListener('click', onYes)
+    noBtn.addEventListener('click', onNo)
+    overlay.addEventListener('click', onBackdrop)
+    document.addEventListener('keydown', onKey)
+  })
+}
+
+// ── Global button-click sound ────────────────────────────────
+document.addEventListener('click', e => {
+  const btn = e.target.closest('button, .btn, [role="button"]')
+  if (!btn) return
+  // Skip the mute toggle itself (it has its own logic)
+  if (btn.id === 'btn-sfx-toggle') return
+  sfxBtnClick()
+}, { capture: true })
+
+// ═══════════════════════════════════════════════════════════
 // TODD JR. — Frontend State Machine
 // ═══════════════════════════════════════════════════════════
 
@@ -1013,6 +1232,7 @@ async function startUpload(files) {
     setProgress(100, '')
     renderTenantCards(result.tenants)
     showOversizeWarnings(result.tenants)
+    sfxReady()
     showHuntCta()
 
     // Single tenant mode: auto-run on the only/first tenant
@@ -1021,6 +1241,7 @@ async function startUpload(files) {
       setTimeout(() => startHunt(result.tenants[0].id), 400)
     }
   } catch (err) {
+    sfxError()
     const msg = err.message || 'Upload failed'
     toast(msg.includes('tenant folders')
       ? '💡 Tip: Try drag-and-drop instead! It works better on macOS. Drag your folder directly onto the drop zone.'
@@ -1275,10 +1496,30 @@ function cheapJsonExtra() {
   return { cheapMode: isCheapModeActive() }
 }
 
+// Lab screen cheap toggle — synced with the main loading-screen toggle via localStorage
+const cheapModeToggleLab = document.getElementById('cheap-mode-toggle-lab')
+
+function syncCheapToggles(checked) {
+  if (cheapModeToggle)    cheapModeToggle.checked    = checked
+  if (cheapModeToggleLab) cheapModeToggleLab.checked = checked
+  const label = document.getElementById('drlab-cheap-label')
+  if (label) label.textContent = checked ? '🪙 DUMB MODE (on)' : '🪙 DUMB MODE'
+}
+
+if (cheapModeToggleLab) {
+  cheapModeToggleLab.checked = localStorage.getItem(CHEAP_MODE_KEY) === '1'
+  syncCheapToggles(cheapModeToggleLab.checked)
+  cheapModeToggleLab.addEventListener('change', () => {
+    localStorage.setItem(CHEAP_MODE_KEY, cheapModeToggleLab.checked ? '1' : '0')
+    syncCheapToggles(cheapModeToggleLab.checked)
+  })
+}
+
 if (cheapModeToggle) {
   cheapModeToggle.checked = localStorage.getItem(CHEAP_MODE_KEY) === '1'
   cheapModeToggle.addEventListener('change', () => {
     localStorage.setItem(CHEAP_MODE_KEY, cheapModeToggle.checked ? '1' : '0')
+    syncCheapToggles(cheapModeToggle.checked)
     refreshHuntJarSprite()
   })
 }
@@ -2137,6 +2378,7 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
   if (state.eventSource) { state.eventSource.close() }
   const es = new EventSource(url)
   state.eventSource = es
+  sfxStartHuntLoop()
 
   let sbsStreamAck = false
   const markSbsAck = () => { sbsStreamAck = true }
@@ -2211,6 +2453,7 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
     window.clearTimeout(sbsFailTimer)
     es.close()
     state.eventSource = null
+    sfxStopBgLoop()
     let d
     try {
       d = JSON.parse(e.data)
@@ -2236,8 +2479,9 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
       if (beefed.openaiError && beefed.findings && beefed.findings[0]) {
         appendOpenAiBrewLog(`OpenAI failure: ${beefed.findings[0].comment || beefed.findings[0].missingDocument || 'see findings'}`, 'error')
       }
-      appendOpenAiBrewLog('sbs-complete: run finished — showing results.', 'ok')
+        appendOpenAiBrewLog('sbs-complete: run finished — showing results.', 'ok')
     }
+    sfxReady()
     // Store for verdict call
     state.sbsLastResult = d
     setSideBySideLoadingVisible(false)
@@ -2263,6 +2507,7 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
     window.clearTimeout(sbsFailTimer)
     es.close()
     state.eventSource = null
+    sfxStopBgLoop()
     let errMsg = 'Unknown'
     try {
       errMsg = e.data ? (JSON.parse(e.data).error || 'Unknown') : 'Unknown'
@@ -2270,6 +2515,7 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
       errMsg = typeof e.data === 'string' && e.data ? e.data : 'Unknown'
     }
     if (mode === 'openaitest') appendOpenAiBrewLog(`sbs-error: ${errMsg}`, 'error')
+    sfxError()
     toast('Side-by-side error: ' + errMsg, 'error')
     setSideBySideLoadingVisible(false)
     goTo(state.sbsSourceScreen || 'loading')
@@ -2300,6 +2546,41 @@ const CHECK_LABELS_SBS = {
   REFERENCED_DOC:'Missing Doc', AMENDMENT_GAP:'Amendment Gap', MISSING_PAGE:'Missing Pages',
   LEGIBILITY:'Legibility', SPECIAL_AGREEMENT:'Special Agreement', GUARANTY:'Guaranty',
   NAME_MISMATCH:'Name Mismatch'
+}
+
+/**
+ * Shared finding card renderer for all side-by-side modes (juice, doublecheck, openaitest, modelcompare).
+ * Shows: check type, severity, unique badge, missing doc, comment, and evidence.
+ */
+function renderSbsFindings(findings, otherKeys, isBeefed) {
+  if (!findings || findings.length === 0) {
+    return '<div class="sbs-finding-card all-clear"><span class="sbs-card-doc">✅ All Clear — no findings</span></div>'
+  }
+  return findings.map(f => {
+    const key      = `${f.checkType}||${(f.missingDocument || '').toLowerCase().trim()}`
+    const isUnique = !otherKeys.has(key)
+    const sevClass = (f.severity || 'low').toLowerCase()
+    const uniqueTag = isUnique
+      ? `<span class="sbs-unique-badge ${isBeefed ? 'only-beefed' : 'only-raw'}">${isBeefed ? '🆕 New find' : '⚠️ Only here'}</span>`
+      : ''
+    const evidenceHtml = f.evidence
+      ? `<div class="sbs-card-evidence">
+           <span class="sbs-card-evidence-label">📍 Evidence</span>
+           <span class="sbs-card-evidence-text">${escHtml(f.evidence)}</span>
+         </div>`
+      : ''
+    return `
+      <div class="sbs-finding-card sev-${sevClass}">
+        <div class="sbs-card-top">
+          <span class="sbs-card-check">${escHtml(CHECK_LABELS_SBS[f.checkType] || f.checkType || '')}</span>
+          <span class="sev-pill sev-${sevClass}">${escHtml(f.severity || 'LOW')}</span>
+          ${uniqueTag}
+        </div>
+        <div class="sbs-card-doc">${escHtml(f.missingDocument || 'N/A')}</div>
+        <div class="sbs-card-comment">${escHtml(f.comment || '')}</div>
+        ${evidenceHtml}
+      </div>`
+  }).join('')
 }
 
 function renderOpenAiTestLeftColumn(meta) {
@@ -2407,56 +2688,12 @@ function renderSideBySide(data) {
     document.getElementById('sbs-beefed-count').textContent =
       beefedF.length + ' finding' + (beefedF.length !== 1 ? 's' : '')
     document.getElementById('sbs-raw-findings').innerHTML = renderOpenAiTestLeftColumn(data.openaiTestMeta)
-    const renderFindingsOai = (findings, otherKeys, isBeefed) => {
-      if (!findings || findings.length === 0) {
-        return '<div class="sbs-finding-card all-clear"><span class="sbs-card-doc">✅ All Clear — no findings</span></div>'
-      }
-      return findings.map(f => {
-        const key = `${f.checkType}||${(f.missingDocument || '').toLowerCase().trim()}`
-        const isUnique = !otherKeys.has(key)
-        const sevClass = (f.severity || 'low').toLowerCase()
-        const uniqueTag = isUnique
-          ? `<span class="sbs-unique-badge ${isBeefed ? 'only-beefed' : 'only-raw'}">${isBeefed ? '🆕 New find' : '⚠️ Raw only'}</span>`
-          : ''
-        return `
-        <div class="sbs-finding-card sev-${sevClass}">
-          <div class="sbs-card-top">
-            <span class="sbs-card-check">${escHtml(CHECK_LABELS_SBS[f.checkType] || f.checkType || '')}</span>
-            <span class="sev-pill sev-${sevClass}">${escHtml(f.severity || 'LOW')}</span>
-            ${uniqueTag}
-          </div>
-          <div class="sbs-card-doc">${escHtml(f.missingDocument || 'N/A')}</div>
-          <div class="sbs-card-comment">${escHtml(f.comment || '')}</div>
-        </div>`
-      }).join('')
-    }
+    const renderFindingsOai = (findings, otherKeys, isBeefed) => renderSbsFindings(findings, otherKeys, isBeefed)
     document.getElementById('sbs-beefed-findings').innerHTML = renderFindingsOai(beefedF, rawKeys, true)
     return
   }
 
-  const renderFindings = (findings, otherKeys, isBeefed) => {
-    if (!findings || findings.length === 0) {
-      return '<div class="sbs-finding-card all-clear"><span class="sbs-card-doc">✅ All Clear — no findings</span></div>'
-    }
-    return findings.map(f => {
-      const key       = `${f.checkType}||${(f.missingDocument||'').toLowerCase().trim()}`
-      const isUnique  = !otherKeys.has(key)
-      const sevClass  = (f.severity || 'low').toLowerCase()
-      const uniqueTag = isUnique
-        ? `<span class="sbs-unique-badge ${isBeefed ? 'only-beefed' : 'only-raw'}">${isBeefed ? '🆕 New find' : '⚠️ Raw only'}</span>`
-        : ''
-      return `
-        <div class="sbs-finding-card sev-${sevClass}">
-          <div class="sbs-card-top">
-            <span class="sbs-card-check">${escHtml(CHECK_LABELS_SBS[f.checkType] || f.checkType || '')}</span>
-            <span class="sev-pill sev-${sevClass}">${escHtml(f.severity || 'LOW')}</span>
-            ${uniqueTag}
-          </div>
-          <div class="sbs-card-doc">${escHtml(f.missingDocument || 'N/A')}</div>
-          <div class="sbs-card-comment">${escHtml(f.comment || '')}</div>
-        </div>`
-    }).join('')
-  }
+  const renderFindings = (findings, otherKeys, isBeefed) => renderSbsFindings(findings, otherKeys, isBeefed)
 
   document.getElementById('sbs-raw-count').textContent =
     rawF.length + ' finding' + (rawF.length !== 1 ? 's' : '')
@@ -2465,6 +2702,73 @@ function renderSideBySide(data) {
 
   document.getElementById('sbs-raw-findings').innerHTML    = renderFindings(rawF,    beefedKeys, false)
   document.getElementById('sbs-beefed-findings').innerHTML = renderFindings(beefedF, rawKeys,    true)
+}
+
+// ── Verdict text renderers ─────────────────────────────────
+
+/**
+ * Parse verdict plain-text into 8-bit styled HTML.
+ * Section headers (ALL CAPS lines) get highlighted, bullets/actions get classes.
+ */
+function renderVerdictHtml(text) {
+  const lines = String(text || '').split('\n')
+  let html = ''
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed) { html += '<div class="verdict-spacer"></div>'; continue }
+
+    // Section header: all-caps words, may have colons/parens/dashes
+    if (/^[A-Z][A-Z\s\-:()\/]+$/.test(trimmed) && trimmed.length >= 4 && !/^\d+\./.test(trimmed)) {
+      html += `<div class="verdict-section-hdr">⬛ ${escHtml(trimmed)}</div>`
+      continue
+    }
+    // Recommendation tags
+    if (/^(KEEP|REVISE|DISCARD|PROMOTE|HOLD|CONFIDENT|NEEDS HUMAN REVIEW|LIKELY FALSE POSITIVE)[\s:—]/.test(trimmed)) {
+      const tag = trimmed.match(/^(KEEP|REVISE|DISCARD|PROMOTE ALL|PROMOTE SOME|HOLD FOR MORE TESTING|DISCARD ALL|CONFIDENT|NEEDS HUMAN REVIEW|LIKELY FALSE POSITIVE)/)?.[1] || ''
+      const cls = /KEEP|PROMOTE|CONFIDENT/.test(tag) ? 'verdict-tag--keep'
+                : /REVISE|HOLD|NEEDS/.test(tag)      ? 'verdict-tag--revise'
+                : 'verdict-tag--discard'
+      html += `<div class="verdict-tag ${cls}">${escHtml(trimmed)}</div>`
+      continue
+    }
+    // Bullet
+    if (/^[-•*]\s/.test(trimmed)) {
+      html += `<div class="verdict-bullet">${escHtml(trimmed)}</div>`
+      continue
+    }
+    // Numbered list
+    if (/^\d+[\.\)]\s/.test(trimmed)) {
+      html += `<div class="verdict-numbered">${escHtml(trimmed)}</div>`
+      continue
+    }
+    html += `<div class="verdict-line">${escHtml(line)}</div>`
+  }
+  return html
+}
+
+/**
+ * Render TL;DR plain text — strip **bold** markdown, split into bullet lines.
+ */
+function renderTldrHtml(text) {
+  const lines = String(text || '').split('\n')
+  let html = ''
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    // Strip markdown bold/italic
+    const safe = escHtml(trimmed)
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g,     '<em>$1</em>')
+    // Section label (e.g. "WHAT’S GOOD:", "URGENCY LEVEL:")
+    if (/^(WHAT’S|WHAT IS|URGENCY|WHAT TO DO)/i.test(trimmed) && trimmed.endsWith(':')) {
+      html += `<div class="tldr-section">${safe}</div>`
+    } else if (/^[-•*\d]/.test(trimmed) || trimmed.includes(':')) {
+      html += `<div class="tldr-line">${safe}</div>`
+    } else {
+      html += `<div class="tldr-line">${safe}</div>`
+    }
+  }
+  return html
 }
 
 // ── Dr. Verdict ────────────────────────────────────────────
@@ -2488,6 +2792,7 @@ document.getElementById('btn-run-verdict')?.addEventListener('click', async () =
         beefedResult:    d.beefed,
         activeLearnings: d.activeLearnings,
         tenantName:      d.tenantName,
+        mode:            state.sbsMode || 'juice',
         ...cheapJsonExtra()
       })
     })
@@ -2495,8 +2800,15 @@ document.getElementById('btn-run-verdict')?.addEventListener('click', async () =
     if (!res.ok) throw new Error(data.error || 'Server error')
 
     document.getElementById('sbs-verdict-loading').classList.add('hidden')
-    document.getElementById('sbs-verdict-text').textContent = data.verdict || ''
+    document.getElementById('sbs-verdict-text').innerHTML = renderVerdictHtml(data.verdict || '')
     document.getElementById('sbs-verdict-report').classList.remove('hidden')
+    // Reset TL;DR + juice button each new verdict
+    document.getElementById('verdict-tldr-wrap').classList.add('hidden')
+    const tldrBtn = document.getElementById('btn-verdict-tldr')
+    if (tldrBtn) { tldrBtn.disabled = false; tldrBtn.textContent = '⚡ TL;DR' }
+    const juiceBtn = document.getElementById('btn-verdict-juice')
+    if (juiceBtn) { juiceBtn.disabled = false; juiceBtn.textContent = '🧃 Send to Juice' }
+    sfxReady()
     toast('Dr. Verdict complete', 'success')
   } catch (err) {
     document.getElementById('sbs-verdict-loading').classList.add('hidden')
@@ -2508,7 +2820,7 @@ document.getElementById('btn-run-verdict')?.addEventListener('click', async () =
 })
 
 document.getElementById('btn-copy-verdict')?.addEventListener('click', () => {
-  const text = document.getElementById('sbs-verdict-text').textContent
+  const text = document.getElementById('sbs-verdict-text').innerText
   navigator.clipboard.writeText(text).then(() => {
     const btn = document.getElementById('btn-copy-verdict')
     btn.textContent = '✅ Copied!'
@@ -2516,7 +2828,77 @@ document.getElementById('btn-copy-verdict')?.addEventListener('click', () => {
   }).catch(() => toast('Copy failed', 'error'))
 })
 
-function startHunt(testTenantId = null) {
+// ── TL;DR button ──────────────────────────────────────────
+document.getElementById('btn-verdict-tldr')?.addEventListener('click', async () => {
+  const btn        = document.getElementById('btn-verdict-tldr')
+  const reportText = document.getElementById('sbs-verdict-text').innerText
+  const tenantName = state.sbsLastResult?.tenantName || ''
+  if (!reportText) return
+
+  btn.disabled    = true
+  btn.textContent = '⏳...'
+
+  try {
+    const res  = await fetch(sameOriginApi('/api/drtoddhunt/tldr'), {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ reportText, tenantName, ...cheapJsonExtra() })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'TL;DR failed')
+
+    document.getElementById('verdict-tldr-text').innerHTML = renderTldrHtml(data.tldr || '')
+    document.getElementById('verdict-tldr-wrap').classList.remove('hidden')
+    btn.textContent = '⚡ TL;DR ✓'
+  } catch (err) {
+    toast('TL;DR error: ' + err.message, 'error')
+    btn.disabled    = false
+    btn.textContent = '⚡ TL;DR'
+  }
+})
+
+// ── Send to Juice button ──────────────────────────────────
+document.getElementById('btn-verdict-juice')?.addEventListener('click', async () => {
+  const btn        = document.getElementById('btn-verdict-juice')
+  const verdictText = document.getElementById('sbs-verdict-text').innerText
+  const tenantName  = state.sbsLastResult?.tenantName || ''
+  const mode        = state.sbsMode || 'juice'
+  if (!verdictText) return
+
+  btn.disabled    = true
+  btn.textContent = '⏳...'
+
+  try {
+    // Use the verdict-specific extractor — understands IMPROVEMENTS/REGRESSIONS/RECOMMENDATION
+    // sections and generates rules targeted at preventing mistakes or reinforcing wins
+    const res = await fetch(sameOriginApi('/api/sidebyside/extract-learnings'), {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        verdictText,
+        tenantName,
+        mode,
+        ...cheapJsonExtra()
+      })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Extract failed')
+
+    const count = data.learnings?.length || 0
+    sfxJuice()
+    btn.textContent = `🧃 ${count} rule${count !== 1 ? 's' : ''} juiced!`
+    toast(`${count} prompt rule${count !== 1 ? 's' : ''} extracted and saved to Juice`, 'success')
+
+    // Open juice modal so user can see + activate the new rules immediately
+    setTimeout(() => openJuiceLearningsModal(), 400)
+  } catch (err) {
+    toast('Juice error: ' + err.message, 'error')
+    btn.disabled    = false
+    btn.textContent = '🧃 Send to Juice'
+  }
+})
+
+async function startHunt(testTenantId = null) {
   // Pre-hunt: warn about oversized files before executing
   const tenantsToCheck = testTenantId
     ? state.tenants.filter(t => t.id === testTenantId)
@@ -2525,8 +2907,8 @@ function startHunt(testTenantId = null) {
     (t.oversizedFiles || []).map(f => `• ${t.tenantName}: ${f}`)
   )
   if (oversized.length > 0) {
-    const msg = `⚠️ ${oversized.length} file${oversized.length !== 1 ? 's' : ''} exceed 32MB and will use text extraction instead of visual analysis (scanned pages may be missed):\n\n${oversized.join('\n')}\n\nContinue anyway?`
-    if (!confirm(msg)) return
+    const msg = `${oversized.length} file${oversized.length !== 1 ? 's' : ''} exceed 32MB.\nText extraction only — scanned pages may be missed.\n\n${oversized.join('\n')}\n\nContinue anyway?`
+    if (!await pixelConfirm(msg, '⚠ LARGE FILES')) return
   }
 
   goTo('hunt')
@@ -2565,6 +2947,7 @@ function startHunt(testTenantId = null) {
   const rel = (testTenantId ? `${base}&testTenantId=${encodeURIComponent(testTenantId)}` : base) + cheapQs() + juiceQs()
   const es = new EventSource(sameOriginApi(rel))
   state.eventSource = es
+  sfxStartHuntLoop()
 
   es.addEventListener('hunt-start', e => {
     const d = JSON.parse(e.data)
@@ -2605,13 +2988,17 @@ function startHunt(testTenantId = null) {
 
   es.addEventListener('hunt-complete', () => {
     es.close()
+    sfxStopBgLoop()
     document.getElementById('btn-kill-hunt').classList.add('hidden')
+    sfxHuntComplete()
     showCookCta()
   })
 
   es.addEventListener('hunt-error', e => {
     const d = JSON.parse(e.data)
     es.close()
+    sfxStopBgLoop()
+    sfxError()
     toast('Hunt error: ' + d.error, 'error')
     // Still show cook button so user can get whatever results came in
     showCookCta()
@@ -2647,6 +3034,7 @@ function startDrToddHunt() {
   const url = sameOriginApi(`/api/drtoddhunt?sessionId=${encodeURIComponent(state.sessionId)}${cheapQs()}`)
   const es = new EventSource(url)
   state.eventSource = es
+  sfxStartHuntLoop()
 
   es.addEventListener('drtoddhunt-start', e => {
     const d = JSON.parse(e.data)
@@ -2692,9 +3080,11 @@ function startDrToddHunt() {
     const d = JSON.parse(e.data)
     es.close()
     state.eventSource = null
+    sfxStopBgLoop()
     const hint = d.errorCount > 0
       ? `${d.errorCount} run(s) had errors — report will use available data`
       : 'All 3 runs complete'
+    sfxHuntComplete()
     document.getElementById('drtoddhunt-sub').textContent = hint
     document.getElementById('drtoddhunt-cta').classList.remove('hidden')
   })
@@ -2703,10 +3093,12 @@ function startDrToddHunt() {
     const d = JSON.parse(e.data)
     es.close()
     state.eventSource = null
+    sfxStopBgLoop()
     document.getElementById('drtoddhunt-synthesis').classList.add('hidden')
     document.getElementById('drtoddhunt-sub').textContent = 'Analysis encountered an error'
     // Still show the report button in case partial data was saved
     document.getElementById('drtoddhunt-cta').classList.remove('hidden')
+    sfxError()
     toast('Dr. Todd error: ' + d.error, 'error')
   })
 
@@ -2811,6 +3203,7 @@ document.getElementById('btn-cook').addEventListener('click', startCook)
 
 async function startCook() {
   stopArena()
+  sfxStartCookLoop()
   goTo('cooking')
 
   // Fake progress animation while real API call happens
@@ -2838,11 +3231,15 @@ async function startCook() {
 
     // Brief delay for satisfying animation
     await sleep(700)
+    sfxStopBgLoop()
+    sfxHuntComplete()
     goTo('report')
     buildReportScreen(data)
 
   } catch (err) {
     clearInterval(fakeProgress)
+    sfxStopBgLoop()
+    sfxError()
     toast('Cook failed: ' + err.message, 'error')
     goTo('hunt')
     showCookCta()
@@ -3386,7 +3783,7 @@ function resetToHome() {
   toast('Home — new session', 'info')
 }
 
-function navigateGlobalBack() {
+async function navigateGlobalBack() {
   switch (state.screen) {
     case 'upload':
       break
@@ -3395,12 +3792,12 @@ function navigateGlobalBack() {
         goTo('upload')
         return
       }
-      if (!window.confirm('Leave the folder list? You’ll start fresh from home.')) return
+      if (!await pixelConfirm('Leave the folder list?\nYou\'ll start fresh from home.', '◀ LEAVE?')) return
       fullResetSession()
       goTo('upload')
       break
     case 'hunt':
-      if (!window.confirm('Stop the hunt and return to your folder list?')) return
+      if (!await pixelConfirm('Stop the hunt and go\nback to your folder list?', '◀ STOP HUNT?')) return
       if (state.eventSource) { state.eventSource.close(); state.eventSource = null }
       stopArena()
       animState.toddMode = 'idle'
@@ -3437,12 +3834,13 @@ function navigateGlobalBack() {
   }
 }
 
-btnGlobalHome?.addEventListener('click', () => {
+btnGlobalHome?.addEventListener('click', async () => {
   if (state.screen === 'upload') {
-    toast('You’re already home', 'info')
+    toast('You\'re already home', 'info')
     return
   }
-  if (!window.confirm('Go home? This starts a new session (upload folders again).')) return
+  const ok = await pixelConfirm('Go home?\n\nThis starts a fresh session.\nAll progress will be lost.', '⌂ GO HOME?')
+  if (!ok) return
   resetToHome()
 })
 
@@ -3815,8 +4213,8 @@ function renderGymFindingCards() {
       </div>
       <div class="gym-card-comment" id="gym-comment-${f.id}"></div>
 
-      <!-- Expandable: Todd's full reasoning -->
-      <button class="gym-expand-btn" id="gym-exp-${f.id}" data-fid="${f.id}">▼ Show Todd's reasoning</button>
+      <!-- Expandable: Todd’s full reasoning -->
+      <button class="gym-expand-btn" id="gym-exp-${f.id}" data-fid="${f.id}">▼ Show Todd’s reasoning</button>
       <div class="gym-reasoning-block hidden" id="gym-rb-${f.id}">
         ${f.triggerQuote ? `
         <div class="gym-rb-section">
@@ -4301,7 +4699,7 @@ function gymRenderDocDrawer() {
         const card = document.getElementById(`gym-card-${gymState.findings[firstFindingIdx].id}`)
         if (card) {
           card.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          // Brief flash so it's obvious which one was selected
+          // Brief flash so it’s obvious which one was selected
           card.classList.add('gym-card-flash')
           setTimeout(() => card.classList.remove('gym-card-flash'), 1200)
         }
@@ -4441,7 +4839,7 @@ function _gymFinishDraw(clientX, clientY) {
     cropDataUrl = offscreen.toDataURL('image/png')
   }
 
-  // Normalised coords (0–1) so they're resolution-independent
+  // Normalised coords (0–1) so they’re resolution-independent
   const normRect = {
     x: cx / canvasEl.width,
     y: cy / canvasEl.height,
@@ -4668,3 +5066,7 @@ function gymShowResults(data) {
 document.getElementById('gym-results-back').addEventListener('click', () => {
   gymOpenPicker()
 })
+
+// ── Speaker / Mute toggle ────────────────────────────────────
+document.getElementById('btn-sfx-toggle')?.addEventListener('click', sfxToggleMute)
+updateSpeakerIcon()

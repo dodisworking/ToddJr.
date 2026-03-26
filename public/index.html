@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=49" />
+  <link rel="stylesheet" href="style.css?v=51" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
@@ -278,7 +278,17 @@
         </button>
       </div>
 
-      <button type="button" class="btn-hunt drlab-initiate" id="btn-drlab-initiate" disabled aria-label="Initiate Dr. Todd — pick a test flask first">⚡ INITIATE DR.TODD</button>
+      <div class="drlab-launch-row">
+        <button type="button" class="btn-hunt drlab-initiate" id="btn-drlab-initiate" disabled aria-label="Initiate Dr. Todd — pick a test flask first">⚡ INITIATE DR.TODD</button>
+
+        <label class="drlab-cheap-toggle" title="Dumb mode uses Haiku instead of Sonnet — much cheaper for testing">
+          <input type="checkbox" id="cheap-mode-toggle-lab" />
+          <span class="drlab-cheap-track">
+            <span class="drlab-cheap-knob"></span>
+          </span>
+          <span class="drlab-cheap-label" id="drlab-cheap-label">🪙 DUMB MODE</span>
+        </label>
+      </div>
 
       <button class="btn-restart drlab-back" id="btn-drlab-back">← Back to Hunt Controls</button>
     </div>
@@ -461,9 +471,18 @@
       <div class="sbs-verdict-report hidden" id="sbs-verdict-report">
         <div class="sbs-verdict-header">
           <h3>🔬 Dr. Verdict</h3>
-          <button class="btn-copy-report" id="btn-copy-verdict">📋 Copy</button>
+          <div class="sbs-verdict-header-actions">
+            <button class="btn-copy-report" id="btn-copy-verdict">📋 Copy</button>
+            <button class="btn-verdict-tldr" id="btn-verdict-tldr">⚡ TL;DR</button>
+            <button class="btn-verdict-juice" id="btn-verdict-juice">🧃 Send to Juice</button>
+          </div>
         </div>
-        <pre class="report-text" id="sbs-verdict-text"></pre>
+        <!-- TL;DR panel (hidden until requested) -->
+        <div class="verdict-tldr-wrap hidden" id="verdict-tldr-wrap">
+          <div class="verdict-tldr-label">⚡ TL;DR</div>
+          <div class="verdict-tldr-text" id="verdict-tldr-text"></div>
+        </div>
+        <div class="verdict-text-body" id="sbs-verdict-text"></div>
       </div>
     </div>
   </div>
@@ -664,8 +683,31 @@
     </div>
   </div>
 
+  <!-- ── 8-bit pixel confirm dialog ── -->
+  <div id="pixel-confirm-overlay" class="pixel-confirm-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="pixel-confirm-title">
+    <div class="pixel-confirm-box">
+      <div class="pixel-confirm-title-bar">
+        <span class="pixel-confirm-skull" aria-hidden="true">☠</span>
+        <span class="pixel-confirm-title" id="pixel-confirm-title">WARNING</span>
+        <span class="pixel-confirm-skull" aria-hidden="true">☠</span>
+      </div>
+      <div class="pixel-confirm-body">
+        <p class="pixel-confirm-msg" id="pixel-confirm-msg"></p>
+      </div>
+      <div class="pixel-confirm-actions">
+        <button type="button" class="pixel-confirm-btn pixel-confirm-yes" id="pixel-confirm-yes">▶ YES</button>
+        <button type="button" class="pixel-confirm-btn pixel-confirm-no"  id="pixel-confirm-no" >✕ NO</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 8-bit speaker / mute toggle ── -->
+  <button type="button" id="btn-sfx-toggle" class="sfx-toggle-btn" title="Sound ON — click to mute" aria-label="Toggle sound effects">
+    <span class="sfx-speaker-icon" aria-hidden="true"></span>
+  </button>
+
   <script src="drlab-flasks.js?v=6"></script>
   <script src="sbs-boxing.js?v=3"></script>
-  <script src="app.js?v=65"></script>
+  <script src="app.js?v=67"></script>
 </body>
 </html>
