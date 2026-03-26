@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=51" />
+  <link rel="stylesheet" href="style.css?v=52" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
@@ -172,7 +172,50 @@
 
     <div class="hunt-layout">
       <div class="hunt-arena" id="hunt-arena">
+        <button type="button" id="btn-game-mode" class="btn-game-mode" title="Play a mini-game while Todd hunts!">🕹 GAME MODE</button>
         <canvas id="arena-canvas"></canvas>
+
+        <!-- NES Controller — shown only in game mode -->
+        <div id="nes-controller" class="nes-controller hidden" aria-label="8-bit game controller">
+          <div class="nes-inner">
+
+            <!-- D-Pad (decorative) -->
+            <div class="nes-left">
+              <div class="nes-dpad">
+                <div class="nes-dpad-up"></div>
+                <div class="nes-dpad-mid">
+                  <div class="nes-dpad-left"></div>
+                  <div class="nes-dpad-ctr"></div>
+                  <div class="nes-dpad-right"></div>
+                </div>
+                <div class="nes-dpad-down"></div>
+              </div>
+            </div>
+
+            <!-- Select / Start -->
+            <div class="nes-mid">
+              <div class="nes-sys-row">
+                <button class="nes-sys-btn" tabindex="-1" aria-hidden="true">SEL</button>
+                <button class="nes-sys-btn" tabindex="-1" aria-hidden="true">STA</button>
+              </div>
+              <p class="nes-ctrl-label">PRESS TO SWING</p>
+              <p class="nes-ctrl-hint">SPACE · Z · X</p>
+            </div>
+
+            <!-- B + A action buttons -->
+            <div class="nes-right">
+              <div class="nes-ab-row">
+                <div class="nes-ab-col">
+                  <button type="button" class="nes-action nes-b" id="nes-b-btn" aria-label="B — swing sword">B</button>
+                </div>
+                <div class="nes-ab-col">
+                  <button type="button" class="nes-action nes-a" id="nes-a-btn" aria-label="A — swing sword">A</button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
       </div>
       <div class="tenant-grid" id="tenant-grid-hunt"></div>
     </div>
@@ -709,5 +752,6 @@
   <script src="drlab-flasks.js?v=6"></script>
   <script src="sbs-boxing.js?v=3"></script>
   <script src="app.js?v=67"></script>
+  <script src="game-mode.js?v=1"></script>
 </body>
 </html>

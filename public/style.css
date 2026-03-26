@@ -4933,3 +4933,206 @@ a.isaac-download-link:hover { text-decoration: underline; color: #c4b5fd; }
   background: #3b0f0f;
   box-shadow: 3px 3px 0 #1a0808;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   GAME MODE — button + NES controller
+═══════════════════════════════════════════════════════════ */
+
+/* Hunt arena needs relative for the button overlay */
+.hunt-arena { position: relative; }
+
+/* ── Game Mode toggle button ─────────────────────────────── */
+.btn-game-mode {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 10;
+  font-family: var(--font-pixel);
+  font-size: 6px;
+  padding: 5px 10px;
+  background: rgba(13, 13, 26, 0.88);
+  border: 2px solid #4C1D95;
+  box-shadow: 2px 2px 0 #000;
+  color: #a78bfa;
+  cursor: pointer;
+  letter-spacing: 0.06em;
+  transition: border-color 0.1s, color 0.1s;
+}
+.btn-game-mode:hover  { border-color: #7C3AED; color: #c4b5fd; }
+.btn-game-mode.gm-active {
+  background: rgba(5, 46, 22, 0.9);
+  border-color: #16a34a;
+  color: #4ade80;
+  box-shadow: 2px 2px 0 #000, 0 0 8px rgba(74,222,128,0.25);
+}
+
+/* ── NES Controller shell ────────────────────────────────── */
+.nes-controller {
+  background: #141421;
+  border-top: 3px solid #1e293b;
+  border-left: 3px solid #1e293b;
+  border-right: 3px solid #0f172a;
+  border-bottom: 3px solid #0f172a;
+  box-shadow: 0 4px 0 #000;
+  padding: 14px 20px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  animation: gmSlideDown 0.15s steps(3) both;
+}
+.nes-controller.hidden { display: none; }
+
+@keyframes gmSlideDown {
+  from { transform: translateY(-8px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.nes-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 420px;
+  gap: 8px;
+}
+
+/* ── D-Pad ───────────────────────────────────────────────── */
+.nes-left { display: flex; align-items: center; justify-content: center; }
+.nes-dpad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  opacity: 0.5;   /* decorative only */
+}
+.nes-dpad-up, .nes-dpad-down {
+  width: 22px;
+  height: 20px;
+  background: #374151;
+  border: 2px solid #1f2937;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7px;
+  color: #4b5563;
+}
+.nes-dpad-up   { border-radius: 3px 3px 0 0; }
+.nes-dpad-down { border-radius: 0 0 3px 3px; }
+.nes-dpad-up::after   { content: '▲'; }
+.nes-dpad-down::after { content: '▼'; }
+.nes-dpad-mid {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+.nes-dpad-left, .nes-dpad-ctr, .nes-dpad-right {
+  width: 20px;
+  height: 22px;
+  background: #374151;
+  border: 2px solid #1f2937;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7px;
+  color: #4b5563;
+}
+.nes-dpad-left  { border-radius: 3px 0 0 3px; }
+.nes-dpad-right { border-radius: 0 3px 3px 0; }
+.nes-dpad-ctr   { background: #4b5563; }
+.nes-dpad-left::after  { content: '◀'; }
+.nes-dpad-right::after { content: '▶'; }
+
+/* ── Center (Select/Start + label) ──────────────────────── */
+.nes-mid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+.nes-sys-row {
+  display: flex;
+  gap: 10px;
+}
+.nes-sys-btn {
+  font-family: var(--font-pixel);
+  font-size: 5px;
+  padding: 4px 7px;
+  background: #1e293b;
+  border: 2px solid #334155;
+  color: #475569;
+  cursor: default;
+  letter-spacing: 0.1em;
+}
+.nes-ctrl-label {
+  font-family: var(--font-pixel);
+  font-size: 6px;
+  color: #7c3aed;
+  margin: 0;
+  letter-spacing: 0.06em;
+}
+.nes-ctrl-hint {
+  font-family: var(--font-pixel);
+  font-size: 5px;
+  color: #334155;
+  margin: 0;
+  letter-spacing: 0.08em;
+}
+
+/* ── A / B buttons ───────────────────────────────────────── */
+.nes-right { display: flex; align-items: center; justify-content: center; }
+.nes-ab-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+.nes-ab-col { display: flex; flex-direction: column; align-items: center; }
+
+.nes-action {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  font-weight: 900;
+  border-radius: 50%;
+  border: 3px solid;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.04s, box-shadow 0.04s, filter 0.08s;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* A button — bigger, red, main action */
+.nes-a {
+  width: 48px;
+  height: 48px;
+  background: #dc2626;
+  border-color: #7f1d1d;
+  color: #fff;
+  box-shadow: 0 5px 0 #7f1d1d, 0 6px 0 #000, inset 0 1px 0 rgba(255,255,255,0.2);
+}
+.nes-a:hover  { filter: brightness(1.15); }
+.nes-a:active, .nes-a.pressed {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 #7f1d1d, 0 2px 0 #000, inset 0 1px 0 rgba(0,0,0,0.2);
+  filter: brightness(0.9);
+}
+
+/* B button — smaller, purple */
+.nes-b {
+  width: 38px;
+  height: 38px;
+  background: #7c3aed;
+  border-color: #4c1d95;
+  color: #fff;
+  box-shadow: 0 4px 0 #4c1d95, 0 5px 0 #000, inset 0 1px 0 rgba(255,255,255,0.15);
+  margin-bottom: 5px;   /* offset so B sits slightly lower than A */
+}
+.nes-b:hover  { filter: brightness(1.15); }
+.nes-b:active, .nes-b.pressed {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #4c1d95, 0 2px 0 #000;
+  filter: brightness(0.9);
+}
