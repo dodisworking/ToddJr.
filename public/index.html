@@ -179,14 +179,14 @@
         <div id="nes-controller" class="nes-controller hidden" aria-label="8-bit game controller">
           <div class="nes-inner">
 
-            <!-- D-Pad (decorative) -->
+            <!-- D-Pad (left/right move, up/down decorative) -->
             <div class="nes-left">
               <div class="nes-dpad">
                 <div class="nes-dpad-up"></div>
                 <div class="nes-dpad-mid">
-                  <div class="nes-dpad-left"></div>
+                  <button type="button" class="nes-dpad-left"  id="nes-dpad-left-btn"  aria-label="Move left">◀</button>
                   <div class="nes-dpad-ctr"></div>
-                  <div class="nes-dpad-right"></div>
+                  <button type="button" class="nes-dpad-right" id="nes-dpad-right-btn" aria-label="Move right">▶</button>
                 </div>
                 <div class="nes-dpad-down"></div>
               </div>
@@ -198,8 +198,8 @@
                 <button class="nes-sys-btn" tabindex="-1" aria-hidden="true">SEL</button>
                 <button class="nes-sys-btn" tabindex="-1" aria-hidden="true">STA</button>
               </div>
-              <p class="nes-ctrl-label">PRESS TO SWING</p>
-              <p class="nes-ctrl-hint">SPACE · Z · X</p>
+              <p class="nes-ctrl-label">← → MOVE · SPACE SWING</p>
+              <p class="nes-ctrl-hint">D-PAD + A ALSO WORK</p>
             </div>
 
             <!-- B + A action buttons -->

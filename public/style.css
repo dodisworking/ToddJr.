@@ -5037,11 +5037,17 @@ a.isaac-download-link:hover { text-decoration: underline; color: #c4b5fd; }
   font-size: 7px;
   color: #4b5563;
 }
-.nes-dpad-left  { border-radius: 3px 0 0 3px; }
-.nes-dpad-right { border-radius: 0 3px 3px 0; }
+.nes-dpad-left  { border-radius: 3px 0 0 3px; cursor: pointer; }
+.nes-dpad-right { border-radius: 0 3px 3px 0; cursor: pointer; }
 .nes-dpad-ctr   { background: #4b5563; }
-.nes-dpad-left::after  { content: '◀'; }
-.nes-dpad-right::after { content: '▶'; }
+/* Left/right are now buttons — remove pseudo-content (text is in HTML) */
+.nes-dpad-left:hover,  .nes-dpad-right:hover  { background: #4b5563; color: #93c5fd; }
+.nes-dpad-left.dpad-pressed, .nes-dpad-right.dpad-pressed,
+.nes-dpad-left:active, .nes-dpad-right:active {
+  background: #1d4ed8;
+  color: #fff;
+  border-color: #1e40af;
+}
 
 /* ── Center (Select/Start + label) ──────────────────────── */
 .nes-mid {
