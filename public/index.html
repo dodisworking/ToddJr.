@@ -198,8 +198,8 @@
                 <button class="nes-sys-btn" tabindex="-1" aria-hidden="true">SEL</button>
                 <button class="nes-sys-btn" tabindex="-1" aria-hidden="true">STA</button>
               </div>
-              <p class="nes-ctrl-label">← → MOVE &nbsp; ▲/B JUMP</p>
-              <p class="nes-ctrl-hint">SPACE = SWING &nbsp; W = JUMP</p>
+              <p class="nes-ctrl-label">← → MOVE &nbsp; SPACE/B JUMP</p>
+              <p class="nes-ctrl-hint">ENTER = SWING · 🚩 = WIN!</p>
             </div>
 
             <!-- B (jump) + A (swing) -->
@@ -217,6 +217,21 @@
             </div>
 
           </div>
+
+          <!-- ── Hearts + stats bar ── shown below controller in game mode -->
+          <div class="gm-status-bar" id="gm-status-bar">
+            <div class="gm-hearts-wrap">
+              <span class="gm-heart filled" id="gm-heart-0">♥</span>
+              <span class="gm-heart filled" id="gm-heart-1">♥</span>
+              <span class="gm-heart filled" id="gm-heart-2">♥</span>
+            </div>
+            <div class="gm-stats-wrap">
+              <span class="gm-stat-lbl">SCORE</span><span class="gm-stat-val" id="gm-score-val">0</span>
+              <span class="gm-stat-lbl">BEST</span><span class="gm-stat-val" id="gm-hi-val">0</span>
+              <span class="gm-stat-lbl">LV</span><span class="gm-stat-val" id="gm-lv-val">1</span>
+            </div>
+          </div>
+
         </div>
       </div>
       <div class="tenant-grid" id="tenant-grid-hunt"></div>
@@ -754,6 +769,6 @@
   <script src="drlab-flasks.js?v=6"></script>
   <script src="sbs-boxing.js?v=3"></script>
   <script src="app.js?v=67"></script>
-  <script src="game-mode.js?v=1"></script>
+  <script src="game-mode.js?v=4"></script>
 </body>
 </html>

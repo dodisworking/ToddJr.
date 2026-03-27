@@ -5194,3 +5194,50 @@ a.isaac-download-link:hover { text-decoration: underline; color: #c4b5fd; }
 /* Canvas in game mode (expanded height) — inline style takes priority,
    this just prevents layout jump before JS fires */
 #arena-canvas.gm-tall { height: 220px; }
+
+/* ── Game Mode status bar (hearts + stats, below controller) ─ */
+.gm-status-bar {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px 8px;
+  background: #0d0d1a;
+  border-top: 2px solid #1e293b;
+}
+/* Show only when nes-controller is visible */
+.nes-controller:not(.hidden) ~ .gm-status-bar,
+.gm-status-bar.visible { display: flex; }
+
+/* Hearts */
+.gm-hearts-wrap { display: flex; gap: 6px; align-items: center; }
+.gm-heart {
+  font-size: 24px;
+  line-height: 1;
+  transition: color 0.1s, text-shadow 0.1s, transform 0.1s;
+  image-rendering: pixelated;
+}
+.gm-heart.filled {
+  color: #ef4444;
+  text-shadow: 1px 1px 0 #7f1d1d, 0 0 8px rgba(239,68,68,.4);
+}
+.gm-heart.empty  { color: #1e293b; text-shadow: 1px 1px 0 #0f172a; }
+.gm-heart.filled:first-child { transform: scale(1.15); }
+
+/* Stats row */
+.gm-stats-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-pixel);
+}
+.gm-stat-lbl {
+  font-size: 5px;
+  color: #475569;
+  letter-spacing: .1em;
+}
+.gm-stat-val {
+  font-size: 8px;
+  color: #fbbf24;
+  min-width: 28px;
+  text-align: right;
+}
