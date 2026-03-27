@@ -179,16 +179,16 @@
         <div id="nes-controller" class="nes-controller hidden" aria-label="8-bit game controller">
           <div class="nes-inner">
 
-            <!-- D-Pad (left/right move, up/down decorative) -->
+            <!-- D-Pad -->
             <div class="nes-left">
               <div class="nes-dpad">
-                <div class="nes-dpad-up"></div>
+                <button type="button" class="nes-dpad-up"    id="nes-dpad-up-btn"    aria-label="Jump">▲</button>
                 <div class="nes-dpad-mid">
                   <button type="button" class="nes-dpad-left"  id="nes-dpad-left-btn"  aria-label="Move left">◀</button>
                   <div class="nes-dpad-ctr"></div>
                   <button type="button" class="nes-dpad-right" id="nes-dpad-right-btn" aria-label="Move right">▶</button>
                 </div>
-                <div class="nes-dpad-down"></div>
+                <div class="nes-dpad-down">▼</div>
               </div>
             </div>
 
@@ -198,17 +198,19 @@
                 <button class="nes-sys-btn" tabindex="-1" aria-hidden="true">SEL</button>
                 <button class="nes-sys-btn" tabindex="-1" aria-hidden="true">STA</button>
               </div>
-              <p class="nes-ctrl-label">← → MOVE · SPACE SWING</p>
-              <p class="nes-ctrl-hint">D-PAD + A ALSO WORK</p>
+              <p class="nes-ctrl-label">← → MOVE &nbsp; ▲/B JUMP</p>
+              <p class="nes-ctrl-hint">SPACE = SWING &nbsp; W = JUMP</p>
             </div>
 
-            <!-- B + A action buttons -->
+            <!-- B (jump) + A (swing) -->
             <div class="nes-right">
               <div class="nes-ab-row">
                 <div class="nes-ab-col">
-                  <button type="button" class="nes-action nes-b" id="nes-b-btn" aria-label="B — swing sword">B</button>
+                  <span class="nes-btn-label">JUMP</span>
+                  <button type="button" class="nes-action nes-b" id="nes-b-btn" aria-label="B — jump">B</button>
                 </div>
                 <div class="nes-ab-col">
+                  <span class="nes-btn-label">SWING</span>
                   <button type="button" class="nes-action nes-a" id="nes-a-btn" aria-label="A — swing sword">A</button>
                 </div>
               </div>
