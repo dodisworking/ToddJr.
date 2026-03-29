@@ -4704,6 +4704,7 @@ function renderIsaacLogsHtml(entries) {
             const sid   = se.id || ''
             const shref = sid ? toddApiUrl(`/api/gym/isaac-download/${encodeURIComponent(sid)}`) : '#'
             return `<div class="isaac-log-card isaac-session-item">
+              <button class="isaac-delete-btn" data-id="${escHtml(sid)}" title="Delete this report">✕</button>
               <div class="isaac-log-meta">${escHtml(se.tenantName || '')} · ${escHtml(se.folderName || '')}</div>
               <a class="isaac-download-link" href="${shref}" download>⬇ Download .xlsx</a>
               ${isaacDocLinks(se)}
@@ -4713,6 +4714,7 @@ function renderIsaacLogsHtml(entries) {
       }
     } else {
       rendered.push(`<div class="isaac-log-card">
+        <button class="isaac-delete-btn" data-id="${escHtml(id)}" title="Delete this report">✕</button>
         <div class="isaac-log-meta">${escHtml(dt)} · ${escHtml(entry.tenantName || '')} · ${escHtml(entry.folderName || '')}</div>
         <a class="isaac-download-link" href="${href}" download>⬇ Download Teacher Todd .xlsx</a>
         ${isaacDocLinks(entry)}
@@ -4733,6 +4735,31 @@ document.getElementById('isaac-easter')?.addEventListener('click', async () => {
     const logs = await res.json()
     if (!res.ok) throw new Error(logs.error || 'Failed to load')
     body.innerHTML = renderIsaacLogsHtml(Array.isArray(logs) ? logs : [])
+    // Wire delete buttons
+    body.querySelectorAll('.isaac-delete-btn').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        e.stopPropagation()
+        const id = btn.dataset.id
+        if (!id) return
+        btn.disabled = true
+        btn.textContent = '…'
+        try {
+          const dr = await fetch(sameOriginApi(`/api/gym/isaac-delete/${encodeURIComponent(id)}`), { method: 'DELETE' })
+          if (!dr.ok) throw new Error((await dr.json()).error || 'Delete failed')
+          // Remove card from DOM immediately
+          const card = btn.closest('.isaac-log-card, .isaac-session-group')
+          if (card) card.remove()
+          // If body is now empty re-render empty state
+          if (!body.querySelector('.isaac-log-card')) {
+            body.innerHTML = renderIsaacLogsHtml([])
+          }
+        } catch (err) {
+          toast(err.message || 'Could not delete', 'error')
+          btn.disabled = false
+          btn.textContent = '✕'
+        }
+      })
+    })
   } catch (e) {
     body.innerHTML = `<p>Could not load logs: ${escHtml(e.message)}</p>`
   }
