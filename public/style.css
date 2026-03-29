@@ -4166,6 +4166,23 @@ a.isaac-download-link:hover { text-decoration: underline; color: #c4b5fd; }
   margin: 0;
 }
 .isaac-session-item:last-child { border-bottom: none; }
+.isaac-pdf-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.isaac-pdf-link {
+  font-size: 10px;
+  color: #93C5FD;
+  text-decoration: none;
+  background: rgba(59,130,246,0.1);
+  border: 1px solid rgba(59,130,246,0.25);
+  border-radius: 4px;
+  padding: 2px 7px;
+  transition: background 0.15s;
+}
+.isaac-pdf-link:hover { background: rgba(59,130,246,0.2); text-decoration: underline; }
 .isaac-doc-list { margin: 6px 0 0 18px; padding: 0; font-size: 11px; color: var(--text2); }
 .isaac-doc-list li { margin-bottom: 4px; }
 .isaac-pdf-tag { font-size: 9px; color: #10B981; margin-left: 4px; }

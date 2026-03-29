@@ -116,7 +116,7 @@ if (CORS_ORIGIN_FIXED || LOCAL_DEV_CORS) {
 }
 
 // Isaac / Teacher Excel — registered immediately after body parser (must not depend on later server.js code)
-mountIsaacRoutes(app, { outputsDir: OUTPUTS_DIR, parseFolderName })
+mountIsaacRoutes(app, { outputsDir: OUTPUTS_DIR, parseFolderName, sessions })
 
 app.get('/api/health', (_req, res) => {
   res.json({
