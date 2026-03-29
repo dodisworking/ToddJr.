@@ -571,6 +571,8 @@
         <p class="gym-picker-hint">Select a tenant folder to workout on:</p>
         <select id="gym-select" class="gym-select"></select>
         <button id="gym-start-btn" class="btn-gym-start">🏃 Start Workout</button>
+        <div class="gym-picker-divider">— or —</div>
+        <button id="gym-ex-session-btn" class="btn-gym-session">⚡ Start Exercise Session <span class="gym-session-hint">all tenants, one by one</span></button>
       </div>
     </div>
 
@@ -641,12 +643,19 @@
         </div>
       </div>
 
+      <!-- Session progress bar (hidden unless exercise session active) -->
+      <div id="gym-ex-progress-wrap" class="gym-ex-progress-wrap hidden">
+        <div class="gym-ex-progress-track"><div id="gym-ex-progress-fill" class="gym-ex-progress-fill" style="width:0%"></div></div>
+        <span id="gym-ex-progress-label" class="gym-ex-progress-label">Session: 0 of 0 saved</span>
+      </div>
+
       <!-- Bottom bar -->
       <div class="gym-bottom-bar">
         <span class="gym-review-status" id="gym-review-status">0 of 0 reviewed</span>
         <div class="gym-bottom-actions">
           <button type="button" id="gym-review-notes-btn" class="btn-gym-secondary">📋 Review notes</button>
           <button type="button" id="gym-save-isaac-btn" class="btn-gym-isaac">💾 Save for Isaac</button>
+          <button type="button" id="gym-ex-save-next-btn" class="btn-gym-ex-save hidden">💾 Save & Next Tenant ›</button>
           <button id="gym-submit-btn" class="btn-gym-submit">💪 Analysis Workout</button>
         </div>
       </div>
@@ -757,6 +766,25 @@
       <div class="pixel-confirm-actions">
         <button type="button" class="pixel-confirm-btn pixel-confirm-yes" id="pixel-confirm-yes">▶ YES</button>
         <button type="button" class="pixel-confirm-btn pixel-confirm-no"  id="pixel-confirm-no" >✕ NO</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 8-bit prompt (reviewer name etc) ── -->
+  <div id="pixel-prompt-overlay" class="pixel-confirm-overlay hidden" role="dialog" aria-modal="true">
+    <div class="pixel-confirm-box">
+      <div class="pixel-confirm-title-bar">
+        <span class="pixel-confirm-skull" aria-hidden="true">✏</span>
+        <span class="pixel-confirm-title" id="pixel-prompt-title">ENTER NAME</span>
+        <span class="pixel-confirm-skull" aria-hidden="true">✏</span>
+      </div>
+      <div class="pixel-confirm-body">
+        <p class="pixel-confirm-msg" id="pixel-prompt-msg"></p>
+        <input id="pixel-prompt-input" type="text" class="pixel-prompt-input" placeholder="Your name..." autocomplete="off" />
+      </div>
+      <div class="pixel-confirm-actions">
+        <button type="button" class="pixel-confirm-btn pixel-confirm-yes" id="pixel-prompt-ok">▶ START</button>
+        <button type="button" class="pixel-confirm-btn pixel-confirm-no"  id="pixel-prompt-cancel">✕ CANCEL</button>
       </div>
     </div>
   </div>

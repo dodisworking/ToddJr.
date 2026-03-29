@@ -8,7 +8,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
 import unzipper from 'unzipper'
-import { analyzeTenant, gymAnalyzeTenant, beefedUpAnalyzeTenant } from './lib/analyzer.js'
+import { analyzeTenant, gymAnalyzeTenant, beefedUpAnalyzeTenant, doubleCheckTenant } from './lib/analyzer.js'
 import { openaiAnalyzeTenant, isOpenAiKeyConfigured, getServerOpenAiKeyHint } from './lib/openai.js'
 import { generateReport } from './lib/reporter.js'
 import { mountIsaacRoutes } from './lib/isaac-routes.js'
@@ -866,26 +866,30 @@ app.get('/api/doublecheck', async (req, res) => {
       activeLearningCount: 0
     })
 
-    // Two independent passes:
-    // 1) Regular model baseline
-    // 2) Reviewer pass (same engine, separate run for confirmation)
-    const [rawResult, reviewResult] = await Promise.all([
-      analyzeTenant(tenant, tenant.files, ({ percent, message }) => {
+    // Sequential double-check:
+    // Pass 1 (raw)    — base model reads all docs cold, produces findings
+    // Pass 2 (review) — same docs + Pass 1 findings → senior reviewer verifies,
+    //                   removes false positives, corrects errors, adds misses
+    const { firstPass, reviewed } = await doubleCheckTenant(
+      tenant,
+      tenant.files,
+      ({ percent, message }) => {
         if (!aborted) emit('sbs-progress', { side: 'raw', percent, message })
-      }, cheapOpts),
-      analyzeTenant(tenant, tenant.files, ({ percent, message }) => {
-        const reviewMsg = message ? `Reviewer: ${message}` : 'Reviewer pass running...'
-        if (!aborted) emit('sbs-progress', { side: 'beefed', percent, message: reviewMsg })
-      }, cheapOpts)
-    ])
+      },
+      ({ percent, message }) => {
+        const msg = message ? `Reviewer: ${message}` : 'Reviewer pass running...'
+        if (!aborted) emit('sbs-progress', { side: 'beefed', percent, message: msg })
+      },
+      cheapOpts
+    )
 
     if (!aborted) {
       emit('sbs-complete', {
-        tenantName: tenant.tenantName,
-        raw: rawResult,
-        beefed: reviewResult,
+        tenantName:     tenant.tenantName,
+        raw:            firstPass,
+        beefed:         reviewed,
         activeLearnings: [],
-        mode: 'doublecheck'
+        mode:           'doublecheck'
       })
     }
   } catch (err) {

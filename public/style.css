@@ -3198,6 +3198,88 @@ input:checked + .toggle-slider:before { transform:translateX(22px); background:#
 }
 .btn-gym-start:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(16,185,129,0.5); }
 
+/* ── Exercise Session button & divider ───────────────────── */
+.gym-picker-divider {
+  color: #4B5563;
+  font-size: 11px;
+  margin: 10px 0 6px;
+  font-family: var(--font-pixel);
+  letter-spacing: 1px;
+}
+.btn-gym-session {
+  padding: 11px 24px;
+  background: linear-gradient(135deg, #1E1B4B, #4F46E5);
+  color: #E0E7FF;
+  border: 1.5px solid #6366F1;
+  border-radius: var(--radius);
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  box-shadow: 0 4px 18px rgba(99,102,241,0.35);
+  transition: transform 0.15s, box-shadow 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  justify-content: center;
+}
+.btn-gym-session:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(99,102,241,0.5); }
+.gym-session-hint {
+  font-size: 8px;
+  opacity: 0.65;
+  font-family: var(--font-mono, monospace);
+}
+
+/* ── Session progress bar (above workout bottom bar) ─────── */
+.gym-ex-progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 16px;
+  background: #1E1B4B;
+  border-top: 1px solid #312E81;
+}
+.gym-ex-progress-wrap.hidden { display: none; }
+.gym-ex-progress-track {
+  flex: 1;
+  height: 6px;
+  background: #312E81;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.gym-ex-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6366F1, #A78BFA);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+.gym-ex-progress-label {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: #A78BFA;
+  white-space: nowrap;
+  letter-spacing: 0.5px;
+}
+
+/* ── Save & Next button ───────────────────────────────────── */
+.btn-gym-ex-save {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #312E81, #6366F1);
+  color: #E0E7FF;
+  border: 1.5px solid #818CF8;
+  border-radius: var(--radius);
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  box-shadow: 0 3px 14px rgba(99,102,241,0.4);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.btn-gym-ex-save:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(99,102,241,0.55); }
+.btn-gym-ex-save:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+.btn-gym-ex-save.hidden { display: none; }
+
 /* ── Loading ──────────────────────────────────────────────── */
 .gym-loading-box {
   display: flex;
@@ -4064,6 +4146,26 @@ a.isaac-download-link {
   text-decoration: none;
 }
 a.isaac-download-link:hover { text-decoration: underline; color: #c4b5fd; }
+.isaac-session-group {
+  border: 1.5px solid #4F46E5;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.isaac-session-header {
+  background: linear-gradient(135deg, #1E1B4B, #312E81);
+  color: #A78BFA;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  padding: 8px 12px;
+  letter-spacing: 0.5px;
+}
+.isaac-session-item {
+  border-radius: 0;
+  border-bottom: 1px solid #1E1B4B;
+  margin: 0;
+}
+.isaac-session-item:last-child { border-bottom: none; }
 .isaac-doc-list { margin: 6px 0 0 18px; padding: 0; font-size: 11px; color: var(--text2); }
 .isaac-doc-list li { margin-bottom: 4px; }
 .isaac-pdf-tag { font-size: 9px; color: #10B981; margin-left: 4px; }
@@ -4892,6 +4994,23 @@ a.isaac-download-link:hover { text-decoration: underline; color: #c4b5fd; }
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+.pixel-prompt-input {
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: #0a0a1a;
+  border: 2px solid #6366F1;
+  border-radius: 4px;
+  color: #E0E7FF;
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  outline: none;
+  box-sizing: border-box;
+  letter-spacing: 0.5px;
+}
+.pixel-prompt-input:focus { border-color: #A78BFA; box-shadow: 0 0 8px rgba(167,139,250,0.4); }
+.pixel-prompt-input::placeholder { color: #4B5563; }
 
 .pixel-confirm-actions {
   display: flex;

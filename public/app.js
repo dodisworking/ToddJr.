@@ -208,6 +208,45 @@ function pixelConfirm(message, title = 'WARNING') {
   })
 }
 
+function pixelPrompt(message, title = 'ENTER', placeholder = '') {
+  return new Promise(resolve => {
+    const overlay   = document.getElementById('pixel-prompt-overlay')
+    const msgEl     = document.getElementById('pixel-prompt-msg')
+    const titleEl   = document.getElementById('pixel-prompt-title')
+    const input     = document.getElementById('pixel-prompt-input')
+    const okBtn     = document.getElementById('pixel-prompt-ok')
+    const cancelBtn = document.getElementById('pixel-prompt-cancel')
+    if (!overlay) { resolve(window.prompt(message) || ''); return }
+
+    titleEl.textContent     = title
+    msgEl.textContent       = message
+    input.value             = ''
+    input.placeholder       = placeholder
+    overlay.classList.remove('hidden')
+    setTimeout(() => input.focus(), 80)
+
+    function cleanup(val) {
+      overlay.classList.add('hidden')
+      okBtn.removeEventListener('click', onOk)
+      cancelBtn.removeEventListener('click', onCancel)
+      overlay.removeEventListener('click', onBackdrop)
+      document.removeEventListener('keydown', onKey)
+      resolve(val)
+    }
+    function onOk()           { cleanup(input.value.trim()) }
+    function onCancel()       { cleanup(null) }
+    function onBackdrop(e)    { if (e.target === overlay) cleanup(null) }
+    function onKey(e) {
+      if (e.key === 'Enter')  { cleanup(input.value.trim()); e.preventDefault() }
+      if (e.key === 'Escape') { cleanup(null);               e.preventDefault() }
+    }
+    okBtn.addEventListener('click', onOk)
+    cancelBtn.addEventListener('click', onCancel)
+    overlay.addEventListener('click', onBackdrop)
+    document.addEventListener('keydown', onKey)
+  })
+}
+
 // ── Global button-click sound ────────────────────────────────
 document.addEventListener('click', e => {
   const btn = e.target.closest('button, .btn, [role="button"]')
@@ -4004,6 +4043,162 @@ const gymState = {
   sweatDrops:       [],
 }
 
+// ── Exercise Session state ─────────────────────────────────
+const gymExSession = {
+  active:       false,
+  tenants:      [],   // all tenants queued for this session
+  currentIdx:   0,    // which tenant we're on right now
+  sessionId:    null, // groups all Isaac saves from this session
+  savedCount:   0,
+  reviewerName: ''    // who is running this session
+}
+
+async function startExerciseSession() {
+  if (!state.tenants || state.tenants.length === 0) { toast('No tenants loaded', 'error'); return }
+  const name = await pixelPrompt(
+    `Who is reviewing this session?\nEnter your name to log the audit.`,
+    '⚡ START SESSION',
+    'e.g. Sarah M.'
+  )
+  if (name === null) return  // cancelled
+  gymExSession.active       = true
+  gymExSession.tenants      = [...state.tenants]
+  gymExSession.currentIdx   = 0
+  gymExSession.sessionId    = 'exsession-' + Date.now()
+  gymExSession.savedCount   = 0
+  gymExSession.reviewerName = name || 'Unknown'
+  toast(`Session started — Reviewer: ${gymExSession.reviewerName}`, 'success')
+  gymExStartTenant(0)
+}
+
+function gymExStartTenant(idx) {
+  const tenant = gymExSession.tenants[idx]
+  if (!tenant) return
+  const total = gymExSession.tenants.length
+  gymReset()
+  gymShowPanel('loading')
+  gymExUpdateProgress()
+  document.getElementById('gym-subtitle').textContent = `Session ${idx + 1}/${total}: ${tenant.tenantName}`
+  document.getElementById('gym-progress-fill').style.width = '0%'
+  document.getElementById('gym-loading-msg').textContent = 'Starting analysis...'
+
+  const url = sameOriginApi(
+    `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenant.id)}${cheapQs()}`
+  )
+  const es = new EventSource(url)
+  state.eventSource = es
+  es.addEventListener('gym-start', e => {
+    const d = JSON.parse(e.data)
+    document.getElementById('gym-subtitle').textContent = `[${idx + 1}/${total}] Analyzing: ${d.tenantName}`
+  })
+  es.addEventListener('gym-progress', e => {
+    const d = JSON.parse(e.data)
+    document.getElementById('gym-progress-fill').style.width = (d.percent || 0) + '%'
+    document.getElementById('gym-loading-msg').textContent = d.message || ''
+  })
+  es.addEventListener('gym-complete', e => {
+    es.close(); state.eventSource = null
+    const d = JSON.parse(e.data)
+    document.getElementById('gym-progress-fill').style.width = '100%'
+    gymLaunchWorkout(d)
+    gymExPlayDoneSound()
+    gymExUpdateSaveButton()
+    gymExUpdateProgress()
+  })
+  es.addEventListener('gym-error', e => {
+    es.close(); state.eventSource = null
+    const d = JSON.parse(e.data)
+    toast('Gym error: ' + d.error, 'error')
+    gymExSession.active = false
+    gymShowPanel('picker')
+  })
+  es.onerror = () => {}
+}
+
+function gymExPlayDoneSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const playTone = (freq, start, dur, vol = 0.28) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain); gain.connect(ctx.destination)
+      osc.type = 'sine'; osc.frequency.value = freq
+      gain.gain.setValueAtTime(vol, ctx.currentTime + start)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur)
+      osc.start(ctx.currentTime + start)
+      osc.stop(ctx.currentTime + start + dur + 0.05)
+    }
+    playTone(523, 0,    0.12)  // C5
+    playTone(659, 0.13, 0.12)  // E5
+    playTone(784, 0.26, 0.28)  // G5
+  } catch { /* audio not available */ }
+}
+
+function gymExUpdateProgress() {
+  const wrap  = document.getElementById('gym-ex-progress-wrap')
+  const fill  = document.getElementById('gym-ex-progress-fill')
+  const label = document.getElementById('gym-ex-progress-label')
+  if (!wrap) return
+  if (!gymExSession.active) { wrap.classList.add('hidden'); return }
+  wrap.classList.remove('hidden')
+  const total = gymExSession.tenants.length
+  const pct   = total > 0 ? Math.round((gymExSession.savedCount / total) * 100) : 0
+  if (fill)  fill.style.width = pct + '%'
+  if (label) label.textContent = `Session: ${gymExSession.savedCount} of ${total} saved`
+}
+
+function gymExUpdateSaveButton() {
+  const saveBtn   = document.getElementById('gym-save-isaac-btn')
+  const exSaveBtn = document.getElementById('gym-ex-save-next-btn')
+  if (!gymExSession.active) {
+    saveBtn?.classList.remove('hidden')
+    exSaveBtn?.classList.add('hidden')
+    return
+  }
+  saveBtn?.classList.add('hidden')
+  exSaveBtn?.classList.remove('hidden')
+  const isLast = gymExSession.currentIdx >= gymExSession.tenants.length - 1
+  if (exSaveBtn) exSaveBtn.textContent = isLast ? '💾 Save & Finish Session' : '💾 Save & Next Tenant ›'
+}
+
+async function gymExSaveAndNext() {
+  const btn = document.getElementById('gym-ex-save-next-btn')
+  if (btn) btn.disabled = true
+  try {
+    const payload = {
+      tenantName:    gymState.tenantName,
+      folderName:    gymState.folderName,
+      findings:      gymFindingsForIsaacPayload(),
+      feedbacks:     gymFeedbacksArray(),
+      annotations:   gymAnnotationsForIsaacExcel(),
+      sessionId:     gymExSession.sessionId,
+      sessionIdx:    gymExSession.currentIdx,
+      sessionTotal:  gymExSession.tenants.length,
+      reviewerName:  gymExSession.reviewerName
+    }
+    const res = await fetch(sameOriginApi('/api/gym/save-for-isaac'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    if (!res.ok) { const raw = await res.text(); throw new Error(raw.slice(0, 200)) }
+    gymExSession.savedCount++
+    gymExSession.currentIdx++
+    const isLast = gymExSession.currentIdx >= gymExSession.tenants.length
+    if (isLast) {
+      gymExSession.active = false
+      toast(`Session complete! ${gymExSession.savedCount} tenant${gymExSession.savedCount !== 1 ? 's' : ''} saved to Isaac ✓`, 'success')
+      gymOpenPicker()
+    } else {
+      toast(`Saved ✓ — loading next tenant...`, 'success')
+      gymExStartTenant(gymExSession.currentIdx)
+    }
+  } catch (e) {
+    toast(e.message || 'Could not save', 'error')
+    if (btn) btn.disabled = false
+  }
+}
+
 // ── Running animation loop ─────────────────────────────────
 const GYM_RUN_CANVAS = document.getElementById('gym-run-canvas')
 function gymAnimLoop(now) {
@@ -4248,10 +4443,15 @@ function renderGymFindingCards() {
     btn.addEventListener('click', e => { e.stopPropagation(); gymJumpToFinding(parseInt(btn.dataset.idx)) })
   })
   // Click any clamped value to expand/collapse it
+  // Clicking the evidence value also navigates to the cited document/page
   scroll.querySelectorAll('.gym-clamp-val').forEach(el => {
     el.addEventListener('click', e => {
       e.stopPropagation()
       el.classList.toggle('expanded')
+      if (el.classList.contains('gym-evidence-val')) {
+        const card = el.closest('.gym-finding-card')
+        if (card) gymJumpToFinding(parseInt(card.dataset.idx))
+      }
     })
   })
 
@@ -4462,19 +4662,50 @@ document.getElementById('gym-save-isaac-btn')?.addEventListener('click', async (
   }
 })
 
+document.getElementById('gym-ex-save-next-btn')?.addEventListener('click', gymExSaveAndNext)
+document.getElementById('gym-ex-session-btn')?.addEventListener('click', startExerciseSession)
+
 function renderIsaacLogsHtml(entries) {
   if (!entries || entries.length === 0) {
     return '<p>No exports yet. In Gym Teacher Mode use <strong>Save for Isaac</strong> — you get a compact Excel file (same columns as the main report + Teacher Todd comments + flag screenshots).</p>'
   }
-  return entries.map(entry => {
-    const dt = new Date(entry.savedAt).toLocaleString()
-    const id = entry.id || ''
+
+  // Group session saves together, standalone saves separate
+  const rendered = []
+  const seenSessions = new Set()
+
+  for (const entry of entries) {
+    const dt   = new Date(entry.savedAt).toLocaleString()
+    const id   = entry.id || ''
     const href = id ? toddApiUrl(`/api/gym/isaac-download/${encodeURIComponent(id)}`) : '#'
-    return `<div class="isaac-log-card">
-      <div class="isaac-log-meta">${escHtml(dt)} · ${escHtml(entry.tenantName || '')} · ${escHtml(entry.folderName || '')}</div>
-      <a class="isaac-download-link" href="${href}" download>⬇ Download Teacher Todd .xlsx</a>
-    </div>`
-  }).join('')
+
+    if (entry.sessionId) {
+      if (!seenSessions.has(entry.sessionId)) {
+        seenSessions.add(entry.sessionId)
+        // Collect all entries from this session
+        const sessionEntries = entries.filter(e => e.sessionId === entry.sessionId)
+        const total    = entry.sessionTotal || sessionEntries.length
+        const reviewer = entry.reviewerName ? ` · Reviewed by: ${escHtml(entry.reviewerName)}` : ''
+        rendered.push(`<div class="isaac-session-group">
+          <div class="isaac-session-header">⚡ Exercise Session · ${escHtml(dt)}${reviewer} · ${sessionEntries.length} of ${total} tenants</div>
+          ${sessionEntries.map(se => {
+            const sid  = se.id || ''
+            const shref = sid ? toddApiUrl(`/api/gym/isaac-download/${encodeURIComponent(sid)}`) : '#'
+            return `<div class="isaac-log-card isaac-session-item">
+              <div class="isaac-log-meta">${escHtml(se.tenantName || '')} · ${escHtml(se.folderName || '')}</div>
+              <a class="isaac-download-link" href="${shref}" download>⬇ Download .xlsx</a>
+            </div>`
+          }).join('')}
+        </div>`)
+      }
+    } else {
+      rendered.push(`<div class="isaac-log-card">
+        <div class="isaac-log-meta">${escHtml(dt)} · ${escHtml(entry.tenantName || '')} · ${escHtml(entry.folderName || '')}</div>
+        <a class="isaac-download-link" href="${href}" download>⬇ Download Teacher Todd .xlsx</a>
+      </div>`)
+    }
+  }
+  return rendered.join('')
 }
 
 document.getElementById('isaac-easter')?.addEventListener('click', async () => {
