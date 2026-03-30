@@ -4015,10 +4015,7 @@ async function navigateGlobalBack() {
 }
 
 btnGlobalHome?.addEventListener('click', async () => {
-  if (state.screen === 'upload') {
-    toast('You\'re already home', 'info')
-    return
-  }
+  if (state.screen === 'home') return  // already on launcher, nothing to do
   const ok = await pixelConfirm('Go home?\n\nThis starts a fresh session.\nAll progress will be lost.', '⌂ GO HOME?')
   if (!ok) return
   resetToHome()
