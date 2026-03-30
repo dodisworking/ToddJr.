@@ -5361,100 +5361,145 @@ updateSpeakerIcon()
 
 // ── Patient Turtle Animation ─────────────────────────────────
 ;(function initPatientTurtles() {
-  const S = 3   // 3px per pixel — more detail
   const PATIENCE_MSG = 'be like todd... patient... this will take a minute'
 
-  // Color palette — matches reference image
-  // 0=transparent
-  // 1=#1a0800  darkest brown  — outline + scute lines
-  // 2=#4a1e08  dark brown     — lower shell shadow
-  // 3=#7c3c18  mid-dark brown — shell body
-  // 4=#aa5e28  medium brown   — shell main
-  // 5=#cc8838  lighter brown  — upper shell
-  // 6=#e8aa48  golden tan     — top highlight
-  // 7=#184038  dark teal      — body outline
-  // 8=#40886a  mid teal       — body / head
-  // 9=#68b888  light teal     — body highlight
-  // 10=#0a0808 eye black
-  // 11=#d07010 orange eye patch
-  const C = [
-    null, '#1a0800','#4a1e08','#7c3c18','#aa5e28',
-    '#cc8838','#e8aa48','#184038','#40886a','#68b888',
-    '#0a0808','#d07010',
-  ]
-
-  // ── Sprite: 24 cols × 17 rows ────────────────────────────────
-  // Shell: rows 0–12, cols 0–16
-  // Head:  rows 2–6,  cols 17–22 (pokes right)
-  // Tail:  rows 5–6,  col 0 stub
-  // Legs:  rows 13–16 (two walk frames)
-  //
-  // Shell scute pattern:
-  //   Row 0-2   → golden top arc
-  //   Row 3     → horizontal scute divider (solid dark line)
-  //   Row 4-5   → middle scutes (medium brown)
-  //   Row 6     → second horizontal scute divider
-  //   Row 7-9   → lower scutes (darkening toward belly)
-  //   Row 10-12 → bottom curve + outline
-
-  const SHELL = [
-    //  0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16  17  18  19  20  21  22  23
-    [  0,  0,  0,  0,  0,  1,  1,  1,  1,  1,  1,  1,  1,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r0
-    [  0,  0,  0,  0,  1,  5,  6,  6,  6,  6,  6,  5,  5,  4,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r1
-    [  0,  0,  0,  1,  5,  6,  1,  6,  6,  6,  1,  6,  5,  4,  4,  1,  0,  8,  8,  8,  0,  0,  0,  0], // r2 head start
-    [  0,  0,  1,  4,  1,  1,  1,  1,  1,  1,  1,  1,  1,  4,  4,  4,  1,  7,  8, 10, 11,  0,  0,  0], // r3 divider + eye
-    [  0,  1,  4,  5,  1,  5,  4,  5,  1,  5,  4,  5,  1,  4,  4,  3,  1,  7,  8,  9,  0,  0,  0,  0], // r4
-    [  0,  1,  4,  4,  5,  4,  4,  4,  5,  4,  4,  4,  5,  4,  3,  3,  1,  0,  7,  0,  0,  0,  0,  0], // r5 neck
-    [  8,  1,  3,  4,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  3,  3,  3,  1,  0,  0,  0,  0,  0,  0], // r6 divider + tail
-    [  8,  1,  3,  4,  4,  3,  4,  4,  3,  4,  4,  3,  4,  4,  3,  3,  2,  1,  0,  0,  0,  0,  0,  0], // r7
-    [  0,  1,  3,  3,  4,  3,  3,  3,  4,  3,  3,  3,  4,  3,  3,  2,  2,  1,  0,  0,  0,  0,  0,  0], // r8
-    [  0,  1,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  2,  2,  1,  0,  0,  0,  0,  0,  0,  0], // r9
-    [  0,  0,  1,  3,  2,  2,  3,  2,  2,  2,  2,  2,  2,  3,  2,  1,  0,  0,  0,  0,  0,  0,  0,  0], // r10
-    [  0,  0,  1,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r11
-    [  0,  0,  0,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r12
-  ]
-
-  // Legs — 2 walk frames, each 4 rows
-  // Front legs: cols 1–3.  Back legs: cols 9–11.
-  // Frame 0 = front legs forward+down, back legs back+up
-  // Frame 1 = front legs back+up,    back legs forward+down
-  const LEGS = [
-    [ // frame 0
-      [  0,  0,  8,  8,  0,  0,  0,  0,  0,  0,  8,  8,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r13
-      [  0,  8,  9,  7,  0,  0,  0,  0,  0,  8,  9,  7,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r14
-      [  8,  9,  0,  0,  0,  0,  0,  0,  8,  9,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r15
-      [  7,  0,  0,  0,  0,  0,  0,  0,  7,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r16
-    ],
-    [ // frame 1 — legs swapped, whole sprite 1px lower (bob)
-      [  0,  8,  8,  0,  0,  0,  0,  0,  0,  8,  8,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r13
-      [  8,  9,  7,  0,  0,  0,  0,  0,  8,  9,  7,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r14
-      [  9,  7,  0,  0,  0,  0,  0,  9,  7,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r15
-      [  0,  7,  0,  0,  0,  0,  0,  0,  7,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r16
-    ],
-  ]
+  // ── Draw turtle using explicit canvas shapes (no pixel arrays) ──────
+  // This gives clean, recognizable turtle geometry at any scale.
+  // Turtle faces RIGHT. All coordinates are in "turtle pixels" (tp).
+  // Everything is scaled by S before drawing.
 
   function drawTurtle(ctx, frame) {
-    // Cute vertical bob: frame 1 sits 1px lower
-    const yOff = frame === 1 ? 1 : 0
-    ctx.clearRect(0, 0, 96, 60)
-    const rows = [...SHELL, ...LEGS[frame]]
-    for (let r = 0; r < rows.length; r++) {
-      for (let c = 0; c < rows[r].length; c++) {
-        const v = rows[r][c]
-        if (!v) continue
-        ctx.fillStyle = C[v]
-        ctx.fillRect(c * S, r * S + yOff, S, S)
-      }
+    const S = 4          // display scale
+    const W = 100, H = 70
+    const bob = frame === 1 ? S : 0   // cute 1-pixel bob on alternate frame
+    ctx.clearRect(0, 0, W, H)
+
+    // ── helpers ──────────────────────────────────────────────
+    // Draw a filled rectangle in turtle-pixel coords
+    function r(tx, ty, tw, th, color) {
+      ctx.fillStyle = color
+      ctx.fillRect(tx * S, ty * S + bob, tw * S, th * S)
     }
+
+    // ── Colors ───────────────────────────────────────────────
+    const OUTLINE = '#1a0800'
+    const SHAD    = '#3d1800'
+    const DARK    = '#6b3010'
+    const MID     = '#9e5020'
+    const WARM    = '#c87030'
+    const LITE    = '#e09040'
+    const GOLD    = '#f0b848'
+    const TEAL_D  = '#1a4a38'
+    const TEAL    = '#38886a'
+    const TEAL_L  = '#60c090'
+    const EYE     = '#0a0808'
+    const ORANGE  = '#d07010'
+
+    // ── SHELL ────────────────────────────────────────────────
+    // Dome oval: wider in the middle, narrow top & bottom.
+    // Each row: [startX, width, fillColor]
+    // Shell is 16tp wide × 13tp tall, anchored at x=0
+    const shellRows = [
+      [ 3, 10, GOLD ],   // r0 — golden top arc (narrow)
+      [ 2, 12, GOLD ],   // r1 — golden arc widens
+      [ 1, 14, LITE ],   // r2 — light brown
+      [ 0, 16, MID  ],   // r3 — first full-width row (SCUTE DIVIDER painted over)
+      [ 0, 16, WARM ],   // r4 — main shell
+      [ 0, 16, WARM ],   // r5 — main shell
+      [ 0, 16, MID  ],   // r6 — (SCUTE DIVIDER painted over)
+      [ 0, 16, MID  ],   // r7 — lower shell
+      [ 0, 16, DARK ],   // r8 — darkening belly
+      [ 1, 14, DARK ],   // r9
+      [ 2, 12, SHAD ],   // r10
+      [ 3, 10, SHAD ],   // r11
+    ]
+    // Fill shell bands
+    for (let i = 0; i < shellRows.length; i++) {
+      const [sx, sw, col] = shellRows[i]
+      r(sx, i, sw, 1, col)
+    }
+
+    // Shell outline (left + right edges per row)
+    for (let i = 0; i < shellRows.length; i++) {
+      const [sx, sw] = shellRows[i]
+      r(sx - 1, i, 1, 1, OUTLINE)   // left edge
+      r(sx + sw, i, 1, 1, OUTLINE)  // right edge
+    }
+    // Top and bottom outline rows
+    r(3, -1, 10, 1, OUTLINE)   // top edge
+    r(3, 12, 10, 1, OUTLINE)   // bottom edge
+
+    // ── SCUTE PATTERN (dark lines painted over shell fill) ────
+    // Two horizontal dividers
+    r(1, 3, 14, 1, OUTLINE)   // top scute divider
+    r(1, 7, 14, 1, SHAD)      // middle scute divider (slightly lighter so shell reads)
+    // Four vertical scute lines (top section cols 5 & 10; bottom cols 4,8,12)
+    r(5,  0, 1, 3, SHAD)   // top-left vertical
+    r(10, 0, 1, 3, SHAD)   // top-right vertical
+    r(4,  4, 1, 3, SHAD)   // mid-left vertical
+    r(9,  4, 1, 3, SHAD)   // mid-center vertical
+    r(13, 4, 1, 3, SHAD)   // mid-right vertical
+    r(5,  8, 1, 4, SHAD)   // bot-left vertical
+    r(11, 8, 1, 4, SHAD)   // bot-right vertical
+
+    // ── HEAD (right side, rows 2–5) ──────────────────────────
+    // Neck connector
+    r(16, 3, 2, 3, TEAL_D)
+    // Head blob
+    r(17, 1, 4, 1, TEAL_D)   // top of head
+    r(17, 2, 5, 3, TEAL)     // main head
+    r(17, 5, 3, 1, TEAL_D)   // chin
+    // Head outline
+    r(16, 1, 1, 1, OUTLINE)
+    r(21, 2, 1, 3, OUTLINE)  // right edge
+    r(17, 0, 4, 1, OUTLINE)  // top
+    r(17, 6, 3, 1, OUTLINE)  // bottom
+    // Eye (black dot + orange iris)
+    r(20, 2, 1, 1, ORANGE)
+    r(20, 3, 1, 1, EYE)
+    // Highlight spot on head
+    r(18, 2, 1, 1, TEAL_L)
+
+    // ── TAIL (left side, row 5–6, small stub) ────────────────
+    r(-1, 5, 1, 2, TEAL_D)
+
+    // ── LEGS ─────────────────────────────────────────────────
+    // 4 legs: front-pair under cols 2–5, back-pair under cols 10–13
+    // Frame 0: front legs angled forward, back legs angled back
+    // Frame 1: swapped (alternate step) + bob already applied above
+    if (frame === 0) {
+      // Front-left leg
+      r(2, 13, 2, 1, TEAL); r(1, 14, 2, 1, TEAL); r(0, 15, 2, 1, TEAL_D)
+      // Front-right leg (slightly behind)
+      r(5, 13, 2, 1, TEAL_D); r(5, 14, 1, 1, TEAL_D)
+      // Back-left leg
+      r(10, 13, 2, 1, TEAL_D); r(10, 14, 1, 1, TEAL_D)
+      // Back-right leg
+      r(12, 13, 2, 1, TEAL); r(13, 14, 2, 1, TEAL); r(14, 15, 2, 1, TEAL_D)
+    } else {
+      // Front-left leg (raised)
+      r(1, 12, 2, 1, TEAL_D); r(2, 13, 1, 1, TEAL_D)
+      // Front-right leg (planted)
+      r(4, 13, 2, 1, TEAL); r(3, 14, 2, 1, TEAL); r(2, 15, 2, 1, TEAL_D)
+      // Back-left leg (planted)
+      r(9, 13, 2, 1, TEAL); r(8, 14, 2, 1, TEAL); r(7, 15, 2, 1, TEAL_D)
+      // Back-right leg (raised)
+      r(13, 12, 2, 1, TEAL_D); r(13, 13, 1, 1, TEAL_D)
+    }
+
+    // Leg outlines (tiny dark pixels at tips)
+    r(0, 15, 1, 1, OUTLINE)
+    r(14, 15, 1, 1, OUTLINE)
   }
 
   function startTurtle(canvas) {
     const ctx = canvas.getContext('2d')
+    ctx.imageSmoothingEnabled = false
     let frame = 0
     function tick() {
       drawTurtle(ctx, frame)
       frame = 1 - frame
-      setTimeout(tick, 360)
+      setTimeout(tick, 400)
     }
     tick()
   }
