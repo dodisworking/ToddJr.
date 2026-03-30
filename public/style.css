@@ -5552,11 +5552,9 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
 
 #screen-home {
   background: #04040f;
-  display: flex;
-  align-items: center;
+  /* position/inset/display come from .screen base — do NOT override position */
   justify-content: center;
-  min-height: 100vh;
-  position: relative;
+  padding: 0;
   overflow: hidden;
 }
 
@@ -5772,11 +5770,9 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
 
 #screen-rr {
   background: #04040f;
-  display: flex;
-  align-items: center;
+  /* position/inset/display come from .screen base — do NOT override position */
   justify-content: center;
-  min-height: 100vh;
-  position: relative;
+  padding: 0;
 }
 
 #screen-rr::before {
