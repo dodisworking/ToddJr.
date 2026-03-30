@@ -40,9 +40,23 @@ function resolveSessionOpenAi(_session) {
 }
 
 const UPLOADS_DIR = path.join(__dirname, 'uploads')
-const OUTPUTS_DIR = path.join(__dirname, 'outputs')
+
+// PERSIST_DIR — set this env var to a Railway Volume mount path (e.g. /data)
+// so that Isaac saves, learnings, and Dr. Todd reports survive restarts/redeploys.
+// Without it, all data is written to the local filesystem and WILL be lost on restart.
+const PERSIST_DIR = process.env.PERSIST_DIR
+  ? path.resolve(process.env.PERSIST_DIR)
+  : path.join(__dirname, 'outputs')
+
+const OUTPUTS_DIR = PERSIST_DIR
 fs.mkdirSync(UPLOADS_DIR, { recursive: true })
 fs.mkdirSync(OUTPUTS_DIR, { recursive: true })
+
+if (process.env.PERSIST_DIR) {
+  console.log(`[storage] Persistent storage active → ${PERSIST_DIR}`)
+} else {
+  console.warn('[storage] ⚠️  No PERSIST_DIR set — data will be lost on restart. Set PERSIST_DIR to a Railway Volume path (e.g. /data).')
+}
 
 const LEARNINGS_PATH = path.join(OUTPUTS_DIR, 'learnings.json')
 const DR_TODD_REPORTS_DIR = path.join(OUTPUTS_DIR, 'dr-todd-reports')
