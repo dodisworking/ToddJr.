@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Excel Preview — Todd Jr. Report</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #e5e7eb; font-family: Calibri, 'Segoe UI', sans-serif; padding: 28px 20px; }
+
+  .page-title {
+    font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 8px;
+    letter-spacing: .03em; text-transform: uppercase;
+  }
+  .sheet-tab-bar {
+    display: flex; gap: 0; margin-bottom: 0;
+  }
+  .sheet-tab {
+    font-size: 11px; padding: 5px 16px; border: 1px solid #9ca3af; border-bottom: none;
+    cursor: pointer; border-radius: 4px 4px 0 0; background: #d1d5db; color: #6b7280;
+  }
+  .sheet-tab.active { background: #fff; color: #1f3864; font-weight: 700; border-color: #9ca3af; }
+
+  .excel-wrapper {
+    border: 1px solid #9ca3af; border-radius: 0 4px 4px 4px;
+    overflow-x: auto; background: #fff;
+    box-shadow: 0 4px 20px rgba(0,0,0,.15);
+  }
+  table {
+    border-collapse: collapse; font-size: 10.5px; color: #1e293b; min-width: 100%;
+  }
+
+  /* Row numbers column */
+  .rn {
+    background: #f3f4f6; color: #9ca3af; font-size: 10px;
+    width: 28px; text-align: center; border-right: 1px solid #d1d5db;
+    border-bottom: 1px solid #e5e7eb; padding: 0 4px;
+    font-family: 'Courier New', monospace; user-select: none;
+  }
+
+  th {
+    background: #1f3864; color: #fff; font-weight: 700; font-size: 11px;
+    padding: 7px 8px; text-align: center; border: 1px solid #93c5fd;
+    white-space: nowrap; position: sticky; top: 0; z-index: 10;
+  }
+  th.input-col { background: #4b5563; border-color: #fbbf24; }
+  th.row-num-hdr { background: #e5e7eb; border: 1px solid #d1d5db; width: 28px; }
+
+  td {
+    padding: 5px 8px; border: 1px solid #e2e8f0; vertical-align: top; max-width: 260px;
+    line-height: 1.35;
+  }
+  td.rn { font-size: 10px; color: #9ca3af; text-align: center; background: #f9fafb; }
+
+  /* Severity row colors */
+  .sev-high   td:not(.rn) { background: #fee2e2; color: #991b1b; }
+  .sev-med    td:not(.rn) { background: #fef3c7; color: #92400e; }
+  .sev-low    td:not(.rn) { background: #fef9c3; color: #713f12; }
+  .sev-ok     td:not(.rn) { background: #f0fdf4; color: #166534; }
+  .sev-ok.alt td:not(.rn) { background: #f8fafc; }
+
+  /* Severity badge */
+  .badge {
+    display: inline-block; font-weight: 700; font-size: 10px;
+    padding: 1px 6px; border-radius: 3px;
+  }
+  .badge-high   { background: #fca5a5; color: #7f1d1d; }
+  .badge-med    { background: #fcd34d; color: #78350f; }
+  .badge-low    { background: #fde68a; color: #713f12; }
+  .badge-ok     { background: #bbf7d0; color: #14532d; }
+
+  /* Input columns */
+  td.input-col {
+    background: #fffde7 !important;
+    color: #374151 !important;
+    border-color: #fbbf24 !important;
+    border-left: 2px solid #fbbf24 !important;
+    font-style: italic;
+  }
+  td.input-col.filled { font-style: normal; font-weight: 600; }
+
+  .dropdown-indicator {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10px; color: #374151;
+  }
+  .dropdown-arrow {
+    display: inline-block; width: 14px; height: 14px; background: #e5e7eb;
+    border: 1px solid #9ca3af; border-radius: 2px; text-align: center;
+    line-height: 14px; font-size: 8px; color: #6b7280; flex-shrink: 0;
+  }
+
+  .confirmed  { color: #166534 !important; font-weight: 700 !important; }
+  .incorrect  { color: #991b1b !important; font-weight: 700 !important; }
+  .needs-rev  { color: #92400e !important; font-weight: 700 !important; }
+
+  /* Frozen row indicator */
+  .freeze-line { border-bottom: 3px solid #1d4ed8 !important; }
+
+  .legend {
+    display: flex; gap: 16px; margin-top: 14px; flex-wrap: wrap; align-items: center;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #374151; }
+  .legend-swatch {
+    width: 14px; height: 14px; border-radius: 2px; border: 1px solid #d1d5db; flex-shrink: 0;
+  }
+
+  .caption {
+    font-size: 11px; color: #6b7280; margin-top: 10px;
+    font-style: italic;
+  }
+
+  /* col widths approximate */
+  .col-a { width: 90px; }
+  .col-b { width: 150px; }
+  .col-c { width: 60px; text-align: center; }
+  .col-d { width: 180px; }
+  .col-e { width: 260px; }
+  .col-f { width: 70px; text-align: center; }
+  .col-g { width: 110px; }
+  .col-h { width: 140px; text-align: center; }
+  .col-i { width: 200px; }
+</style>
+</head>
+<body>
+
+<div class="page-title">📊 Todd Jr. — Excel Report Preview</div>
+
+<div class="sheet-tab-bar">
+  <div class="sheet-tab active">Missing Documents Report</div>
+  <div class="sheet-tab">Summary</div>
+</div>
+
+<div class="excel-wrapper">
+<table>
+  <!-- Header row -->
+  <thead>
+    <tr>
+      <th class="row-num-hdr"></th>
+      <th class="col-a">Property Name</th>
+      <th class="col-b">Tenant Name</th>
+      <th class="col-c">Suite Number</th>
+      <th class="col-d">Missing Document</th>
+      <th class="col-e">Comment / Status</th>
+      <th class="col-f">Severity</th>
+      <th class="col-g">Check Type</th>
+      <th class="col-h input-col">Confirm or Deny Findings</th>
+      <th class="col-i input-col">Notes / Reason</th>
+    </tr>
+  </thead>
+  <tbody>
+
+    <!-- Row 2 — HIGH -->
+    <tr class="sev-high">
+      <td class="rn">2</td>
+      <td class="col-a">RN 6419</td>
+      <td class="col-b">Freeway Insurance</td>
+      <td class="col-c">105</td>
+      <td class="col-d">Second Amendment to Lease</td>
+      <td class="col-e">Second Amendment not found in folder.<br><br><em>Evidence: Recitals of Third Amendment dated 6/15/23, Page 1: "as modified by the Second Amendment to Lease dated…" — not found.</em></td>
+      <td class="col-f"><span class="badge badge-high">HIGH</span></td>
+      <td class="col-g">Amendment Gap</td>
+      <td class="col-h input-col filled confirmed">✓ Confirmed</td>
+      <td class="col-i input-col filled">Second Amend was never executed — confirmed with landlord records.</td>
+    </tr>
+
+    <!-- Row 3 — HIGH -->
+    <tr class="sev-high">
+      <td class="rn">3</td>
+      <td class="col-a">RN 6419</td>
+      <td class="col-b">Freeway Insurance</td>
+      <td class="col-c">105</td>
+      <td class="col-d">Landlord signature — Lease dated 8/11/20</td>
+      <td class="col-e">Landlord signature line on Page 12 is blank.<br><br><em>Evidence: Lease dated 8/11/20, Page 12, signature block: "By: ____________ [blank]"</em></td>
+      <td class="col-f"><span class="badge badge-high">HIGH</span></td>
+      <td class="col-g">Execution</td>
+      <td class="col-h input-col">
+        <span class="dropdown-indicator">
+          <span style="color:#6b7280">Select…</span>
+          <span class="dropdown-arrow">▼</span>
+        </span>
+      </td>
+      <td class="col-i input-col" style="color:#9ca3af; font-size:9.5px;">Type your notes here…</td>
+    </tr>
+
+    <!-- Row 4 — MEDIUM -->
+    <tr class="sev-med">
+      <td class="rn">4</td>
+      <td class="col-a">RN 6419</td>
+      <td class="col-b">Freeway Insurance</td>
+      <td class="col-c">105</td>
+      <td class="col-d">Exhibit C — Site Plan</td>
+      <td class="col-e">Exhibit C listed in lease index but no Exhibit C document found in folder.<br><br><em>Evidence: Exhibit Index in Lease dated 4/1/19, Page 2: Exhibit C listed as "Site Plan"</em></td>
+      <td class="col-f"><span class="badge badge-med">MEDIUM</span></td>
+      <td class="col-g">Missing Exhibit</td>
+      <td class="col-h input-col filled needs-rev">⚠ Needs Review</td>
+      <td class="col-i input-col filled">May have been filed separately — check box 4B in the archive room.</td>
+    </tr>
+
+    <!-- Row 5 — MEDIUM -->
+    <tr class="sev-med">
+      <td class="rn">5</td>
+      <td class="col-a">RN 6419</td>
+      <td class="col-b">Freeway Insurance</td>
+      <td class="col-c">105</td>
+      <td class="col-d">Lease expired Nov 30 2025</td>
+      <td class="col-e">Lease term has expired. No renewal, extension, or holdover agreement found in folder.<br><br><em>Evidence: Lease dated 8/11/20, Section 3(b): "Lease shall expire on November 30, 2025"</em></td>
+      <td class="col-f"><span class="badge badge-med">MEDIUM</span></td>
+      <td class="col-g">Lease Currency</td>
+      <td class="col-h input-col filled incorrect">✗ Incorrect</td>
+      <td class="col-i input-col filled">Renewal signed 10/1/25 — it's in the tenant's digital file, not the paper folder.</td>
+    </tr>
+
+    <!-- Row 6 — LOW -->
+    <tr class="sev-low">
+      <td class="rn">6</td>
+      <td class="col-a">RN 6419</td>
+      <td class="col-b">Freeway Insurance</td>
+      <td class="col-c">105</td>
+      <td class="col-d">OCR / Legibility issue — First Amendment</td>
+      <td class="col-e">Pages 4–6 of First Amendment appear to be scanned at low resolution. Text is garbled in places.<br><br><em>Evidence: First Amendment, Pages 4-6: extracted text contains repeated "?????" and broken characters.</em></td>
+      <td class="col-f"><span class="badge badge-low">LOW</span></td>
+      <td class="col-g">Legibility</td>
+      <td class="col-h input-col">
+        <span class="dropdown-indicator">
+          <span style="color:#6b7280">Select…</span>
+          <span class="dropdown-arrow">▼</span>
+        </span>
+      </td>
+      <td class="col-i input-col" style="color:#9ca3af; font-size:9.5px;">Type your notes here…</td>
+    </tr>
+
+    <!-- Row 7 — OK -->
+    <tr class="sev-ok">
+      <td class="rn">7</td>
+      <td class="col-a">RN 7200</td>
+      <td class="col-b">Desert Sun Café LLC</td>
+      <td class="col-c">220</td>
+      <td class="col-d">None</td>
+      <td class="col-e">All documents present and properly executed.</td>
+      <td class="col-f"><span class="badge badge-ok">OK</span></td>
+      <td class="col-g"></td>
+      <td class="col-h input-col">
+        <span class="dropdown-indicator">
+          <span style="color:#6b7280">Select…</span>
+          <span class="dropdown-arrow">▼</span>
+        </span>
+      </td>
+      <td class="col-i input-col" style="color:#9ca3af; font-size:9.5px;">Type your notes here…</td>
+    </tr>
+
+    <!-- Row 8 — HIGH -->
+    <tr class="sev-high">
+      <td class="rn">8</td>
+      <td class="col-a">RN 7200</td>
+      <td class="col-b">Apex Fitness Corp</td>
+      <td class="col-c">310</td>
+      <td class="col-d">Personal Guaranty — not executed</td>
+      <td class="col-e">Guaranty attached as Exhibit G but guarantor signature line is blank.<br><br><em>Evidence: Guaranty (Exhibit G of Lease dated 9/1/21, Page 47): "Guarantor: ____________ [blank]"</em></td>
+      <td class="col-f"><span class="badge badge-high">HIGH</span></td>
+      <td class="col-g">Guaranty</td>
+      <td class="col-h input-col">
+        <span class="dropdown-indicator">
+          <span style="color:#6b7280">Select…</span>
+          <span class="dropdown-arrow">▼</span>
+        </span>
+      </td>
+      <td class="col-i input-col" style="color:#9ca3af; font-size:9.5px;">Type your notes here…</td>
+    </tr>
+
+  </tbody>
+</table>
+</div>
+
+<!-- Legend -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-swatch" style="background:#fee2e2;border-color:#fca5a5"></div> HIGH</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#fef3c7;border-color:#fcd34d"></div> MEDIUM</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#fef9c3;border-color:#fde68a"></div> LOW</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#f0fdf4;border-color:#bbf7d0"></div> OK / All Clear</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#fffde7;border-color:#fbbf24"></div> Reviewer Input (cols H–I)</div>
+</div>
+<div class="caption">
+  Cols H &amp; I are light yellow with golden borders — visually distinct as reviewer-filled fields. Col H has a ▼ dropdown: ✓ Confirmed / ✗ Incorrect / ⚠ Needs Review.
+</div>
+
+</body>
+</html>

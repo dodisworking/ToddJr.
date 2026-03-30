@@ -4146,6 +4146,39 @@ a.isaac-download-link {
   text-decoration: none;
 }
 a.isaac-download-link:hover { text-decoration: underline; color: #c4b5fd; }
+.isaac-download-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.isaac-download-row .isaac-download-link { margin-top: 0; }
+a.isaac-pkg-btn {
+  font-size: 12px;
+  font-weight: 600;
+  color: #34d399;
+  text-decoration: none;
+  background: rgba(16,185,129,0.1);
+  border: 1px solid rgba(16,185,129,0.3);
+  border-radius: 5px;
+  padding: 2px 10px;
+  transition: background 0.15s, color 0.15s;
+}
+a.isaac-pkg-btn:hover { background: rgba(16,185,129,0.2); color: #6ee7b7; text-decoration: none; }
+a.isaac-session-pkg-btn {
+  font-size: 10px;
+  font-weight: 700;
+  color: #34d399;
+  text-decoration: none;
+  background: rgba(16,185,129,0.12);
+  border: 1px solid rgba(16,185,129,0.35);
+  border-radius: 5px;
+  padding: 3px 10px;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decoration: none; }
 .isaac-session-group {
   border: 1.5px solid #4F46E5;
   border-radius: 8px;
@@ -4159,6 +4192,11 @@ a.isaac-download-link:hover { text-decoration: underline; color: #c4b5fd; }
   font-size: 8px;
   padding: 8px 12px;
   letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .isaac-session-item {
   border-radius: 0;

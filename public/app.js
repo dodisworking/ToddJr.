@@ -4678,6 +4678,12 @@ function isaacDocLinks(entry) {
   return `<div class="isaac-pdf-links">${links}</div>`
 }
 
+function isaacPackageBtn(entry) {
+  if (!entry.id) return ''
+  const href = toddApiUrl(`/api/gym/isaac-package/${encodeURIComponent(entry.id)}`)
+  return `<a class="isaac-download-link isaac-pkg-btn" href="${href}" download title="Download Excel + all PDFs as a zip">📦 Download Package</a>`
+}
+
 function renderIsaacLogsHtml(entries) {
   if (!entries || entries.length === 0) {
     return '<p>No exports yet. In Gym Teacher Mode use <strong>Save for Isaac</strong> — you get a compact Excel file (same columns as the main report + Teacher Todd comments + flag screenshots).</p>'
@@ -4698,15 +4704,22 @@ function renderIsaacLogsHtml(entries) {
         const sessionEntries = entries.filter(e => e.sessionId === entry.sessionId)
         const total    = entry.sessionTotal || sessionEntries.length
         const reviewer = entry.reviewerName ? ` · Reviewed by: ${escHtml(entry.reviewerName)}` : ''
+        const sessionPkgHref = toddApiUrl(`/api/gym/isaac-session-package/${encodeURIComponent(entry.sessionId)}`)
         rendered.push(`<div class="isaac-session-group">
-          <div class="isaac-session-header">⚡ Exercise Session · ${escHtml(dt)}${reviewer} · ${sessionEntries.length} of ${total} tenants</div>
+          <div class="isaac-session-header">
+            ⚡ Exercise Session · ${escHtml(dt)}${reviewer} · ${sessionEntries.length} of ${total} tenants
+            <a class="isaac-session-pkg-btn" href="${sessionPkgHref}" download title="Download all reports + PDFs for this session as a zip">📦 Download Full Session</a>
+          </div>
           ${sessionEntries.map(se => {
             const sid   = se.id || ''
             const shref = sid ? toddApiUrl(`/api/gym/isaac-download/${encodeURIComponent(sid)}`) : '#'
             return `<div class="isaac-log-card isaac-session-item">
               <button class="isaac-delete-btn" data-id="${escHtml(sid)}" title="Delete this report">✕</button>
               <div class="isaac-log-meta">${escHtml(se.tenantName || '')} · ${escHtml(se.folderName || '')}</div>
-              <a class="isaac-download-link" href="${shref}" download>⬇ Download .xlsx</a>
+              <div class="isaac-download-row">
+                <a class="isaac-download-link" href="${shref}" download>⬇ Download .xlsx</a>
+                ${isaacPackageBtn(se)}
+              </div>
               ${isaacDocLinks(se)}
             </div>`
           }).join('')}
@@ -4716,7 +4729,10 @@ function renderIsaacLogsHtml(entries) {
       rendered.push(`<div class="isaac-log-card">
         <button class="isaac-delete-btn" data-id="${escHtml(id)}" title="Delete this report">✕</button>
         <div class="isaac-log-meta">${escHtml(dt)} · ${escHtml(entry.tenantName || '')} · ${escHtml(entry.folderName || '')}</div>
-        <a class="isaac-download-link" href="${href}" download>⬇ Download Teacher Todd .xlsx</a>
+        <div class="isaac-download-row">
+          <a class="isaac-download-link" href="${href}" download>⬇ Download .xlsx</a>
+          ${isaacPackageBtn(entry)}
+        </div>
         ${isaacDocLinks(entry)}
       </div>`)
     }
