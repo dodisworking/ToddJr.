@@ -2856,6 +2856,63 @@ input:checked + .toggle-slider:before { transform:translateX(22px); background:#
 .sbs-unique-badge.only-raw    { background: rgba(239,68,68,0.15);  color: #EF4444; }
 .sbs-unique-badge.only-beefed { background: rgba(16,185,129,0.15); color: #10B981; }
 
+/* ── Double-check reviewer badges ────────────────────────── */
+.review-badge {
+  font-size: 8px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 6px;
+  margin-left: auto;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+.review-confirmed { background: rgba(16,185,129,0.15); color: #10B981; border: 1px solid rgba(16,185,129,0.3); }
+.review-corrected { background: rgba(245,158,11,0.15); color: #F59E0B; border: 1px solid rgba(245,158,11,0.3); }
+.review-added     { background: rgba(239,68,68,0.18);  color: #F87171; border: 1px solid rgba(239,68,68,0.4); }
+.sbs-card-review-note {
+  font-size: 10px;
+  color: #a78bfa;
+  font-style: italic;
+  margin: 4px 0 2px;
+  line-height: 1.4;
+  padding: 4px 8px;
+  background: rgba(167,139,250,0.08);
+  border-left: 2px solid rgba(167,139,250,0.4);
+  border-radius: 0 4px 4px 0;
+}
+.removed-findings-panel {
+  margin-top: 12px;
+  border: 1px solid rgba(239,68,68,0.25);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.removed-findings-header {
+  background: rgba(239,68,68,0.12);
+  color: #F87171;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 6px 12px;
+  letter-spacing: 0.5px;
+}
+.removed-finding-item {
+  padding: 8px 12px;
+  border-top: 1px solid rgba(239,68,68,0.1);
+  background: rgba(15,23,42,0.5);
+}
+.removed-finding-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94A3B8;
+  margin-bottom: 3px;
+}
+.removed-finding-reason {
+  font-size: 10px;
+  color: #64748B;
+  line-height: 1.4;
+}
+.rc-added   { color: #F87171; }
+.rc-removed { color: #94A3B8; }
+
 /* ── Dr. Verdict ──────────────────────────────────────────── */
 /* ── Verdict CTA ── */
 .sbs-verdict-cta {

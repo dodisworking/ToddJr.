@@ -2595,13 +2595,27 @@ function renderSbsFindings(findings, otherKeys, isBeefed) {
   if (!findings || findings.length === 0) {
     return '<div class="sbs-finding-card all-clear"><span class="sbs-card-doc">✅ All Clear — no findings</span></div>'
   }
+  const isDoubleCheck = state.sbsMode === 'doublecheck'
   return findings.map(f => {
     const key      = `${f.checkType}||${(f.missingDocument || '').toLowerCase().trim()}`
     const isUnique = !otherKeys.has(key)
     const sevClass = (f.severity || 'low').toLowerCase()
-    const uniqueTag = isUnique
-      ? `<span class="sbs-unique-badge ${isBeefed ? 'only-beefed' : 'only-raw'}">${isBeefed ? '🆕 New find' : '⚠️ Only here'}</span>`
+
+    // Review status badge (doublecheck right column only)
+    let reviewBadge = ''
+    if (isDoubleCheck && isBeefed && f.reviewStatus) {
+      const rs = f.reviewStatus.toUpperCase()
+      if (rs === 'CONFIRMED') reviewBadge = `<span class="review-badge review-confirmed">✓ CONFIRMED</span>`
+      else if (rs === 'CORRECTED') reviewBadge = `<span class="review-badge review-corrected">✎ CORRECTED</span>`
+      else if (rs === 'ADDED') reviewBadge = `<span class="review-badge review-added">⚡ MISSED — ADDED</span>`
+    } else if (!isDoubleCheck && isUnique) {
+      reviewBadge = `<span class="sbs-unique-badge ${isBeefed ? 'only-beefed' : 'only-raw'}">${isBeefed ? '🆕 New find' : '⚠️ Only here'}</span>`
+    }
+
+    const reviewNoteHtml = (isDoubleCheck && isBeefed && f.reviewNote)
+      ? `<div class="sbs-card-review-note">${escHtml(f.reviewNote)}</div>`
       : ''
+
     const evidenceHtml = f.evidence
       ? `<div class="sbs-card-evidence">
            <span class="sbs-card-evidence-label">📍 Evidence</span>
@@ -2613,13 +2627,28 @@ function renderSbsFindings(findings, otherKeys, isBeefed) {
         <div class="sbs-card-top">
           <span class="sbs-card-check">${escHtml(CHECK_LABELS_SBS[f.checkType] || f.checkType || '')}</span>
           <span class="sev-pill sev-${sevClass}">${escHtml(f.severity || 'LOW')}</span>
-          ${uniqueTag}
+          ${reviewBadge}
         </div>
         <div class="sbs-card-doc">${escHtml(f.missingDocument || 'N/A')}</div>
         <div class="sbs-card-comment">${escHtml(f.comment || '')}</div>
+        ${reviewNoteHtml}
         ${evidenceHtml}
       </div>`
   }).join('')
+}
+
+function renderRemovedFindings(removedFindings) {
+  if (!removedFindings || removedFindings.length === 0) return ''
+  const items = removedFindings.map(r =>
+    `<div class="removed-finding-item">
+      <div class="removed-finding-label">🗑 ${escHtml(r.originalFinding || '')}</div>
+      <div class="removed-finding-reason">${escHtml(r.reason || '')}</div>
+    </div>`
+  ).join('')
+  return `<div class="removed-findings-panel">
+    <div class="removed-findings-header">❌ FALSE POSITIVES REMOVED (${removedFindings.length})</div>
+    ${items}
+  </div>`
 }
 
 function renderOpenAiTestLeftColumn(meta) {
@@ -2736,11 +2765,24 @@ function renderSideBySide(data) {
 
   document.getElementById('sbs-raw-count').textContent =
     rawF.length + ' finding' + (rawF.length !== 1 ? 's' : '')
-  document.getElementById('sbs-beefed-count').textContent =
-    beefedF.length + ' finding' + (beefedF.length !== 1 ? 's' : '')
+
+  // For doublecheck mode, include removed findings count in the header
+  const removedF = (mode === 'doublecheck') ? (beefed.removedFindings || []) : []
+  const added   = beefedF.filter(f => f.reviewStatus === 'ADDED').length
+  const removed = removedF.length
+  if (mode === 'doublecheck') {
+    let summary = beefedF.length + ' finding' + (beefedF.length !== 1 ? 's' : '')
+    if (added)   summary += ` · <span class="rc-added">${added} added</span>`
+    if (removed) summary += ` · <span class="rc-removed">${removed} removed</span>`
+    document.getElementById('sbs-beefed-count').innerHTML = summary
+  } else {
+    document.getElementById('sbs-beefed-count').textContent =
+      beefedF.length + ' finding' + (beefedF.length !== 1 ? 's' : '')
+  }
 
   document.getElementById('sbs-raw-findings').innerHTML    = renderFindings(rawF,    beefedKeys, false)
-  document.getElementById('sbs-beefed-findings').innerHTML = renderFindings(beefedF, rawKeys,    true)
+  document.getElementById('sbs-beefed-findings').innerHTML =
+    renderFindings(beefedF, rawKeys, true) + renderRemovedFindings(removedF)
 }
 
 // ── Verdict text renderers ─────────────────────────────────
