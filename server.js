@@ -757,6 +757,54 @@ app.post('/api/sidebyside/extract-learnings', async (req, res) => {
   }
 })
 
+// POST /api/doublecheck/extract-learnings
+// Pulls juice rules from structured double-check QA data (not verdict text)
+// ═══════════════════════════════════════════════════════════
+
+app.post('/api/doublecheck/extract-learnings', async (req, res) => {
+  try {
+    const { beefedFindings, removedFindings, rawFindings, tenantName, cheapMode } = req.body
+    if (!beefedFindings && !removedFindings) {
+      return res.status(400).json({ error: 'beefedFindings or removedFindings required' })
+    }
+
+    const allBeefed = beefedFindings || []
+    const addedFindings     = allBeefed.filter(f => f.reviewStatus === 'ADDED')
+    const correctedFindings = allBeefed.filter(f => f.reviewStatus === 'CORRECTED')
+    const confirmedFindings = allBeefed.filter(f => f.reviewStatus === 'CONFIRMED')
+
+    const { extractLearningsFromDoubleCheck } = await import('./lib/gym-trainer.js')
+    const result = await extractLearningsFromDoubleCheck({
+      addedFindings,
+      correctedFindings,
+      removedFindings: removedFindings || [],
+      confirmedFindings,
+      tenantName: tenantName || 'Unknown',
+      cheapMode:  !!cheapMode
+    })
+
+    const batchId  = `dc-${Date.now()}`
+    const savedAt  = new Date().toISOString()
+    const newLearnings = (result.learnings || []).map(l => ({
+      ...l,
+      id:         `learning-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      createdAt:  savedAt,
+      batchId,
+      tenantName: tenantName || 'Unknown',
+      source:     'doublecheck-review',
+      active:     false,
+    }))
+
+    const existing = readLearnings()
+    writeLearnings([...existing, ...newLearnings])
+
+    res.json({ learnings: newLearnings, summary: result.summary })
+  } catch (err) {
+    console.error('[doublecheck/extract-learnings]', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // POST /api/drtoddhunt/tldr
 app.post('/api/drtoddhunt/tldr', async (req, res) => {
   try {

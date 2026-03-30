@@ -2701,6 +2701,14 @@ function renderSideBySide(data) {
     if (mode === 'openaitest') verdictCta.classList.add('hidden')
     else verdictCta.classList.remove('hidden')
   }
+  // Show DC juice button only in doublecheck mode; hide in all others
+  const dcJuiceBtn = document.getElementById('btn-dc-juice')
+  if (dcJuiceBtn) {
+    if (mode === 'doublecheck') dcJuiceBtn.classList.remove('hidden')
+    else dcJuiceBtn.classList.add('hidden')
+    dcJuiceBtn.disabled    = false
+    dcJuiceBtn.textContent = '🧃 Juice this Review'
+  }
 
   const debugPanel = document.getElementById('sbs-openai-debug')
   const debugPre = document.getElementById('sbs-openai-debug-pre')
@@ -2976,6 +2984,59 @@ document.getElementById('btn-verdict-juice')?.addEventListener('click', async ()
     toast('Juice error: ' + err.message, 'error')
     btn.disabled    = false
     btn.textContent = '🧃 Send to Juice'
+  }
+})
+
+// ── Juice from double-check review (structured data, not verdict text) ──
+document.getElementById('btn-dc-juice')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btn-dc-juice')
+  const d   = state.sbsLastResult
+  if (!d || state.sbsMode !== 'doublecheck') {
+    toast('No double-check results to juice', 'error')
+    return
+  }
+
+  const beefedFindings  = d.beefed?.findings   || []
+  const removedFindings = d.beefed?.removedFindings || []
+
+  const added     = beefedFindings.filter(f => f.reviewStatus === 'ADDED').length
+  const corrected = beefedFindings.filter(f => f.reviewStatus === 'CORRECTED').length
+  const removed   = removedFindings.length
+
+  if (added + corrected + removed === 0) {
+    toast('Nothing to juice — reviewer confirmed everything, no misses or false positives found', 'info')
+    return
+  }
+
+  btn.disabled    = true
+  btn.textContent = '⏳ Juicing...'
+
+  try {
+    const res = await fetch(sameOriginApi('/api/doublecheck/extract-learnings'), {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        beefedFindings,
+        removedFindings,
+        rawFindings: d.raw?.findings || [],
+        tenantName:  d.tenantName || '',
+        ...cheapJsonExtra()
+      })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Extract failed')
+
+    const count = data.learnings?.length || 0
+    sfxJuice()
+    btn.textContent = `🧃 ${count} rule${count !== 1 ? 's' : ''} juiced!`
+    toast(`${count} prompt rule${count !== 1 ? 's' : ''} extracted from QA review and saved to Juice`, 'success')
+
+    // Open juice modal so user can see + activate immediately
+    setTimeout(() => openJuiceLearningsModal(), 400)
+  } catch (err) {
+    toast('Juice error: ' + err.message, 'error')
+    btn.disabled    = false
+    btn.textContent = '🧃 Juice this Review'
   }
 })
 
