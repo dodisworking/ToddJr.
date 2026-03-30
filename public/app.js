@@ -23,8 +23,9 @@ function _sfxNote(freq, startT, durSec, type = 'square', vol = 0.18) {
   o.stop(startT + durSec + 0.05)
 }
 
-function _sfxResume() {
-  if (_sfxCtx && _sfxCtx.state === 'suspended') _sfxCtx.resume()
+// _sfxResume: awaitable — always resolves after context is running
+async function _sfxResume() {
+  if (_sfxCtx && _sfxCtx.state === 'suspended') await _sfxCtx.resume()
 }
 
 /** 🔊 Toggle mute — called by speaker button */
@@ -43,18 +44,18 @@ function updateSpeakerIcon() {
 }
 
 /** 🎵 Button click — quick square blip */
-function sfxBtnClick() {
-  if (_sfxMuted) return
-  _sfxResume()
-  const t = _sfxCtx?.currentTime || 0
+async function sfxBtnClick() {
+  if (_sfxMuted || !_sfxCtx) return
+  await _sfxResume()
+  const t = _sfxCtx.currentTime
   _sfxNote(440, t, 0.04, 'square', 0.09)
 }
 
 /** 🎵 Hunt complete — ascending 4-note 8-bit fanfare */
-function sfxHuntComplete() {
-  if (_sfxMuted) return
-  _sfxResume()
-  const t = _sfxCtx?.currentTime || 0
+async function sfxHuntComplete() {
+  if (_sfxMuted || !_sfxCtx) return
+  await _sfxResume()
+  const t = _sfxCtx.currentTime
   _sfxNote(523,  t + 0.00, 0.12)   // C5
   _sfxNote(659,  t + 0.13, 0.12)   // E5
   _sfxNote(784,  t + 0.26, 0.12)   // G5
@@ -62,38 +63,38 @@ function sfxHuntComplete() {
 }
 
 /** 🎵 All clear — clean 3-note chime */
-function sfxAllClear() {
-  if (_sfxMuted) return
-  _sfxResume()
-  const t = _sfxCtx?.currentTime || 0
+async function sfxAllClear() {
+  if (_sfxMuted || !_sfxCtx) return
+  await _sfxResume()
+  const t = _sfxCtx.currentTime
   _sfxNote(784,  t + 0.00, 0.15, 'sine', 0.14)  // G5
   _sfxNote(988,  t + 0.16, 0.15, 'sine', 0.14)  // B5
   _sfxNote(1175, t + 0.32, 0.28, 'sine', 0.14)  // D6
 }
 
 /** 🎵 Test/verdict ready — 2-tone notification ping */
-function sfxReady() {
-  if (_sfxMuted) return
-  _sfxResume()
-  const t = _sfxCtx?.currentTime || 0
+async function sfxReady() {
+  if (_sfxMuted || !_sfxCtx) return
+  await _sfxResume()
+  const t = _sfxCtx.currentTime
   _sfxNote(880,  t + 0.00, 0.10, 'square', 0.12) // A5
   _sfxNote(1175, t + 0.12, 0.18, 'square', 0.12) // D6
 }
 
 /** 🎵 Error — low descending buzz */
-function sfxError() {
-  if (_sfxMuted) return
-  _sfxResume()
-  const t = _sfxCtx?.currentTime || 0
+async function sfxError() {
+  if (_sfxMuted || !_sfxCtx) return
+  await _sfxResume()
+  const t = _sfxCtx.currentTime
   _sfxNote(220, t + 0.00, 0.12, 'sawtooth', 0.15)
   _sfxNote(165, t + 0.13, 0.20, 'sawtooth', 0.13)
 }
 
 /** 🎵 Juice saved — quick bloop */
-function sfxJuice() {
-  if (_sfxMuted) return
-  _sfxResume()
-  const t = _sfxCtx?.currentTime || 0
+async function sfxJuice() {
+  if (_sfxMuted || !_sfxCtx) return
+  await _sfxResume()
+  const t = _sfxCtx.currentTime
   _sfxNote(440, t + 0.00, 0.07, 'square', 0.1)
   _sfxNote(659, t + 0.08, 0.12, 'square', 0.1)
 }
@@ -109,26 +110,22 @@ function sfxStopBgLoop() {
 
 /**
  * 🎵 Hunt loop — suspenseful Am pentatonic 8-bit melody (~130 BPM)
- * Notes: A3 C4 D4 E4 G4 A4  (minor pentatonic, loop of 16 steps)
  */
-function sfxStartHuntLoop() {
+async function sfxStartHuntLoop() {
   sfxStopBgLoop()
   if (_sfxMuted || !_sfxCtx) return
+  await _sfxResume()
   _bgLoopActive = true
-  _sfxResume()
 
-  // Am pentatonic: A3=220, C4=261, D4=293, E4=329, G4=392, A4=440
   const seq = [220, 261, 293, 329, 261, 392, 329, 261,
                440, 392, 329, 293, 261, 220, 293, 220]
-  const stepMs = 462  // ~130 BPM sixteenth notes
+  const stepMs = 462
   let step = 0
 
   function playStep() {
     if (!_bgLoopActive || _sfxMuted) return
     const t = _sfxCtx.currentTime
-    const freq = seq[step % seq.length]
-    _sfxNote(freq, t, 0.18, 'square', 0.07)
-    // Every 4th beat add a soft kick-like low thud
+    _sfxNote(seq[step % seq.length], t, 0.18, 'square', 0.07)
     if (step % 4 === 0) _sfxNote(55, t, 0.12, 'sawtooth', 0.05)
     step++
     _bgLoopTimer = setTimeout(playStep, stepMs)
@@ -138,17 +135,16 @@ function sfxStartHuntLoop() {
 
 /**
  * 🎵 Cook / bubbling loop — whimsical C major arpeggio (~110 BPM)
- * Notes: C4 E4 G4 C5 G4 E4  cycling
  */
-function sfxStartCookLoop() {
+async function sfxStartCookLoop() {
   sfxStopBgLoop()
   if (_sfxMuted || !_sfxCtx) return
+  await _sfxResume()
   _bgLoopActive = true
-  _sfxResume()
 
   const seq = [261, 329, 392, 523, 392, 329, 261, 329,
                392, 440, 523, 440, 392, 329, 261, 196]
-  const stepMs = 545  // ~110 BPM
+  const stepMs = 545
   let step = 0
 
   function playStep() {
@@ -156,7 +152,6 @@ function sfxStartCookLoop() {
     const t = _sfxCtx.currentTime
     const freq = seq[step % seq.length]
     _sfxNote(freq, t, 0.22, 'sine', 0.06)
-    // Occasional blip accent on beat 1 and 9
     if (step % 16 === 0 || step % 16 === 8) _sfxNote(freq * 2, t, 0.08, 'square', 0.04)
     step++
     _bgLoopTimer = setTimeout(playStep, stepMs)
