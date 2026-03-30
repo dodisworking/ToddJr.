@@ -1219,6 +1219,20 @@ input:checked + .toggle-slider:before { transform:translateX(22px); background:#
 }
 .cooking-sub { font-size: 13px; color: var(--text2); }
 
+.todd-patience-msg {
+  font-size: 11px;
+  color: var(--text3);
+  font-style: italic;
+  margin-top: 10px;
+  letter-spacing: 0.3px;
+  opacity: 0.85;
+  animation: patience-pulse 3s ease-in-out infinite;
+}
+@keyframes patience-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%       { opacity: 1; }
+}
+
 .cook-bar-wrap { width: 320px; max-width: 90vw; }
 .cook-bar {
   height: 10px;
