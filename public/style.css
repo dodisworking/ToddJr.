@@ -5542,3 +5542,441 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   min-width: 28px;
   text-align: right;
 }
+
+
+/* ═══════════════════════════════════════════════════════════
+   SCREEN: HOME — Game Launcher
+   Architecture: purely presentational root screen.
+   No hunter or RR logic lives here.
+═══════════════════════════════════════════════════════════ */
+
+#screen-home {
+  background: #04040f;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+/* CRT scanlines */
+#screen-home::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(0, 0, 0, 0.18) 3px,
+    rgba(0, 0, 0, 0.18) 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Pixel grid */
+#screen-home::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+  background-size: 8px 8px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.home-inner {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+/* ── Title block ── */
+.home-logo-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  position: relative;
+}
+
+.home-logo-frame {
+  border: 4px solid #7C3AED;
+  box-shadow:
+    0 0 0 2px #4C1D95,
+    8px 8px 0 #1a0050,
+    inset 0 0 24px rgba(124,58,237,0.12);
+  padding: 22px 48px;
+  background: #0d0820;
+}
+
+.home-logo-title {
+  font-family: var(--font-pixel);
+  font-size: clamp(20px, 5vw, 32px);
+  color: #e9d5ff;
+  text-shadow:
+    0 0 24px rgba(167,139,250,0.9),
+    3px 3px 0 #1a0050;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+}
+
+.home-logo-sub {
+  font-family: var(--font-pixel);
+  font-size: clamp(7px, 1.8vw, 11px);
+  color: #a78bfa;
+  letter-spacing: 0.2em;
+  margin-top: 10px;
+  text-shadow: 0 0 12px rgba(167,139,250,0.6);
+}
+
+/* Corner decorations (drawn with separate elements so they pop above border) */
+.home-logo-corner {
+  position: absolute;
+  font-family: var(--font-pixel);
+  font-size: 14px;
+  color: #FCD34D;
+  line-height: 1;
+  text-shadow: 0 0 8px rgba(252,211,77,0.7);
+}
+.home-logo-corner--tl { top: -4px;  left:  -4px; }
+.home-logo-corner--tr { top: -4px;  right: -4px; }
+.home-logo-corner--bl { bottom: 8px; left:  -4px; }
+.home-logo-corner--br { bottom: 8px; right: -4px; }
+
+.home-logo-tagline {
+  font-family: var(--font-pixel);
+  font-size: 5px;
+  color: #4b5563;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+}
+
+/* ── Todd sprite on home ── */
+.home-char-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  filter: drop-shadow(0 0 14px rgba(124,58,237,0.55));
+}
+
+/* ── READY TO PLAY button ── */
+.home-start-btn {
+  font-family: var(--font-pixel);
+  font-size: clamp(8px, 2vw, 11px);
+  color: #FCD34D;
+  background: transparent;
+  border: 3px solid #FCD34D;
+  box-shadow: 5px 5px 0 #78350f, 0 0 18px rgba(252,211,77,0.25);
+  padding: 14px 32px;
+  cursor: pointer;
+  letter-spacing: 0.12em;
+  animation: home-blink 1.4s step-end infinite;
+  transition: background 0.1s, color 0.1s, transform 0.08s, box-shadow 0.08s;
+}
+.home-start-btn:hover {
+  background: #FCD34D;
+  color: #1c0a00;
+  animation: none;
+  transform: translate(-2px, -2px);
+  box-shadow: 7px 7px 0 #78350f, 0 0 28px rgba(252,211,77,0.45);
+}
+.home-start-btn:active {
+  transform: translate(3px, 3px);
+  box-shadow: 2px 2px 0 #78350f;
+}
+
+@keyframes home-blink {
+  0%, 49%  { opacity: 1; }
+  50%, 100% { opacity: 0.12; }
+}
+
+.home-credits {
+  font-family: var(--font-pixel);
+  font-size: 5px;
+  color: #1f2937;
+  letter-spacing: 0.22em;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   GAME SELECT OVERLAY
+   Appears on top of home screen when "READY TO PLAY?" clicked.
+═══════════════════════════════════════════════════════════ */
+
+.game-select-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 4, 15, 0.86);
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(3px);
+}
+.game-select-overlay.hidden { display: none; }
+
+.game-select-box {
+  background: #0d0820;
+  border: 4px solid #7C3AED;
+  box-shadow:
+    0 0 0 2px #4C1D95,
+    12px 12px 0 #000;
+  min-width: 380px;
+  max-width: 560px;
+  width: 90vw;
+  animation: game-select-pop 0.1s ease-out;
+}
+
+@keyframes game-select-pop {
+  from { transform: scale(0.88); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+.game-select-header {
+  background: #7C3AED;
+  padding: 13px 20px;
+  text-align: center;
+  border-bottom: 2px solid #4C1D95;
+}
+
+.game-select-title {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: #fff;
+  letter-spacing: 0.18em;
+  text-shadow: 2px 2px 0 #2e1065;
+}
+
+.game-select-list {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── Game card base ── */
+.game-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 2px solid #1f2937;
+  background: #07060f;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.08s, background 0.08s, transform 0.08s, box-shadow 0.08s;
+  width: 100%;
+  font-family: inherit;
+}
+
+/* Active / playable */
+.game-card--active {
+  border-color: #4C1D95;
+  background: #0d0820;
+}
+.game-card--active:hover {
+  border-color: #7C3AED;
+  background: #130a28;
+  transform: translate(-2px, -2px);
+  box-shadow: 4px 4px 0 #1a0050;
+}
+.game-card--active:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 #1a0050;
+}
+
+/* Coming soon / disabled */
+.game-card--soon {
+  border-color: #111827;
+  background: #050510;
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* Game number */
+.game-card-num {
+  font-family: var(--font-pixel);
+  font-size: 22px;
+  color: #1f2937;
+  min-width: 40px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.game-card--active .game-card-num { color: #5B21B6; }
+
+/* Body */
+.game-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.game-card-name {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #ddd6fe;
+  line-height: 1.7;
+  margin-bottom: 6px;
+  letter-spacing: 0.05em;
+}
+.game-card--soon .game-card-name { color: #4b5563; }
+
+.game-card-desc {
+  font-family: var(--font-pixel);
+  font-size: 5.5px;
+  color: #6b7280;
+  line-height: 2;
+  letter-spacing: 0.03em;
+}
+
+/* Arrow (active cards) */
+.game-card-arrow {
+  font-family: var(--font-pixel);
+  font-size: 14px;
+  color: #FCD34D;
+  flex-shrink: 0;
+  animation: home-blink 0.9s step-end infinite;
+}
+
+/* Coming soon badge */
+.game-card-badge {
+  font-family: var(--font-pixel);
+  font-size: 5px;
+  color: #78350f;
+  background: #1c0900;
+  border: 2px solid #78350f;
+  padding: 4px 8px;
+  white-space: nowrap;
+  letter-spacing: 0.12em;
+  flex-shrink: 0;
+}
+
+/* Close button */
+.game-select-close {
+  display: block;
+  width: 100%;
+  padding: 11px;
+  background: #060410;
+  border: none;
+  border-top: 2px solid #1f2937;
+  font-family: var(--font-pixel);
+  font-size: 6px;
+  color: #374151;
+  cursor: pointer;
+  letter-spacing: 0.15em;
+  transition: color 0.1s, background 0.1s;
+}
+.game-select-close:hover {
+  color: #9ca3af;
+  background: #0a0418;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SCREEN: RENT ROLL CHEF — placeholder
+   Real RR UI, state, and API calls will be built here.
+   Nothing in this block connects to the Hunter.
+═══════════════════════════════════════════════════════════ */
+
+#screen-rr {
+  background: #04040f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+/* CRT scanlines on RR screen too */
+#screen-rr::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(0,0,0,0.18) 3px,
+    rgba(0,0,0,0.18) 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.rr-placeholder {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  text-align: center;
+  padding: 60px 32px;
+  border: 3px solid #065f46;
+  box-shadow: 8px 8px 0 #022c22, 0 0 0 1px #022c22;
+  background: #020f09;
+  max-width: 480px;
+}
+
+.rr-placeholder-badge {
+  font-family: var(--font-pixel);
+  font-size: 6px;
+  color: #064e3b;
+  background: #022c22;
+  border: 2px solid #065f46;
+  padding: 4px 12px;
+  letter-spacing: 0.2em;
+}
+
+.rr-placeholder-title {
+  font-family: var(--font-pixel);
+  font-size: clamp(14px, 4vw, 20px);
+  color: #10b981;
+  text-shadow:
+    0 0 20px rgba(16,185,129,0.6),
+    2px 2px 0 #022c22;
+  letter-spacing: 0.1em;
+  margin: 0;
+}
+
+.rr-placeholder-sub {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: #6b7280;
+  letter-spacing: 0.25em;
+  animation: home-blink 1.2s step-end infinite;
+  margin: 0;
+}
+
+.rr-placeholder-hint {
+  font-family: var(--font-pixel);
+  font-size: 6px;
+  color: #374151;
+  line-height: 2;
+  max-width: 360px;
+  margin: 0;
+}
+
+.rr-back-btn {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #374151;
+  background: transparent;
+  border: 2px solid #1f2937;
+  padding: 10px 22px;
+  cursor: pointer;
+  letter-spacing: 0.1em;
+  transition: color 0.1s, border-color 0.1s;
+  margin-top: 8px;
+}
+.rr-back-btn:hover {
+  color: #9ca3af;
+  border-color: #4b5563;
+}

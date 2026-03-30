@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=52" />
+  <link rel="stylesheet" href="style.css?v=53" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
@@ -24,10 +24,90 @@
     <button type="button" class="pixel-nav-btn pixel-nav-home" id="btn-global-home" title="Home — new session">⌂ HOME</button>
   </nav>
 
+  <!-- ═══════════════════════════════════════════════════════════
+       SCREEN: HOME — Game Launcher (root of all games)
+       Architecture note: this screen is purely navigation.
+       Each game lives in its own screen subtree below.
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="screen-home" class="screen active">
+    <!-- CRT scanline + grid overlays are pure CSS (::before / ::after on #screen-home) -->
+    <div class="home-inner">
+
+      <!-- Title block -->
+      <div class="home-logo-block">
+        <div class="home-logo-corner home-logo-corner--tl">╔</div>
+        <div class="home-logo-corner home-logo-corner--tr">╗</div>
+        <div class="home-logo-corner home-logo-corner--bl">╚</div>
+        <div class="home-logo-corner home-logo-corner--br">╝</div>
+        <div class="home-logo-frame">
+          <div class="home-logo-title">TODD JR.</div>
+          <div class="home-logo-sub">HUNTING SYSTEM</div>
+        </div>
+        <div class="home-logo-tagline">REAL ESTATE TOOLS · POWERED BY CLAUDE</div>
+      </div>
+
+      <!-- 8-bit Todd sprite -->
+      <div class="home-char-wrap">
+        <canvas id="home-todd-canvas" width="60" height="84" title="Todd Jr."></canvas>
+      </div>
+
+      <!-- Blinking start button -->
+      <button type="button" class="home-start-btn" id="btn-home-start">
+        ▶ READY TO PLAY?
+      </button>
+
+      <!-- Credits -->
+      <div class="home-credits">© 2026 · INSERT COIN TO CONTINUE</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       OVERLAY: GAME SELECT (appears over home screen)
+       Add new games here as cards — each card routes to its own screen.
+  ═══════════════════════════════════════════════════════════ -->
+  <div class="game-select-overlay hidden" id="game-select-overlay" role="dialog" aria-modal="true" aria-label="Select a game">
+    <div class="game-select-box">
+
+      <div class="game-select-header">
+        <span class="game-select-title">── SELECT YOUR GAME ──</span>
+      </div>
+
+      <div class="game-select-list">
+
+        <!-- ── GAME 01: Lease Index & Missing Docs Hunter ── -->
+        <!-- Routes to screen-upload and the entire existing hunter flow -->
+        <button type="button" class="game-card game-card--active" id="game-card-hunter">
+          <div class="game-card-num">01</div>
+          <div class="game-card-body">
+            <div class="game-card-name">LEASE INDEX &amp; MISSING DOCS HUNTER</div>
+            <div class="game-card-desc">Hunt missing &amp; defective documents across tenant folders. Generate Excel reports.</div>
+          </div>
+          <div class="game-card-arrow">▶</div>
+        </button>
+
+        <!-- ── GAME 02: Rent Roll Chef ── -->
+        <!-- Routes to screen-rr — under construction, disabled -->
+        <button type="button" class="game-card game-card--soon" id="game-card-rr" disabled>
+          <div class="game-card-num">02</div>
+          <div class="game-card-body">
+            <div class="game-card-name">RENT ROLL CHEF</div>
+            <div class="game-card-desc">Compare Client Accounting vs. Argus rent rolls. Surface discrepancies. Export to Excel.</div>
+          </div>
+          <div class="game-card-badge">COMING SOON</div>
+        </button>
+
+        <!-- GAME 03+ slots go here when ready -->
+
+      </div>
+
+      <button type="button" class="game-select-close" id="game-select-close">✕ CLOSE</button>
+    </div>
+  </div>
+
   <!-- ═══════════════════════════════════════
-       SCREEN: UPLOAD
+       SCREEN: UPLOAD  (Game 01 — Hunter)
   ═══════════════════════════════════════ -->
-  <div id="screen-upload" class="screen active">
+  <div id="screen-upload" class="screen">
     <div class="upload-hero">
       <div class="logo-area">
         <canvas id="hero-canvas" width="60" height="84" title="Todd Jr."></canvas>
@@ -807,9 +887,25 @@
     <span class="sfx-speaker-icon" aria-hidden="true"></span>
   </button>
 
+  <!-- ═══════════════════════════════════════════════════════════
+       SCREEN: RENT ROLL CHEF  (Game 02 — under construction)
+       Architecture note: all RR state, logic, and API calls live
+       in separate files (rr-app.js, lib/rr-*.js, /api/rr/*).
+       Nothing here touches the hunter flow above.
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="screen-rr" class="screen">
+    <div class="rr-placeholder">
+      <div class="rr-placeholder-badge">GAME 02</div>
+      <h2 class="rr-placeholder-title">RENT ROLL CHEF</h2>
+      <p class="rr-placeholder-sub">LOADING KITCHEN...</p>
+      <p class="rr-placeholder-hint">Compare accounting vs. Argus rent rolls and surface every discrepancy.</p>
+      <button type="button" id="btn-rr-back" class="rr-back-btn">← BACK TO MENU</button>
+    </div>
+  </div>
+
   <script src="drlab-flasks.js?v=6"></script>
   <script src="sbs-boxing.js?v=3"></script>
-  <script src="app.js?v=67"></script>
+  <script src="app.js?v=68"></script>
   <script src="game-mode.js?v=4"></script>
 </body>
 </html>

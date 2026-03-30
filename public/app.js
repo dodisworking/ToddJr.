@@ -262,7 +262,7 @@ document.addEventListener('click', e => {
 
 // ── State ────────────────────────────────────────────────────
 const state = {
-  screen:           'upload',
+  screen:           'home',
   sessionId:        crypto.randomUUID(),
   tenants:          [],        // [{ id, folderName, property, suite, tenantName, fileCount }]
   findings:         new Map(), // tenantId -> { findingCount, allClear, severity }
@@ -343,6 +343,10 @@ function toddApiUrl(pathOrAbsolute) {
 
 // ── DOM refs ─────────────────────────────────────────────────
 const screens = {
+  // ── Root ───────────────────────────────────────────────────
+  home:        document.getElementById('screen-home'),       // game launcher
+
+  // ── Game 01: Lease Index & Missing Docs Hunter ─────────────
   upload:      document.getElementById('screen-upload'),
   loading:     document.getElementById('screen-loading'),
   hunt:        document.getElementById('screen-hunt'),
@@ -352,6 +356,9 @@ const screens = {
   drtoddhunt:  document.getElementById('screen-drtoddhunt'),
   gym:         document.getElementById('screen-gym'),
   sidebyside:  document.getElementById('screen-sidebyside'),
+
+  // ── Game 02: Rent Roll Chef (under construction) ───────────
+  rr:          document.getElementById('screen-rr'),
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -831,6 +838,7 @@ const animState = {
   isaacTimer:   0,
 }
 
+const HOME_TODD_CANVAS = document.getElementById('home-todd-canvas')
 const HERO_CANVAS    = document.getElementById('hero-canvas')
 const HUNT_JAR_CANVAS = document.getElementById('hunt-jar-canvas')
 const HUNT_JAR_WRAP = document.getElementById('hunt-jar-wrap')
@@ -846,10 +854,12 @@ function refreshHuntJarSprite() {
 function animLoop() {
   const now = performance.now()
 
-  // Hero sprite (upload screen logo)
+  // Hero sprite (upload screen logo + home screen)
   if (animState.heroTimer < now) {
     animState.heroFrame = animState.heroFrame === 0 ? 1 : 0
-    drawFrame(HERO_CANVAS,   animState.heroFrame === 0 ? IDLE1 : IDLE2)
+    const heroSprite = animState.heroFrame === 0 ? IDLE1 : IDLE2
+    drawFrame(HERO_CANVAS,       heroSprite)
+    drawFrame(HOME_TODD_CANVAS,  heroSprite)  // same idle animation on the game launcher
     drawFrame(REPORT_CANVAS, animState.heroFrame === 0 ? VIC1 : IDLE1)
     animState.heroTimer = now + 500
   }
@@ -890,8 +900,10 @@ const btnGlobalHome = document.getElementById('btn-global-home')
 
 function updateGlobalNav() {
   if (!btnGlobalBack || !btnGlobalHome) return
-  btnGlobalHome.hidden = state.screen === 'upload'
-  btnGlobalBack.hidden = state.screen === 'upload'
+  // Hide nav entirely on the root launcher — it has its own back/close flow
+  const isRoot = state.screen === 'home'
+  btnGlobalHome.hidden = isRoot
+  btnGlobalBack.hidden = isRoot
   const busyCook = state.screen === 'cooking'
   btnGlobalBack.disabled = busyCook
   btnGlobalBack.title = busyCook ? 'Not available while cooking' : 'Go back one screen'
@@ -987,6 +999,64 @@ function goTo(screenName) {
   updateGlobalNav()
   if (screenName === 'upload' || screenName === 'loading') void refreshJuiceHomePanel()
 }
+
+// ═══════════════════════════════════════════════════════════
+// GAME LAUNCHER — Home screen routing
+// Architecture: screen-home is the root. Each game has its own
+// screen subtree. This block is purely navigation — no state.
+// ═══════════════════════════════════════════════════════════
+
+const gameSelectOverlay = document.getElementById('game-select-overlay')
+
+function showGameSelect() {
+  gameSelectOverlay?.classList.remove('hidden')
+}
+
+function hideGameSelect() {
+  gameSelectOverlay?.classList.add('hidden')
+}
+
+// "READY TO PLAY?" → open game select
+document.getElementById('btn-home-start')?.addEventListener('click', () => {
+  sfxBtnClick()
+  showGameSelect()
+})
+
+// Close button
+document.getElementById('game-select-close')?.addEventListener('click', () => {
+  hideGameSelect()
+})
+
+// ESC closes overlay
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !gameSelectOverlay?.classList.contains('hidden')) {
+    hideGameSelect()
+  }
+})
+
+// Click outside box closes overlay
+gameSelectOverlay?.addEventListener('click', e => {
+  if (e.target === gameSelectOverlay) hideGameSelect()
+})
+
+// ── Game 01: Lease Index & Missing Docs Hunter ──────────────
+document.getElementById('game-card-hunter')?.addEventListener('click', () => {
+  hideGameSelect()
+  goTo('upload')
+  sfxBtnClick()
+})
+
+// ── Game 02: Rent Roll Chef (placeholder) ──────────────────
+// Card is disabled but keep handler for future activation
+document.getElementById('game-card-rr')?.addEventListener('click', () => {
+  // Not yet active — card is disabled, this won't fire, but guard anyway
+  toast('Rent Roll Chef — coming soon!', 'info')
+})
+
+// Back button inside screen-rr → return to launcher
+document.getElementById('btn-rr-back')?.addEventListener('click', () => {
+  goTo('home')
+})
 
 // ═══════════════════════════════════════════════════════════
 // UPLOAD SCREEN
@@ -3921,14 +3991,22 @@ function fullResetSession() {
 
 function resetToHome() {
   fullResetSession()
-  goTo('upload')
+  goTo('home')
   toast('Home — new session', 'info')
 }
 
 async function navigateGlobalBack() {
   switch (state.screen) {
+    case 'home':
+      break  // already at root — nothing to go back to
     case 'upload':
-      break
+      // Back from hunter entry → return to game launcher
+      goTo('home')
+      return
+    case 'rr':
+      // Back from RR → return to game launcher
+      goTo('home')
+      return
     case 'loading':
       if (state.tenants.length === 0) {
         goTo('upload')
@@ -4045,6 +4123,7 @@ function drawJuiceEasterIcon() {
 }
 
 // ── Initial draw ─────────────────────────────────────────────
+drawFrame(HOME_TODD_CANVAS, IDLE1)
 drawFrame(HERO_CANVAS,    IDLE1)
 if (HUNT_JAR_CANVAS) drawFrame(HUNT_JAR_CANVAS, buildHuntJarComposite())
 drawFrame(COOK_CANVAS,    ATK1)
