@@ -5361,77 +5361,100 @@ updateSpeakerIcon()
 
 // ── Patient Turtle Animation ─────────────────────────────────
 ;(function initPatientTurtles() {
-  const S = 4   // px per pixel
-  const W = 24  // grid cols
+  const S = 3   // 3px per pixel — more detail
   const PATIENCE_MSG = 'be like todd... patient... this will take a minute'
 
-  // 0=transparent  1=darkest brown(outline)  2=dark brown  3=mid brown  4=light brown(highlight)
-  // 5=darkgreen(outline)  6=midgreen(body)  7=lightgreen(highlight)  8=eye-black  9=eye-iris(orange)
+  // Color palette — matches reference image
+  // 0=transparent
+  // 1=#1a0800  darkest brown  — outline + scute lines
+  // 2=#4a1e08  dark brown     — lower shell shadow
+  // 3=#7c3c18  mid-dark brown — shell body
+  // 4=#aa5e28  medium brown   — shell main
+  // 5=#cc8838  lighter brown  — upper shell
+  // 6=#e8aa48  golden tan     — top highlight
+  // 7=#184038  dark teal      — body outline
+  // 8=#40886a  mid teal       — body / head
+  // 9=#68b888  light teal     — body highlight
+  // 10=#0a0808 eye black
+  // 11=#d07010 orange eye patch
   const C = [
-    null,       // 0
-    '#2e1000',  // 1 darkest brown outline
-    '#7a3410',  // 2 dark brown shadow
-    '#b05a20',  // 3 mid brown main shell
-    '#e09040',  // 4 light brown highlight
-    '#1d5c1d',  // 5 dark green outline
-    '#3daa3d',  // 6 mid green
-    '#70d470',  // 7 light green highlight
-    '#0a0a0a',  // 8 eye black
-    '#e09820',  // 9 eye iris orange
+    null, '#1a0800','#4a1e08','#7c3c18','#aa5e28',
+    '#cc8838','#e8aa48','#184038','#40886a','#68b888',
+    '#0a0808','#d07010',
   ]
 
-  // Shell body — 12 rows × 24 cols, head pokes out right at rows 2-4
+  // ── Sprite: 24 cols × 17 rows ────────────────────────────────
+  // Shell: rows 0–12, cols 0–16
+  // Head:  rows 2–6,  cols 17–22 (pokes right)
+  // Tail:  rows 5–6,  col 0 stub
+  // Legs:  rows 13–16 (two walk frames)
+  //
+  // Shell scute pattern:
+  //   Row 0-2   → golden top arc
+  //   Row 3     → horizontal scute divider (solid dark line)
+  //   Row 4-5   → middle scutes (medium brown)
+  //   Row 6     → second horizontal scute divider
+  //   Row 7-9   → lower scutes (darkening toward belly)
+  //   Row 10-12 → bottom curve + outline
+
   const SHELL = [
-    //0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23
-    [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], // 0
-    [0, 0, 0, 1, 3, 3, 4, 3, 3, 4, 3, 3, 4, 3, 3, 1, 0, 0, 0, 0, 0, 0, 0, 0], // 1
-    [0, 0, 1, 3, 4, 3, 2, 4, 3, 2, 4, 3, 2, 4, 3, 3, 1, 6, 6, 6, 0, 0, 0, 0], // 2 head start
-    [0, 1, 3, 2, 3, 3, 3, 2, 3, 3, 3, 2, 3, 3, 2, 3, 1, 6, 7, 6, 8, 9, 0, 0], // 3 eye
-    [0, 1, 3, 3, 4, 3, 2, 3, 4, 3, 2, 3, 4, 3, 3, 4, 1, 6, 6, 6, 0, 0, 0, 0], // 4 head end
-    [1, 3, 2, 3, 3, 4, 3, 2, 3, 3, 4, 3, 2, 3, 3, 2, 3, 1, 0, 0, 0, 0, 0, 0], // 5
-    [1, 3, 3, 4, 3, 2, 3, 3, 4, 3, 2, 3, 3, 4, 3, 3, 4, 1, 0, 0, 0, 0, 0, 0], // 6
-    [1, 3, 2, 3, 3, 4, 3, 2, 3, 3, 4, 3, 2, 3, 3, 2, 3, 1, 0, 0, 0, 0, 0, 0], // 7
-    [0, 1, 3, 3, 4, 3, 2, 3, 4, 3, 2, 3, 4, 3, 3, 4, 1, 0, 0, 0, 0, 0, 0, 0], // 8
-    [0, 1, 3, 2, 3, 3, 3, 2, 3, 3, 3, 2, 3, 3, 2, 3, 1, 0, 0, 0, 0, 0, 0, 0], // 9
-    [0, 0, 1, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 1, 0, 0, 0, 0, 0, 0, 0, 0], // 10
-    [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], // 11
+    //  0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16  17  18  19  20  21  22  23
+    [  0,  0,  0,  0,  0,  1,  1,  1,  1,  1,  1,  1,  1,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r0
+    [  0,  0,  0,  0,  1,  5,  6,  6,  6,  6,  6,  5,  5,  4,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r1
+    [  0,  0,  0,  1,  5,  6,  1,  6,  6,  6,  1,  6,  5,  4,  4,  1,  0,  8,  8,  8,  0,  0,  0,  0], // r2 head start
+    [  0,  0,  1,  4,  1,  1,  1,  1,  1,  1,  1,  1,  1,  4,  4,  4,  1,  7,  8, 10, 11,  0,  0,  0], // r3 divider + eye
+    [  0,  1,  4,  5,  1,  5,  4,  5,  1,  5,  4,  5,  1,  4,  4,  3,  1,  7,  8,  9,  0,  0,  0,  0], // r4
+    [  0,  1,  4,  4,  5,  4,  4,  4,  5,  4,  4,  4,  5,  4,  3,  3,  1,  0,  7,  0,  0,  0,  0,  0], // r5 neck
+    [  8,  1,  3,  4,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  3,  3,  3,  1,  0,  0,  0,  0,  0,  0], // r6 divider + tail
+    [  8,  1,  3,  4,  4,  3,  4,  4,  3,  4,  4,  3,  4,  4,  3,  3,  2,  1,  0,  0,  0,  0,  0,  0], // r7
+    [  0,  1,  3,  3,  4,  3,  3,  3,  4,  3,  3,  3,  4,  3,  3,  2,  2,  1,  0,  0,  0,  0,  0,  0], // r8
+    [  0,  1,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  2,  2,  1,  0,  0,  0,  0,  0,  0,  0], // r9
+    [  0,  0,  1,  3,  2,  2,  3,  2,  2,  2,  2,  2,  2,  3,  2,  1,  0,  0,  0,  0,  0,  0,  0,  0], // r10
+    [  0,  0,  1,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r11
+    [  0,  0,  0,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r12
   ]
 
-  // Leg rows: two walking frames [frame0rows, frame1rows]
-  // 4 legs: front-left ~col1, back-left ~col5, back-right ~col9, front-right ~col13
+  // Legs — 2 walk frames, each 4 rows
+  // Front legs: cols 1–3.  Back legs: cols 9–11.
+  // Frame 0 = front legs forward+down, back legs back+up
+  // Frame 1 = front legs back+up,    back legs forward+down
   const LEGS = [
-    [ // frame 0 — front legs down, back legs up
-      [0, 6, 6, 0, 0, 0, 6, 0, 0, 6, 0, 0, 0, 6, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0], // 12
-      [6, 7, 5, 0, 0, 6, 7, 0, 6, 7, 0, 0, 6, 7, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0], // 13
-      [5, 0, 0, 0, 0, 5, 0, 0, 5, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], // 14
+    [ // frame 0
+      [  0,  0,  8,  8,  0,  0,  0,  0,  0,  0,  8,  8,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r13
+      [  0,  8,  9,  7,  0,  0,  0,  0,  0,  8,  9,  7,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r14
+      [  8,  9,  0,  0,  0,  0,  0,  0,  8,  9,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r15
+      [  7,  0,  0,  0,  0,  0,  0,  0,  7,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r16
     ],
-    [ // frame 1 — front legs up, back legs down
-      [6, 6, 0, 0, 0, 6, 6, 0, 0, 0, 6, 6, 0, 0, 6, 6, 0, 0, 0, 0, 0, 0, 0, 0], // 12
-      [7, 5, 0, 0, 7, 5, 6, 0, 0, 7, 5, 6, 0, 7, 5, 6, 0, 0, 0, 0, 0, 0, 0, 0], // 13
-      [0, 5, 0, 0, 0, 5, 0, 0, 0, 0, 5, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0], // 14
+    [ // frame 1 — legs swapped, whole sprite 1px lower (bob)
+      [  0,  8,  8,  0,  0,  0,  0,  0,  0,  8,  8,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r13
+      [  8,  9,  7,  0,  0,  0,  0,  0,  8,  9,  7,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r14
+      [  9,  7,  0,  0,  0,  0,  0,  9,  7,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r15
+      [  0,  7,  0,  0,  0,  0,  0,  0,  7,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0], // r16
     ],
   ]
 
-  function drawTurtle(ctx, legFrame) {
-    ctx.clearRect(0, 0, W * S, 15 * S)
-    const rows = [...SHELL, ...LEGS[legFrame]]
+  function drawTurtle(ctx, frame) {
+    // Cute vertical bob: frame 1 sits 1px lower
+    const yOff = frame === 1 ? 1 : 0
+    ctx.clearRect(0, 0, 96, 60)
+    const rows = [...SHELL, ...LEGS[frame]]
     for (let r = 0; r < rows.length; r++) {
       for (let c = 0; c < rows[r].length; c++) {
         const v = rows[r][c]
         if (!v) continue
         ctx.fillStyle = C[v]
-        ctx.fillRect(c * S, r * S, S, S)
+        ctx.fillRect(c * S, r * S + yOff, S, S)
       }
     }
   }
 
   function startTurtle(canvas) {
     const ctx = canvas.getContext('2d')
-    let leg = 0
+    let frame = 0
     function tick() {
-      drawTurtle(ctx, leg)
-      leg = 1 - leg
-      setTimeout(tick, 380)
+      drawTurtle(ctx, frame)
+      frame = 1 - frame
+      setTimeout(tick, 360)
     }
     tick()
   }
