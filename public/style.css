@@ -1219,18 +1219,34 @@ input:checked + .toggle-slider:before { transform:translateX(22px); background:#
 }
 .cooking-sub { font-size: 13px; color: var(--text2); }
 
-.todd-patience-msg {
+.todd-patience-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  justify-content: center;
+}
+.patience-turtle {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  flex-shrink: 0;
+}
+.patience-text {
   font-size: 11px;
   color: var(--text3);
   font-style: italic;
-  margin-top: 10px;
   letter-spacing: 0.3px;
-  opacity: 0.85;
-  animation: patience-pulse 3s ease-in-out infinite;
+  min-width: 260px;
 }
-@keyframes patience-pulse {
-  0%, 100% { opacity: 0.5; }
-  50%       { opacity: 1; }
+.patience-text::after {
+  content: '▎';
+  animation: blink-cursor 0.8s step-end infinite;
+  color: var(--text3);
+  margin-left: 1px;
+}
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
 }
 
 .cook-bar-wrap { width: 320px; max-width: 90vw; }

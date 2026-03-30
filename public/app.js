@@ -5358,3 +5358,96 @@ document.getElementById('gym-results-back').addEventListener('click', () => {
 // ── Speaker / Mute toggle ────────────────────────────────────
 document.getElementById('btn-sfx-toggle')?.addEventListener('click', sfxToggleMute)
 updateSpeakerIcon()
+
+// ── Patient Turtle Animation ─────────────────────────────────
+;(function initPatientTurtles() {
+  const S = 5  // pixel size in canvas pixels
+  const PATIENCE_MSG = 'be like todd... patient... this will take a minute'
+
+  // Color palette: 0=transparent, 1=dark shell, 2=mid shell, 3=light shell, 4=head, 5=eye, 6=leg/tail
+  const COLORS = {
+    1: '#1a5c1a',
+    2: '#2d9e2d',
+    3: '#5cd45c',
+    4: '#4ab84a',
+    5: '#0a0a0a',
+    6: '#4ab84a',
+  }
+
+  // Body rows — same for both walking frames
+  const BODY = [
+    [0,0,1,1,1,1,0,4,0],
+    [0,1,2,3,2,3,1,4,0],
+    [1,2,3,2,3,2,2,4,5],
+    [1,2,2,2,2,2,2,1,0],
+    [1,2,3,2,3,2,2,1,0],
+    [0,1,2,3,2,3,1,0,0],
+    [0,0,1,1,1,1,0,0,0],
+  ]
+  // Two leg frames to simulate walking
+  const LEGS = [
+    [[0,6,0,0,6,0,0,0,0],[6,0,0,0,0,6,0,0,0]],
+    [[6,0,0,0,0,6,0,0,0],[0,6,0,0,6,0,0,0,0]],
+  ]
+
+  function drawTurtle(ctx, legFrame) {
+    ctx.clearRect(0, 0, 50, 45)
+    const rows = [...BODY, ...LEGS[legFrame]]
+    for (let r = 0; r < rows.length; r++) {
+      for (let c = 0; c < rows[r].length; c++) {
+        const v = rows[r][c]
+        if (!v || !COLORS[v]) continue
+        ctx.fillStyle = COLORS[v]
+        ctx.fillRect(c * S, r * S, S, S)
+      }
+    }
+  }
+
+  function startTurtle(canvas) {
+    const ctx = canvas.getContext('2d')
+    let leg = 0
+    let stopped = false
+    function tick() {
+      if (stopped) return
+      drawTurtle(ctx, leg)
+      leg = 1 - leg
+      setTimeout(tick, 350)
+    }
+    tick()
+    return () => { stopped = true }
+  }
+
+  function startTypewriter(span) {
+    let cancelled = false
+    let timeoutId = null
+
+    function loop() {
+      if (cancelled) return
+      let i = 0
+      span.textContent = ''
+
+      function type() {
+        if (cancelled) return
+        if (i >= PATIENCE_MSG.length) {
+          // Done typing — pause then restart
+          timeoutId = setTimeout(loop, 2200)
+          return
+        }
+        span.textContent += PATIENCE_MSG[i]
+        i++
+        timeoutId = setTimeout(type, 55)
+      }
+      type()
+    }
+
+    loop()
+    return () => { cancelled = true; clearTimeout(timeoutId) }
+  }
+
+  document.querySelectorAll('.todd-patience-wrap').forEach(wrap => {
+    const canvas = wrap.querySelector('.patience-turtle')
+    const span   = wrap.querySelector('.patience-text')
+    if (canvas) startTurtle(canvas)
+    if (span)   startTypewriter(span)
+  })
+})();
