@@ -592,9 +592,12 @@ html, body {
   letter-spacing: 0.5px;
   text-transform: uppercase;
 }
-.badge-prop { background: #1E3A5F; color: #93C5FD; }
+.badge-prop  { background: #1E3A5F; color: #93C5FD; }
 .badge-suite { background: #1F2937; color: #9CA3AF; }
 .badge-files { background: #1C1917; color: #A8A29E; }
+.badge-size  { background: #1a2010; color: #86efac; }
+.badge-batch { background: #1c0f00; color: #fbbf24; border: 1px solid #78350f; }
+.badge-batch--single { background: #0a1020; color: #6b7280; border: 1px solid #1f2937; }
 
 .card-tenant-name {
   font-size: 13px;

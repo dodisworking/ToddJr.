@@ -2,9 +2,17 @@
 // 8-BIT SOUND ENGINE — Web Audio API, no files needed
 // ═══════════════════════════════════════════════════════════
 
-const _sfxCtx = (() => {
-  try { return new (window.AudioContext || window.webkitAudioContext)() } catch { return null }
-})()
+// AudioContext created lazily on first user gesture — Chrome blocks
+// AudioContexts created at page load (autoplay policy).
+let _sfxCtx = null
+
+function _ensureCtx() {
+  if (!_sfxCtx) {
+    try { _sfxCtx = new (window.AudioContext || window.webkitAudioContext)() }
+    catch (e) { console.warn('[sfx] AudioContext unavailable:', e) }
+  }
+  return _sfxCtx
+}
 
 // ── Mute state (persisted in localStorage) ──────────────────
 let _sfxMuted = localStorage.getItem('toddSfxMuted') === '1'
@@ -23,8 +31,10 @@ function _sfxNote(freq, startT, durSec, type = 'square', vol = 0.18) {
   o.stop(startT + durSec + 0.05)
 }
 
-// _sfxResume: awaitable — always resolves after context is running
+// _sfxResume: creates context on first call (must be within user gesture),
+// then awaits resume if suspended. Always call this before scheduling notes.
 async function _sfxResume() {
+  _ensureCtx()
   if (_sfxCtx && _sfxCtx.state === 'suspended') await _sfxCtx.resume()
 }
 
@@ -1398,17 +1408,48 @@ function updateHud() {
   if (el) el.textContent = state.tenants.length
 }
 
+/** Estimate how many Claude batches this tenant will need.
+ *  Mirrors analyzer.js buildBatches: groups PDFs until base64 total > 20MB. */
+function predictBatches(files) {
+  const BATCH_MAX_BASE64 = 20 * 1024 * 1024
+  const PDF_MAX_BYTES    = 32 * 1024 * 1024
+  const pdfs = (files || []).filter(f => {
+    const ext = f.name.split('.').pop().toLowerCase()
+    return ext === 'pdf' && (f.sizeBytes || 0) <= PDF_MAX_BYTES
+  })
+  if (!pdfs.length) return 1
+  let batches = 0, cur = 0
+  for (const f of pdfs) {
+    const b64 = Math.ceil((f.sizeBytes || 0) * 4 / 3) + 1024
+    if (cur > 0 && cur + b64 > BATCH_MAX_BASE64) { batches++; cur = b64 }
+    else cur += b64
+  }
+  if (cur > 0) batches++
+  return batches
+}
+
 function makeTenantCard(t, animDelay = 0, removable = false) {
   const card = document.createElement('div')
   card.className = 'tenant-card'
   card.id = `card-${t.id}`
   card.style.animationDelay = (animDelay * 60) + 'ms'
+
+  // ── Total size + batch prediction ──────────────────────────
+  const totalBytes  = (t.files || []).reduce((s, f) => s + (f.sizeBytes || 0), 0)
+  const batchCount  = predictBatches(t.files)
+  const sizeLabel   = fmtBytes(totalBytes)
+  const batchBadge  = batchCount > 1
+    ? `<span class="badge badge-batch">⚡ ${batchCount} BATCHES</span>`
+    : `<span class="badge badge-batch badge-batch--single">⚡ 1 BATCH</span>`
+
   card.innerHTML = `
     ${removable ? `<button class="card-remove" title="Remove tenant">−</button>` : ''}
     <div class="card-badges">
       <span class="badge badge-prop">${escHtml(t.property)}</span>
       <span class="badge badge-suite">${escHtml(String(t.suite))}</span>
       <span class="badge badge-files">${t.fileCount} file${t.fileCount !== 1 ? 's' : ''}</span>
+      <span class="badge badge-size">${sizeLabel}</span>
+      ${batchBadge}
     </div>
     <div class="card-tenant-name" title="${escHtml(t.tenantName)}">${escHtml(t.tenantName)}</div>
     ${t.files && t.files.length > 0 ? `
