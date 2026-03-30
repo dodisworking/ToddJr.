@@ -1002,55 +1002,20 @@ function goTo(screenName) {
 
 // ═══════════════════════════════════════════════════════════
 // GAME LAUNCHER — Home screen routing
-// Architecture: screen-home is the root. Each game has its own
-// screen subtree. This block is purely navigation — no state.
+// Games are listed directly on screen-home (NES-style menu).
+// Each button routes straight to its game — no overlay needed.
+// Add new game rows in index.html + a handler here.
 // ═══════════════════════════════════════════════════════════
-
-const gameSelectOverlay = document.getElementById('game-select-overlay')
-
-function showGameSelect() {
-  gameSelectOverlay?.classList.remove('hidden')
-}
-
-function hideGameSelect() {
-  gameSelectOverlay?.classList.add('hidden')
-}
-
-// "READY TO PLAY?" → open game select
-document.getElementById('btn-home-start')?.addEventListener('click', () => {
-  sfxBtnClick()
-  showGameSelect()
-})
-
-// Close button
-document.getElementById('game-select-close')?.addEventListener('click', () => {
-  hideGameSelect()
-})
-
-// ESC closes overlay
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && !gameSelectOverlay?.classList.contains('hidden')) {
-    hideGameSelect()
-  }
-})
-
-// Click outside box closes overlay
-gameSelectOverlay?.addEventListener('click', e => {
-  if (e.target === gameSelectOverlay) hideGameSelect()
-})
 
 // ── Game 01: Lease Index & Missing Docs Hunter ──────────────
 document.getElementById('game-card-hunter')?.addEventListener('click', () => {
-  hideGameSelect()
   goTo('upload')
-  sfxBtnClick()
 })
 
-// ── Game 02: Rent Roll Chef (placeholder) ──────────────────
-// Card is disabled but keep handler for future activation
+// ── Game 02: Rent Roll Chef (coming soon — disabled) ────────
+// Handler wired but button is disabled in HTML. Activate when ready.
 document.getElementById('game-card-rr')?.addEventListener('click', () => {
-  // Not yet active — card is disabled, this won't fire, but guard anyway
-  toast('Rent Roll Chef — coming soon!', 'info')
+  goTo('rr')
 })
 
 // Back button inside screen-rr → return to launcher

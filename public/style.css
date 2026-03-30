@@ -5545,15 +5545,13 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
 
 
 /* ═══════════════════════════════════════════════════════════
-   SCREEN: HOME — Game Launcher
-   Architecture: purely presentational root screen.
-   No hunter or RR logic lives here.
+   SCREEN: HOME — NES-style game select
+   Both games visible on screen. No popup. Direct select.
 ═══════════════════════════════════════════════════════════ */
 
 #screen-home {
   background: #04040f;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   min-height: 100vh;
@@ -5568,10 +5566,10 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   inset: 0;
   background: repeating-linear-gradient(
     0deg,
-    transparent,
+    transparent 0px,
     transparent 3px,
-    rgba(0, 0, 0, 0.18) 3px,
-    rgba(0, 0, 0, 0.18) 4px
+    rgba(0,0,0,0.2) 3px,
+    rgba(0,0,0,0.2) 4px
   );
   pointer-events: none;
   z-index: 1;
@@ -5583,307 +5581,192 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+    linear-gradient(rgba(255,255,255,0.016) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.016) 1px, transparent 1px);
   background-size: 8px 8px;
   pointer-events: none;
   z-index: 0;
 }
 
+/* Center column */
 .home-inner {
   position: relative;
   z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 28px;
-  padding: 48px 24px;
+  gap: 24px;
+  padding: 40px 24px;
+  width: 100%;
+  max-width: 560px;
+}
+
+/* ── Title ── */
+.home-title-wrap {
   text-align: center;
-}
-
-/* ── Title block ── */
-.home-logo-block {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  position: relative;
-}
-
-.home-logo-frame {
-  border: 4px solid #7C3AED;
+  border: 3px solid #7C3AED;
   box-shadow:
     0 0 0 2px #4C1D95,
-    8px 8px 0 #1a0050,
-    inset 0 0 24px rgba(124,58,237,0.12);
-  padding: 22px 48px;
-  background: #0d0820;
+    6px 6px 0 #1a0050,
+    inset 0 0 20px rgba(124,58,237,0.1);
+  background: #0a0818;
+  padding: 18px 40px 16px;
+  width: 100%;
 }
 
-.home-logo-title {
+.home-title-top {
   font-family: var(--font-pixel);
-  font-size: clamp(20px, 5vw, 32px);
+  font-size: clamp(22px, 6vw, 36px);
   color: #e9d5ff;
   text-shadow:
-    0 0 24px rgba(167,139,250,0.9),
+    0 0 28px rgba(167,139,250,0.95),
     3px 3px 0 #1a0050;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   line-height: 1.2;
 }
 
-.home-logo-sub {
+.home-title-sub {
   font-family: var(--font-pixel);
-  font-size: clamp(7px, 1.8vw, 11px);
-  color: #a78bfa;
-  letter-spacing: 0.2em;
-  margin-top: 10px;
-  text-shadow: 0 0 12px rgba(167,139,250,0.6);
+  font-size: clamp(5px, 1.4vw, 8px);
+  color: #7c5fc8;
+  letter-spacing: 0.22em;
+  margin-top: 8px;
+  text-shadow: 0 0 10px rgba(124,95,200,0.5);
 }
 
-/* Corner decorations (drawn with separate elements so they pop above border) */
-.home-logo-corner {
-  position: absolute;
+/* ── Todd sprite ── */
+.home-sprite {
+  image-rendering: pixelated;
+  filter: drop-shadow(0 0 12px rgba(124,58,237,0.5));
+}
+
+/* ── Game menu ── */
+.home-game-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 3px solid #2d1b69;
+  box-shadow: 6px 6px 0 #0a0020;
+  background: #070510;
+}
+
+.home-menu-label {
   font-family: var(--font-pixel);
-  font-size: 14px;
+  font-size: 6px;
+  color: #4b3a8a;
+  letter-spacing: 0.25em;
+  text-align: center;
+  padding: 10px;
+  border-bottom: 2px solid #1a0f3a;
+  background: #0a0820;
+}
+
+/* ── Each game row ── */
+.home-game-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  border: none;
+  border-bottom: 2px solid #110a2a;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.08s;
+}
+.home-game-row:last-child { border-bottom: none; }
+
+/* Active/playable row */
+.home-game-row--active {
+  background: #0a0620;
+}
+.home-game-row--active:hover {
+  background: #150b38;
+}
+.home-game-row--active:hover .home-game-cursor {
+  opacity: 1;
+  animation: home-blink 0.5s step-end infinite;
+}
+.home-game-row--active:hover .home-game-title {
+  color: #fff;
+  text-shadow: 0 0 10px rgba(167,139,250,0.7);
+}
+.home-game-row--active:active {
+  background: #1e0f50;
+}
+
+/* Coming soon row */
+.home-game-row--soon {
+  background: #050410;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Blinking cursor ▶ */
+.home-game-cursor {
+  font-family: var(--font-pixel);
+  font-size: 10px;
   color: #FCD34D;
-  line-height: 1;
-  text-shadow: 0 0 8px rgba(252,211,77,0.7);
+  min-width: 14px;
+  opacity: 0;
+  flex-shrink: 0;
 }
-.home-logo-corner--tl { top: -4px;  left:  -4px; }
-.home-logo-corner--tr { top: -4px;  right: -4px; }
-.home-logo-corner--bl { bottom: 8px; left:  -4px; }
-.home-logo-corner--br { bottom: 8px; right: -4px; }
+.home-game-row--active:hover .home-game-cursor {
+  opacity: 1;
+}
 
-.home-logo-tagline {
+/* Game number */
+.home-game-num {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: #3d2a7a;
+  min-width: 24px;
+  flex-shrink: 0;
+}
+.home-game-row--active .home-game-num { color: #5B21B6; }
+
+/* Game title */
+.home-game-title {
+  font-family: var(--font-pixel);
+  font-size: clamp(6px, 1.6vw, 9px);
+  color: #c4b5fd;
+  letter-spacing: 0.05em;
+  line-height: 1.6;
+  flex: 1;
+  transition: color 0.08s;
+}
+.home-game-row--soon .home-game-title { color: #374151; }
+
+/* Coming soon badge */
+.home-game-soon {
   font-family: var(--font-pixel);
   font-size: 5px;
-  color: #4b5563;
-  letter-spacing: 0.25em;
-  text-transform: uppercase;
-}
-
-/* ── Todd sprite on home ── */
-.home-char-wrap {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  filter: drop-shadow(0 0 14px rgba(124,58,237,0.55));
-}
-
-/* ── READY TO PLAY button ── */
-.home-start-btn {
-  font-family: var(--font-pixel);
-  font-size: clamp(8px, 2vw, 11px);
-  color: #FCD34D;
-  background: transparent;
-  border: 3px solid #FCD34D;
-  box-shadow: 5px 5px 0 #78350f, 0 0 18px rgba(252,211,77,0.25);
-  padding: 14px 32px;
-  cursor: pointer;
+  color: #4b3012;
+  background: #1c0e00;
+  border: 2px solid #78350f;
+  padding: 3px 7px;
   letter-spacing: 0.12em;
-  animation: home-blink 1.4s step-end infinite;
-  transition: background 0.1s, color 0.1s, transform 0.08s, box-shadow 0.08s;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
-.home-start-btn:hover {
-  background: #FCD34D;
-  color: #1c0a00;
-  animation: none;
-  transform: translate(-2px, -2px);
-  box-shadow: 7px 7px 0 #78350f, 0 0 28px rgba(252,211,77,0.45);
-}
-.home-start-btn:active {
-  transform: translate(3px, 3px);
-  box-shadow: 2px 2px 0 #78350f;
+
+/* ── Footer ── */
+.home-credits {
+  font-family: var(--font-pixel);
+  font-size: 5px;
+  color: #1f1535;
+  letter-spacing: 0.22em;
 }
 
 @keyframes home-blink {
   0%, 49%  { opacity: 1; }
-  50%, 100% { opacity: 0.12; }
-}
-
-.home-credits {
-  font-family: var(--font-pixel);
-  font-size: 5px;
-  color: #1f2937;
-  letter-spacing: 0.22em;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   GAME SELECT OVERLAY
-   Appears on top of home screen when "READY TO PLAY?" clicked.
-═══════════════════════════════════════════════════════════ */
-
-.game-select-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(4, 4, 15, 0.86);
-  z-index: 9000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(3px);
-}
-.game-select-overlay.hidden { display: none; }
-
-.game-select-box {
-  background: #0d0820;
-  border: 4px solid #7C3AED;
-  box-shadow:
-    0 0 0 2px #4C1D95,
-    12px 12px 0 #000;
-  min-width: 380px;
-  max-width: 560px;
-  width: 90vw;
-  animation: game-select-pop 0.1s ease-out;
-}
-
-@keyframes game-select-pop {
-  from { transform: scale(0.88); opacity: 0; }
-  to   { transform: scale(1);   opacity: 1; }
-}
-
-.game-select-header {
-  background: #7C3AED;
-  padding: 13px 20px;
-  text-align: center;
-  border-bottom: 2px solid #4C1D95;
-}
-
-.game-select-title {
-  font-family: var(--font-pixel);
-  font-size: 9px;
-  color: #fff;
-  letter-spacing: 0.18em;
-  text-shadow: 2px 2px 0 #2e1065;
-}
-
-.game-select-list {
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-/* ── Game card base ── */
-.game-card {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px;
-  border: 2px solid #1f2937;
-  background: #07060f;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.08s, background 0.08s, transform 0.08s, box-shadow 0.08s;
-  width: 100%;
-  font-family: inherit;
-}
-
-/* Active / playable */
-.game-card--active {
-  border-color: #4C1D95;
-  background: #0d0820;
-}
-.game-card--active:hover {
-  border-color: #7C3AED;
-  background: #130a28;
-  transform: translate(-2px, -2px);
-  box-shadow: 4px 4px 0 #1a0050;
-}
-.game-card--active:active {
-  transform: translate(1px, 1px);
-  box-shadow: 1px 1px 0 #1a0050;
-}
-
-/* Coming soon / disabled */
-.game-card--soon {
-  border-color: #111827;
-  background: #050510;
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-/* Game number */
-.game-card-num {
-  font-family: var(--font-pixel);
-  font-size: 22px;
-  color: #1f2937;
-  min-width: 40px;
-  line-height: 1;
-  flex-shrink: 0;
-}
-.game-card--active .game-card-num { color: #5B21B6; }
-
-/* Body */
-.game-card-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.game-card-name {
-  font-family: var(--font-pixel);
-  font-size: 7px;
-  color: #ddd6fe;
-  line-height: 1.7;
-  margin-bottom: 6px;
-  letter-spacing: 0.05em;
-}
-.game-card--soon .game-card-name { color: #4b5563; }
-
-.game-card-desc {
-  font-family: var(--font-pixel);
-  font-size: 5.5px;
-  color: #6b7280;
-  line-height: 2;
-  letter-spacing: 0.03em;
-}
-
-/* Arrow (active cards) */
-.game-card-arrow {
-  font-family: var(--font-pixel);
-  font-size: 14px;
-  color: #FCD34D;
-  flex-shrink: 0;
-  animation: home-blink 0.9s step-end infinite;
-}
-
-/* Coming soon badge */
-.game-card-badge {
-  font-family: var(--font-pixel);
-  font-size: 5px;
-  color: #78350f;
-  background: #1c0900;
-  border: 2px solid #78350f;
-  padding: 4px 8px;
-  white-space: nowrap;
-  letter-spacing: 0.12em;
-  flex-shrink: 0;
-}
-
-/* Close button */
-.game-select-close {
-  display: block;
-  width: 100%;
-  padding: 11px;
-  background: #060410;
-  border: none;
-  border-top: 2px solid #1f2937;
-  font-family: var(--font-pixel);
-  font-size: 6px;
-  color: #374151;
-  cursor: pointer;
-  letter-spacing: 0.15em;
-  transition: color 0.1s, background 0.1s;
-}
-.game-select-close:hover {
-  color: #9ca3af;
-  background: #0a0418;
+  50%, 100% { opacity: 0; }
 }
 
 /* ═══════════════════════════════════════════════════════════
    SCREEN: RENT ROLL CHEF — placeholder
-   Real RR UI, state, and API calls will be built here.
-   Nothing in this block connects to the Hunter.
 ═══════════════════════════════════════════════════════════ */
 
 #screen-rr {
@@ -5892,44 +5775,41 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   align-items: center;
   justify-content: center;
   min-height: 100vh;
+  position: relative;
 }
 
-/* CRT scanlines on RR screen too */
 #screen-rr::before {
   content: '';
   position: absolute;
   inset: 0;
   background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 3px,
-    rgba(0,0,0,0.18) 3px,
-    rgba(0,0,0,0.18) 4px
+    0deg, transparent 0px, transparent 3px,
+    rgba(0,0,0,0.2) 3px, rgba(0,0,0,0.2) 4px
   );
   pointer-events: none;
-  z-index: 1;
 }
 
 .rr-placeholder {
   position: relative;
-  z-index: 2;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 18px;
   text-align: center;
-  padding: 60px 32px;
+  padding: 48px 40px;
   border: 3px solid #065f46;
-  box-shadow: 8px 8px 0 #022c22, 0 0 0 1px #022c22;
+  box-shadow: 7px 7px 0 #011f15, 0 0 0 1px #022c22;
   background: #020f09;
-  max-width: 480px;
+  max-width: 460px;
+  width: 90vw;
 }
 
 .rr-placeholder-badge {
   font-family: var(--font-pixel);
   font-size: 6px;
   color: #064e3b;
-  background: #022c22;
+  background: #011a10;
   border: 2px solid #065f46;
   padding: 4px 12px;
   letter-spacing: 0.2em;
@@ -5937,11 +5817,9 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
 
 .rr-placeholder-title {
   font-family: var(--font-pixel);
-  font-size: clamp(14px, 4vw, 20px);
+  font-size: clamp(13px, 3.5vw, 20px);
   color: #10b981;
-  text-shadow:
-    0 0 20px rgba(16,185,129,0.6),
-    2px 2px 0 #022c22;
+  text-shadow: 0 0 20px rgba(16,185,129,0.55), 2px 2px 0 #022c22;
   letter-spacing: 0.1em;
   margin: 0;
 }
@@ -5949,7 +5827,7 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
 .rr-placeholder-sub {
   font-family: var(--font-pixel);
   font-size: 8px;
-  color: #6b7280;
+  color: #374151;
   letter-spacing: 0.25em;
   animation: home-blink 1.2s step-end infinite;
   margin: 0;
@@ -5958,7 +5836,7 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
 .rr-placeholder-hint {
   font-family: var(--font-pixel);
   font-size: 6px;
-  color: #374151;
+  color: #1f2937;
   line-height: 2;
   max-width: 360px;
   margin: 0;
@@ -5976,7 +5854,4 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   transition: color 0.1s, border-color 0.1s;
   margin-top: 8px;
 }
-.rr-back-btn:hover {
-  color: #9ca3af;
-  border-color: #4b5563;
-}
+.rr-back-btn:hover { color: #9ca3af; border-color: #4b5563; }
