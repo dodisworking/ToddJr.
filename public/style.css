@@ -52,7 +52,8 @@ html, body {
   animation: fadeIn 0.4s ease;
 }
 /* Reserve space for floating ◀ BACK (left) and ⌂ HOME (right) — avoid overlapping titles */
-.screen:not(#screen-upload) {
+/* Excludes: screen-upload (has its own layout), screen-home + screen-rr (no nav shown) */
+.screen:not(#screen-upload):not(#screen-home):not(#screen-rr) {
   padding-left: max(24px, calc(env(safe-area-inset-left, 0px) + 118px));
   padding-right: max(24px, calc(env(safe-area-inset-right, 0px) + 118px));
 }
