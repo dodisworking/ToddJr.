@@ -1360,11 +1360,27 @@ function uploadWithProgress(formData, onProgress) {
   })
 }
 
+const _progressQuips = [
+  'SNIFFING FILES...',
+  'CHASING FOLDERS...',
+  'WAKING UP TODD...',
+  'READING LEASES...',
+  'COUNTING TENANTS...',
+  'LOADING PREY...',
+  'PARSING DOCS...',
+  'ALMOST READY...',
+  'LOCKED & LOADED',
+]
+
 function setProgress(pct, label) {
   const fill = document.getElementById('upload-progress-fill')
   const lbl  = document.getElementById('upload-progress-label')
   if (fill) fill.style.width = pct + '%'
-  if (lbl)  lbl.textContent  = label
+  if (lbl) {
+    // Use fun quip based on progress %, ignore the raw server label
+    const idx = Math.min(Math.floor((pct / 100) * _progressQuips.length), _progressQuips.length - 1)
+    lbl.textContent = _progressQuips[idx]
+  }
 }
 
 function renderTenantCards(tenants) {
