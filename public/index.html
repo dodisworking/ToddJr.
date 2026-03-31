@@ -883,8 +883,8 @@
         <!-- File slot 1 -->
         <div class="rr-file-slot" id="rr-slot-1">
           <div class="rr-slot-empty" id="rr-slot-1-empty">
-            <div class="rr-slot-icon">📄</div>
-            <div class="rr-slot-label">DROP FILE 1</div>
+            <div class="rr-slot-icon">📐</div>
+            <div class="rr-slot-label">ARGUS RR</div>
             <div class="rr-slot-hint">Excel · PDF · PNG</div>
             <button type="button" class="rr-slot-btn" id="btn-rr-pick-1">CHOOSE FILE</button>
             <input type="file" id="rr-input-1" accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg" style="display:none" />
@@ -901,8 +901,8 @@
         <!-- File slot 2 -->
         <div class="rr-file-slot" id="rr-slot-2">
           <div class="rr-slot-empty" id="rr-slot-2-empty">
-            <div class="rr-slot-icon">📊</div>
-            <div class="rr-slot-label">DROP FILE 2</div>
+            <div class="rr-slot-icon">📄</div>
+            <div class="rr-slot-label">CLIENT RR</div>
             <div class="rr-slot-hint">Excel · PDF · PNG</div>
             <button type="button" class="rr-slot-btn" id="btn-rr-pick-2">CHOOSE FILE</button>
             <input type="file" id="rr-input-2" accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg" style="display:none" />
@@ -952,39 +952,84 @@
 
         <!-- Stage: DOUGH -->
         <div class="rr-stage rr-stage-dough" id="rr-stage-dough">
-          <div class="pizza-dough-wrap">
-            <div class="dough-ball"></div>
-            <div class="rolling-pin" id="rr-rolling-pin"></div>
-            <div class="dough-flat"></div>
+          <div class="rr-pizza-pair">
+            <div class="rr-pizza-station">
+              <div class="rr-station-label">ARGUS</div>
+              <div class="pizza-dough-wrap pizza-sm">
+                <div class="dough-ball"></div>
+                <div class="rolling-pin"></div>
+                <div class="dough-flat"></div>
+              </div>
+            </div>
+            <div class="rr-pizza-station">
+              <div class="rr-station-label">CLIENT</div>
+              <div class="pizza-dough-wrap pizza-sm">
+                <div class="dough-ball"></div>
+                <div class="rolling-pin" style="animation-delay:0.4s"></div>
+                <div class="dough-flat"></div>
+              </div>
+            </div>
           </div>
           <div class="rr-stage-label">ROLLING THE DOUGH...</div>
         </div>
 
         <!-- Stage: SAUCE -->
         <div class="rr-stage rr-stage-sauce hidden" id="rr-stage-sauce">
-          <div class="pizza-sauce-wrap">
-            <div class="pizza-base"></div>
-            <div class="sauce-spread" id="rr-sauce-spread"></div>
+          <div class="rr-pizza-pair">
+            <div class="rr-pizza-station">
+              <div class="rr-station-label">ARGUS</div>
+              <div class="pizza-sauce-wrap pizza-sm">
+                <div class="pizza-base"></div>
+                <div class="sauce-spread"></div>
+              </div>
+            </div>
+            <div class="rr-pizza-station">
+              <div class="rr-station-label">CLIENT</div>
+              <div class="pizza-sauce-wrap pizza-sm">
+                <div class="pizza-base"></div>
+                <div class="sauce-spread" style="animation-delay:0.6s"></div>
+              </div>
+            </div>
           </div>
           <div class="rr-stage-label">SPREADING THE SAUCE...</div>
         </div>
 
         <!-- Stage: OVEN -->
         <div class="rr-stage rr-stage-oven hidden" id="rr-stage-oven">
-          <div class="rr-oven">
-            <div class="oven-top">
-              <div class="oven-chimney"></div>
-            </div>
-            <div class="oven-door">
-              <div class="oven-window">
-                <div class="oven-pizza-inside"></div>
-                <div class="oven-glow"></div>
+          <div class="rr-pizza-pair">
+            <div class="rr-pizza-station">
+              <div class="rr-station-label">ARGUS</div>
+              <div class="rr-oven rr-oven-sm">
+                <div class="oven-top"><div class="oven-chimney"></div></div>
+                <div class="oven-door">
+                  <div class="oven-window">
+                    <div class="oven-pizza-inside"></div>
+                    <div class="oven-glow"></div>
+                  </div>
+                </div>
+                <div class="oven-flames">
+                  <div class="flame f1"></div>
+                  <div class="flame f2"></div>
+                  <div class="flame f3"></div>
+                </div>
               </div>
             </div>
-            <div class="oven-flames">
-              <div class="flame f1"></div>
-              <div class="flame f2"></div>
-              <div class="flame f3"></div>
+            <div class="rr-pizza-station">
+              <div class="rr-station-label">CLIENT</div>
+              <div class="rr-oven rr-oven-sm">
+                <div class="oven-top"><div class="oven-chimney"></div></div>
+                <div class="oven-door">
+                  <div class="oven-window">
+                    <div class="oven-pizza-inside" style="animation-delay:1s"></div>
+                    <div class="oven-glow" style="animation-delay:0.5s"></div>
+                  </div>
+                </div>
+                <div class="oven-flames">
+                  <div class="flame f1" style="animation-delay:0.2s"></div>
+                  <div class="flame f2" style="animation-delay:0.35s"></div>
+                  <div class="flame f3" style="animation-delay:0.1s"></div>
+                </div>
+              </div>
             </div>
           </div>
           <div class="rr-stage-label">CHEF TODD IS ANALYZING...</div>
@@ -992,16 +1037,32 @@
 
         <!-- Stage: DONE -->
         <div class="rr-stage rr-stage-done hidden" id="rr-stage-done">
-          <div class="pizza-done-wrap">
-            <div class="pizza-done" id="rr-pizza-done">🍕</div>
-            <div class="pizza-steam">
-              <span class="steam s1">〜</span>
-              <span class="steam s2">〜</span>
-              <span class="steam s3">〜</span>
+          <div class="rr-pizza-pair">
+            <div class="rr-pizza-station">
+              <div class="rr-station-label">ARGUS</div>
+              <div class="pizza-done-wrap">
+                <div class="pizza-done" style="font-size:40px">🍕</div>
+                <div class="pizza-steam">
+                  <span class="steam s1">〜</span>
+                  <span class="steam s2">〜</span>
+                  <span class="steam s3">〜</span>
+                </div>
+              </div>
             </div>
-            <div class="pizza-ding" id="rr-pizza-ding">DING!</div>
+            <div class="rr-pizza-station">
+              <div class="rr-station-label">CLIENT</div>
+              <div class="pizza-done-wrap">
+                <div class="pizza-done" id="rr-pizza-done" style="font-size:40px;animation-delay:0.3s">🍕</div>
+                <div class="pizza-steam">
+                  <span class="steam s1" style="animation-delay:0.2s">〜</span>
+                  <span class="steam s2" style="animation-delay:0.4s">〜</span>
+                  <span class="steam s3" style="animation-delay:0.6s">〜</span>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="rr-stage-label">PIZZA IS READY!</div>
+          <div class="pizza-ding" id="rr-pizza-ding">DING!</div>
+          <div class="rr-stage-label">PIZZAS ARE READY!</div>
         </div>
 
       </div>

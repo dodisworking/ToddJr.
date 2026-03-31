@@ -53,19 +53,65 @@ function drawRRChef(canvas, frame) {
   if (!canvas || typeof drawFrame !== 'function') return
   const sprite = frame === 0 ? IDLE1 : IDLE2
   drawFrame(canvas, sprite)
-  // Draw a white chef hat on top
   const ctx = canvas.getContext('2d')
-  const PS_LOC = typeof PS !== 'undefined' ? PS : 4
-  // Hat brim — row 0: wide white rectangle
-  ctx.fillStyle = '#FFFFFF'
-  ctx.fillRect(3 * PS_LOC, 0, 9 * PS_LOC, 2 * PS_LOC)
-  // Hat body — rows -3 to -1 (above brim, use offset via negative y)
+  const P = typeof PS !== 'undefined' ? PS : 4
+
+  // ── Chef Hat ──────────────────────────────────────────────
   ctx.fillStyle = '#F8FAFC'
-  ctx.fillRect(4 * PS_LOC, -3 * PS_LOC, 7 * PS_LOC, 3 * PS_LOC)
-  // Hat outline
-  ctx.strokeStyle = '#374151'
+  ctx.fillRect(3*P, 0, 9*P, 2*P)          // hat brim
+  ctx.fillRect(4*P, -10, 7*P, 12)          // hat body (tall toque)
+  ctx.strokeStyle = '#9CA3AF'
   ctx.lineWidth = 1
-  ctx.strokeRect(4 * PS_LOC, -3 * PS_LOC, 7 * PS_LOC, 5 * PS_LOC)
+  ctx.strokeRect(4*P, -10, 7*P, 12)
+  ctx.strokeRect(3*P, 0, 9*P, 2*P)
+  // Toque puff texture
+  ctx.fillStyle = '#E2E8F0'
+  ctx.fillRect(5*P, -8, 2*P, 4)
+  ctx.fillRect(7*P, -9, 2*P, 5)
+  ctx.fillRect(9*P, -7, 2*P, 4)
+
+  // ── Chef Coat (white double-breasted) ─────────────────────
+  // Main coat body over torso (rows 5–13 of sprite ≈ y=20–54)
+  ctx.fillStyle = '#F8FAFC'
+  ctx.fillRect(8, 22, 44, 32)
+  // Left arm cuff
+  ctx.fillRect(2, 30, 8, 12)
+  // Right arm cuff
+  ctx.fillRect(50, 30, 8, 12)
+
+  // Coat collar — dark V
+  ctx.fillStyle = '#1F2937'
+  ctx.beginPath()
+  ctx.moveTo(28, 22); ctx.lineTo(22, 30); ctx.lineTo(28, 28); ctx.closePath(); ctx.fill()
+  ctx.beginPath()
+  ctx.moveTo(32, 22); ctx.lineTo(38, 30); ctx.lineTo(32, 28); ctx.closePath(); ctx.fill()
+
+  // Red chef neckerchief
+  ctx.fillStyle = '#DC2626'
+  ctx.beginPath()
+  ctx.moveTo(22, 22); ctx.lineTo(38, 22); ctx.lineTo(30, 30); ctx.closePath(); ctx.fill()
+
+  // Coat buttons (left column)
+  ctx.fillStyle = '#D1D5DB'
+  ;[28, 34, 40].forEach(y => ctx.fillRect(18, y, 3, 3))
+
+  // Coat outline
+  ctx.strokeStyle = '#9CA3AF'
+  ctx.lineWidth = 1
+  ctx.strokeRect(8, 22, 44, 32)
+  ctx.strokeRect(2, 30, 8, 12)
+  ctx.strokeRect(50, 30, 8, 12)
+
+  // ── Apron (white over lower coat) ────────────────────────
+  ctx.fillStyle = '#FFFFFF'
+  ctx.fillRect(16, 32, 28, 22)
+  ctx.strokeStyle = '#CBD5E1'
+  ctx.strokeRect(16, 32, 28, 22)
+  // Apron pocket
+  ctx.fillStyle = '#F1F5F9'
+  ctx.fillRect(24, 38, 12, 10)
+  ctx.strokeStyle = '#CBD5E1'
+  ctx.strokeRect(24, 38, 12, 10)
 }
 
 function startChefAnimation(canvasId) {
@@ -200,8 +246,8 @@ async function uploadRRFiles() {
 
     // Set initial assignments based on detected roles
     rrState.assignments = {
-      client: data.files.find(f => f.detectedRole === 'CLIENT')?.id || data.files[0].id,
-      argus:  data.files.find(f => f.detectedRole === 'ARGUS')?.id  || data.files[1].id,
+      argus:  data.files.find(f => f.detectedRole === 'ARGUS')?.id  || data.files[0].id,
+      client: data.files.find(f => f.detectedRole === 'CLIENT')?.id || data.files[1].id,
     }
 
     statusEl.classList.add('hidden')

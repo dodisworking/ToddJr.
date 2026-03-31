@@ -6941,3 +6941,73 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   box-shadow: 2px 2px 0 #4C1D95;
 }
 .rr-add-btn:hover { background: #6D28D9; }
+
+/* ── Two-pizza side-by-side layout ─────────────────────────── */
+.rr-kitchen {
+  max-width: 520px !important;
+}
+.rr-pizza-pair {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+}
+.rr-pizza-station {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.rr-station-label {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #F59E0B;
+  letter-spacing: 0.12em;
+}
+
+/* Scaled-down pizza elements for side-by-side */
+.pizza-sm.pizza-dough-wrap {
+  width: 100px;
+  height: 65px;
+}
+.pizza-sm .dough-ball {
+  width: 38px;
+  height: 38px;
+}
+.pizza-sm .rolling-pin {
+  width: 52px;
+  height: 12px;
+  top: 12px;
+}
+.pizza-sm .rolling-pin::before,
+.pizza-sm .rolling-pin::after {
+  width: 8px;
+  height: 14px;
+  top: -3px;
+}
+.pizza-sm .dough-flat {
+  width: 76px;
+  height: 18px;
+  bottom: 4px;
+}
+
+.pizza-sm.pizza-sauce-wrap {
+  width: 90px;
+  height: 90px;
+}
+.pizza-sm .pizza-base {
+  width: 76px;
+  height: 76px;
+}
+.pizza-sm .sauce-spread {
+  animation: spread-sauce-sm 2s ease-out forwards infinite;
+}
+@keyframes spread-sauce-sm {
+  0%   { width: 6px;  height: 6px;  opacity: 1; }
+  70%  { width: 56px; height: 56px; opacity: 0.9; }
+  90%  { width: 60px; height: 60px; opacity: 0.8; }
+  100% { width: 6px;  height: 6px;  opacity: 1; }
+}
+
+.rr-oven-sm { transform: scale(0.72); transform-origin: top center; }
