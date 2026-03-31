@@ -325,8 +325,8 @@ function startMasterChef() {
   setCookStage('dough')
 
   const { sessionId, assignments } = rrState
-  const enabledChecks = getEnabledCheckIds()
-  const checksParam = enabledChecks ? `&checks=${encodeURIComponent(JSON.stringify(enabledChecks))}` : ''
+  const checksData = getEnabledCheckIds()  // { standard, custom } or null
+  const checksParam = checksData ? `&checks=${encodeURIComponent(JSON.stringify(checksData))}` : ''
   const baseUrl = `/api/rr/analyze?sessionId=${sessionId}&clientFileId=${assignments.client}&argusFileId=${assignments.argus}${checksParam}`
   const url = typeof sameOriginApi === 'function' ? sameOriginApi(baseUrl) : baseUrl
 
@@ -547,9 +547,26 @@ const DEFAULT_INGREDIENTS = [
   { id: 'normalize',   label: 'NORMALIZE RENT FORMAT',   emoji: '📊',  on: true },
 ]
 
+const INGREDIENT_INFO = {
+  tenant_name:  'Checks that tenant names refer to the same business. Flags name variations like "ACME Corp" vs "ACME Corporation" as NAME_VARIATION rather than a hard discrepancy.',
+  suite:        '"Unit" and "Suite" are treated as identical. Combined suites (e.g. Argus "101-102" vs separate Client rows "101" + "102") are detected and aggregated automatically.',
+  square_feet:  'Compares rentable SF only — building share percentage is ignored. Differences >2% are flagged HIGH severity. Smaller differences get MEDIUM or LOW.',
+  lease_start:  'Checks lease commencement/start dates across both systems. Variances ≤30 days = MEDIUM, >30 days = HIGH severity.',
+  lease_exp:    'Checks lease expiration and termination dates. Variances ≤30 days = MEDIUM, >30 days = HIGH. Early termination options noted if present.',
+  rent:         'Compares total annual rent. Claude first normalizes all rent formats (monthly, annual, monthly/SF, annual/SF) to the same basis before comparing.',
+  rent_steps:   'Verifies rent step schedules — both the step AMOUNT and the exact step DATE (month + year). A step on Apr 2027 in one system vs May 2027 in the other is flagged HIGH.',
+  cam:          'Checks CAM (Common Area Maintenance), NNN, operating expenses, and insurance charges. Compares absolute dollar amounts and $/SF if available.',
+  rent_psf:     'Compares annual rent expressed as $/SF after normalization. Differences <$0.02/SF are treated as rounding errors and ignored.',
+  name_fuzzy:   'When names differ, Claude first tries to match by suite number, then by approximate name similarity, then by square footage. Reduces false positives from minor name formatting differences.',
+  rounding:     'Differences smaller than $0.02/SF are classified as MATCH (LOW) rather than DISCREPANCY. This ignores harmless rounding that occurs between systems.',
+  normalize:    'Converts all rent expressions to a common format (annual total + annual $/SF) before any comparison. Without this, monthly vs annual entries would always appear as discrepancies.',
+}
+
 let secretState = {
-  mode: false,
-  ingredients: null,  // loaded from localStorage or defaults
+  mode:      false,
+  editMode:  false,
+  openInfo:  null,        // id of ingredient with info panel open
+  ingredients: null,
 }
 
 function loadSecretRecipe() {
@@ -584,39 +601,63 @@ function saveSecretRecipe() {
   } catch {}
 }
 
+// Returns { standard: [ids], custom: [labels] } or null if mode off
 function getEnabledCheckIds() {
-  if (!secretState.mode) return null  // null = use all defaults
-  return (secretState.ingredients || []).filter(i => i.on).map(i => i.id)
+  if (!secretState.mode) return null
+  const on = (secretState.ingredients || []).filter(i => i.on)
+  return {
+    standard: on.filter(i => !i.custom).map(i => i.id),
+    custom:   on.filter(i => i.custom).map(i => i.label),
+  }
 }
 
 function renderIngredients() {
   const list = el('rr-ingredients-list')
   if (!list) return
-  list.innerHTML = (secretState.ingredients || []).map(ing => `
-    <div class="rr-ingredient${ing.on ? ' ing-on' : ' ing-off'}" data-id="${escapeHtml(ing.id)}">
-      <span class="ing-emoji">${ing.emoji || '🍕'}</span>
-      <span class="ing-label">${escapeHtml(ing.label)}</span>
-      <label class="rr-toggle rr-ing-toggle">
-        <input type="checkbox" class="ing-checkbox" data-id="${escapeHtml(ing.id)}" ${ing.on ? 'checked' : ''} />
-        <span class="rr-toggle-track"></span>
-      </label>
-      ${ing.custom ? `<button class="ing-delete" data-id="${escapeHtml(ing.id)}" title="Remove">✕</button>` : ''}
-    </div>
-  `).join('')
+  const editMode = secretState.editMode
 
-  // Bind toggles
+  list.innerHTML = (secretState.ingredients || []).map(ing => {
+    const infoText = ing.custom
+      ? `Custom AI check — Claude will be explicitly instructed to: "${escapeHtml(ing.label)}"`
+      : escapeHtml(INGREDIENT_INFO[ing.id] || '')
+    const infoOpen = secretState.openInfo === ing.id
+    return `
+    <div class="rr-ingredient${ing.on ? ' ing-on' : ' ing-off'}${infoOpen ? ' info-open' : ''}" data-id="${escapeHtml(ing.id)}">
+      <div class="ing-main-row">
+        <span class="ing-emoji">${ing.emoji || '🍕'}</span>
+        <span class="ing-label">${escapeHtml(ing.label)}</span>
+        <button class="ing-info-btn" data-id="${escapeHtml(ing.id)}" title="What does this check?">ℹ</button>
+        <label class="rr-toggle rr-ing-toggle">
+          <input type="checkbox" class="ing-checkbox" data-id="${escapeHtml(ing.id)}" ${ing.on ? 'checked' : ''} />
+          <span class="rr-toggle-track"></span>
+        </label>
+        ${editMode ? `<button class="ing-delete" data-id="${escapeHtml(ing.id)}" title="Delete">✕</button>` : ''}
+      </div>
+      ${infoOpen && infoText ? `<div class="ing-info-panel">${infoText}</div>` : ''}
+    </div>`
+  }).join('')
+
+  // Toggles
   list.querySelectorAll('.ing-checkbox').forEach(cb => {
     cb.addEventListener('change', () => {
-      const id = cb.dataset.id
-      const ing = secretState.ingredients.find(i => i.id === id)
+      const ing = secretState.ingredients.find(i => i.id === cb.dataset.id)
       if (ing) { ing.on = cb.checked; saveSecretRecipe(); renderIngredients() }
     })
   })
-  // Bind deletes (custom only)
-  list.querySelectorAll('.ing-delete').forEach(btn => {
-    btn.addEventListener('click', () => {
+  // Info buttons
+  list.querySelectorAll('.ing-info-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation()
       const id = btn.dataset.id
-      secretState.ingredients = secretState.ingredients.filter(i => i.id !== id)
+      secretState.openInfo = secretState.openInfo === id ? null : id
+      renderIngredients()
+    })
+  })
+  // Delete buttons
+  list.querySelectorAll('.ing-delete').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation()
+      secretState.ingredients = secretState.ingredients.filter(i => i.id !== btn.dataset.id)
       saveSecretRecipe()
       renderIngredients()
     })
@@ -662,8 +703,17 @@ function initSecretRecipe() {
     updateSecretBtn()
   })
 
+  // EDIT mode toggle
+  el('btn-rr-edit-mode')?.addEventListener('click', () => {
+    secretState.editMode = !secretState.editMode
+    const editBtn = el('btn-rr-edit-mode')
+    if (editBtn) editBtn.textContent = secretState.editMode ? '✓ DONE' : '✎ EDIT'
+    editBtn?.classList.toggle('edit-mode-active', secretState.editMode)
+    renderIngredients()
+  })
+
   addBtn?.addEventListener('click', () => {
-    const label = (addInput?.value || '').trim().toUpperCase()
+    const label = (addInput?.value || '').trim()  // keep natural language as-is
     if (!label) return
     const id = 'custom_' + Date.now()
     secretState.ingredients.push({ id, label, emoji: '🍕', on: true, custom: true })
@@ -863,7 +913,7 @@ async function xlUploadClient(c) {
 
 function xlAnalyzeClient(c, sessionId, argusFileId, clientFileId) {
   return new Promise((resolve, reject) => {
-    const checks = getEnabledCheckIds()
+    const checks = getEnabledCheckIds()  // { standard, custom } or null
     const cp = checks ? `&checks=${encodeURIComponent(JSON.stringify(checks))}` : ''
     const base = `/api/rr/analyze?sessionId=${sessionId}&clientFileId=${clientFileId}&argusFileId=${argusFileId}${cp}`
     const url = typeof sameOriginApi === 'function' ? sameOriginApi(base) : base

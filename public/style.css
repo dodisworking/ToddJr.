@@ -7511,3 +7511,73 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   letter-spacing: 0.08em;
 }
 .rr-xl-result-dl:hover { background: #10B981; color: #fff; }
+
+/* ── Secret Recipe: info expansion + edit mode ─────────────── */
+.rr-secret-header-btns { display: flex; align-items: center; gap: 8px; }
+
+.rr-edit-mode-btn {
+  background: none;
+  border: 1px solid #4B5563;
+  color: #9CA3AF;
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  padding: 3px 7px;
+  cursor: pointer;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.rr-edit-mode-btn:hover { border-color: #F59E0B; color: #F59E0B; }
+.rr-edit-mode-btn.edit-mode-active { border-color: #10B981; color: #6EE7B7; }
+
+.ing-main-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.rr-ingredient { flex-direction: column; align-items: stretch; }
+.ing-on .ing-main-row, .ing-off .ing-main-row { display: flex; align-items: center; gap: 6px; }
+
+.ing-info-btn {
+  background: none;
+  border: 1px solid #4B5563;
+  color: #6B7280;
+  cursor: pointer;
+  font-size: 10px;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+  font-style: italic;
+  font-family: Georgia, serif;
+}
+.ing-info-btn:hover { border-color: #A78BFA; color: #A78BFA; }
+.info-open .ing-info-btn { border-color: #A78BFA; color: #A78BFA; background: #1A1035; }
+
+.ing-info-panel {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: #0D0A1E;
+  border: 1px solid #4C1D95;
+  border-left: 3px solid #7C3AED;
+  font-family: monospace;
+  font-size: 9px;
+  color: #C4B5FD;
+  line-height: 1.6;
+  animation: info-slide-down 0.15s ease-out;
+}
+@keyframes info-slide-down {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Show delete on ALL ingredients in edit mode (overrides custom-only rule) */
+.ing-delete { display: flex; }
+
+/* Placeholder for ingredient input — smaller font for natural language */
+.rr-ingredient-input::placeholder { color: #4B5563; font-size: 6px; }

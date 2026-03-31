@@ -1185,7 +1185,10 @@
     <div id="rr-secret-panel" class="rr-secret-panel hidden">
       <div class="rr-secret-header">
         <span class="rr-secret-title">🍕 SECRET RECIPE</span>
-        <button id="btn-rr-secret-close" class="rr-secret-close">✕</button>
+        <div class="rr-secret-header-btns">
+          <button id="btn-rr-edit-mode" class="rr-edit-mode-btn">✎ EDIT</button>
+          <button id="btn-rr-secret-close" class="rr-secret-close">✕</button>
+        </div>
       </div>
       <div class="rr-secret-mode-row">
         <span class="rr-secret-mode-label">SECRET RECIPE MODE</span>
@@ -1199,7 +1202,7 @@
         <!-- Populated by rr-app.js -->
       </div>
       <div class="rr-secret-add-wrap">
-        <input type="text" id="rr-ingredient-input" class="rr-ingredient-input" placeholder="ADD CUSTOM CHECK..." maxlength="60" />
+        <input type="text" id="rr-ingredient-input" class="rr-ingredient-input" placeholder="e.g. check that security deposits match..." maxlength="200" />
         <button id="btn-rr-add-ingredient" class="rr-add-btn">+</button>
       </div>
     </div>
