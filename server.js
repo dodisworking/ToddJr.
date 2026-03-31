@@ -1724,7 +1724,9 @@ app.post('/api/rr/upload', rrUpload.array('files', 2), async (req, res) => {
 
 // GET /api/rr/analyze?sessionId=&clientFileId=&argusFileId= (SSE)
 app.get('/api/rr/analyze', async (req, res) => {
-  const { sessionId, clientFileId, argusFileId } = req.query
+  const { sessionId, clientFileId, argusFileId, checks } = req.query
+  let enabledChecks
+  try { if (checks) enabledChecks = JSON.parse(checks) } catch {}
   const session = rrSessions.get(sessionId)
   if (!session) return res.status(404).json({ error: 'RR session not found' })
 
@@ -1770,7 +1772,8 @@ app.get('/api/rr/analyze', async (req, res) => {
         argusName:  argusFile.name,
       },
       onProgress,
-      cheapMode
+      cheapMode,
+      enabledChecks
     )
 
     // Generate Excel report

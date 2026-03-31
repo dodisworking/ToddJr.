@@ -1024,6 +1024,32 @@
       </div>
     </div>
 
+    <!-- SECRET RECIPE BUTTON (floating corner) -->
+    <button id="btn-rr-secret" class="rr-secret-btn" title="Secret Recipe">🍕</button>
+
+    <!-- SECRET RECIPE PANEL -->
+    <div id="rr-secret-panel" class="rr-secret-panel hidden">
+      <div class="rr-secret-header">
+        <span class="rr-secret-title">🍕 SECRET RECIPE</span>
+        <button id="btn-rr-secret-close" class="rr-secret-close">✕</button>
+      </div>
+      <div class="rr-secret-mode-row">
+        <span class="rr-secret-mode-label">SECRET RECIPE MODE</span>
+        <label class="rr-toggle">
+          <input type="checkbox" id="rr-secret-mode-toggle" />
+          <span class="rr-toggle-track"></span>
+        </label>
+      </div>
+      <div class="rr-secret-subtitle">CHEF TODD'S INGREDIENTS:</div>
+      <div id="rr-ingredients-list" class="rr-ingredients-list">
+        <!-- Populated by rr-app.js -->
+      </div>
+      <div class="rr-secret-add-wrap">
+        <input type="text" id="rr-ingredient-input" class="rr-ingredient-input" placeholder="ADD CUSTOM CHECK..." maxlength="60" />
+        <button id="btn-rr-add-ingredient" class="rr-add-btn">+</button>
+      </div>
+    </div>
+
     <!-- SUB: REPORT -->
     <div id="rr-sub-report" class="rr-sub hidden">
       <div class="rr-report-header">
@@ -1057,6 +1083,6 @@
   <script src="sbs-boxing.js?v=3"></script>
   <script src="app.js?v=73"></script>
   <script src="game-mode.js?v=4"></script>
-  <script src="rr-app.js?v=1"></script>
+  <script src="rr-app.js?v=2"></script>
 </body>
 </html>

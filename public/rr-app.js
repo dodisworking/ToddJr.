@@ -279,9 +279,10 @@ function startMasterChef() {
   setCookStage('dough')
 
   const { sessionId, assignments } = rrState
-  const url = typeof sameOriginApi === 'function'
-    ? sameOriginApi(`/api/rr/analyze?sessionId=${sessionId}&clientFileId=${assignments.client}&argusFileId=${assignments.argus}`)
-    : `/api/rr/analyze?sessionId=${sessionId}&clientFileId=${assignments.client}&argusFileId=${assignments.argus}`
+  const enabledChecks = getEnabledCheckIds()
+  const checksParam = enabledChecks ? `&checks=${encodeURIComponent(JSON.stringify(enabledChecks))}` : ''
+  const baseUrl = `/api/rr/analyze?sessionId=${sessionId}&clientFileId=${assignments.client}&argusFileId=${assignments.argus}${checksParam}`
+  const url = typeof sameOriginApi === 'function' ? sameOriginApi(baseUrl) : baseUrl
 
   const es = new EventSource(url)
   rrState.eventSource = es
@@ -468,6 +469,157 @@ function resetRR() {
   setTimeout(() => startChefAnimation('rr-hero-chef-canvas'), 100)
 }
 
+// ══════════════════════════════════════════════════════════════
+// SECRET RECIPE MODE
+// ══════════════════════════════════════════════════════════════
+const SECRET_RECIPE_KEY = 'rr_secret_recipe'
+
+const DEFAULT_INGREDIENTS = [
+  { id: 'tenant_name', label: 'TENANT NAME MATCH',       emoji: '🏷️',  on: true },
+  { id: 'suite',       label: 'SUITE / UNIT MATCH',      emoji: '🔢',  on: true },
+  { id: 'square_feet', label: 'SQUARE FOOTAGE',          emoji: '📐',  on: true },
+  { id: 'lease_start', label: 'LEASE START DATE',        emoji: '📅',  on: true },
+  { id: 'lease_exp',   label: 'LEASE EXPIRATION DATE',   emoji: '📆',  on: true },
+  { id: 'rent',        label: 'RENT AMOUNT',             emoji: '💰',  on: true },
+  { id: 'rent_steps',  label: 'RENT STEPS (AMT + DATE)', emoji: '📈',  on: true },
+  { id: 'cam',         label: 'CAM / NNN CHARGES',       emoji: '🏢',  on: true },
+  { id: 'rent_psf',    label: 'RENT PER SF',             emoji: '💲',  on: true },
+  { id: 'name_fuzzy',  label: 'FUZZY NAME MATCHING',     emoji: '🔍',  on: true },
+  { id: 'rounding',    label: 'IGNORE <$0.02/SF DIFFS',  emoji: '🔄',  on: true },
+  { id: 'normalize',   label: 'NORMALIZE RENT FORMAT',   emoji: '📊',  on: true },
+]
+
+let secretState = {
+  mode: false,
+  ingredients: null,  // loaded from localStorage or defaults
+}
+
+function loadSecretRecipe() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SECRET_RECIPE_KEY) || 'null')
+    if (saved) {
+      secretState.mode = !!saved.mode
+      // Merge: keep defaults, apply saved on/off, keep any custom
+      const savedById = {}
+      ;(saved.ingredients || []).forEach(i => { savedById[i.id] = i })
+      secretState.ingredients = DEFAULT_INGREDIENTS.map(d => ({
+        ...d,
+        on: savedById[d.id] !== undefined ? !!savedById[d.id].on : d.on
+      }))
+      // Append any custom ingredients not in defaults
+      ;(saved.ingredients || []).filter(i => !DEFAULT_INGREDIENTS.find(d => d.id === i.id))
+        .forEach(i => secretState.ingredients.push(i))
+    } else {
+      secretState.ingredients = DEFAULT_INGREDIENTS.map(d => ({ ...d }))
+    }
+  } catch {
+    secretState.ingredients = DEFAULT_INGREDIENTS.map(d => ({ ...d }))
+  }
+}
+
+function saveSecretRecipe() {
+  try {
+    localStorage.setItem(SECRET_RECIPE_KEY, JSON.stringify({
+      mode: secretState.mode,
+      ingredients: secretState.ingredients
+    }))
+  } catch {}
+}
+
+function getEnabledCheckIds() {
+  if (!secretState.mode) return null  // null = use all defaults
+  return (secretState.ingredients || []).filter(i => i.on).map(i => i.id)
+}
+
+function renderIngredients() {
+  const list = el('rr-ingredients-list')
+  if (!list) return
+  list.innerHTML = (secretState.ingredients || []).map(ing => `
+    <div class="rr-ingredient${ing.on ? ' ing-on' : ' ing-off'}" data-id="${escapeHtml(ing.id)}">
+      <span class="ing-emoji">${ing.emoji || '🍕'}</span>
+      <span class="ing-label">${escapeHtml(ing.label)}</span>
+      <label class="rr-toggle rr-ing-toggle">
+        <input type="checkbox" class="ing-checkbox" data-id="${escapeHtml(ing.id)}" ${ing.on ? 'checked' : ''} />
+        <span class="rr-toggle-track"></span>
+      </label>
+      ${ing.custom ? `<button class="ing-delete" data-id="${escapeHtml(ing.id)}" title="Remove">✕</button>` : ''}
+    </div>
+  `).join('')
+
+  // Bind toggles
+  list.querySelectorAll('.ing-checkbox').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const id = cb.dataset.id
+      const ing = secretState.ingredients.find(i => i.id === id)
+      if (ing) { ing.on = cb.checked; saveSecretRecipe(); renderIngredients() }
+    })
+  })
+  // Bind deletes (custom only)
+  list.querySelectorAll('.ing-delete').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id
+      secretState.ingredients = secretState.ingredients.filter(i => i.id !== id)
+      saveSecretRecipe()
+      renderIngredients()
+    })
+  })
+}
+
+function updateSecretBtn() {
+  const btn = el('btn-rr-secret')
+  if (!btn) return
+  btn.classList.toggle('secret-active', secretState.mode)
+}
+
+function initSecretRecipe() {
+  loadSecretRecipe()
+
+  const btn      = el('btn-rr-secret')
+  const panel    = el('rr-secret-panel')
+  const closeBtn = el('btn-rr-secret-close')
+  const modeToggle = el('rr-secret-mode-toggle')
+  const addBtn   = el('btn-rr-add-ingredient')
+  const addInput = el('rr-ingredient-input')
+
+  if (!btn || !panel) return
+
+  // Sync mode toggle to saved state
+  if (modeToggle) modeToggle.checked = secretState.mode
+  updateSecretBtn()
+  renderIngredients()
+
+  btn.addEventListener('click', () => {
+    if (typeof sfxBtnClick === 'function') sfxBtnClick()
+    panel.classList.toggle('hidden')
+    if (!panel.classList.contains('hidden')) renderIngredients()
+  })
+
+  closeBtn?.addEventListener('click', () => {
+    panel.classList.add('hidden')
+  })
+
+  modeToggle?.addEventListener('change', () => {
+    secretState.mode = modeToggle.checked
+    saveSecretRecipe()
+    updateSecretBtn()
+  })
+
+  addBtn?.addEventListener('click', () => {
+    const label = (addInput?.value || '').trim().toUpperCase()
+    if (!label) return
+    const id = 'custom_' + Date.now()
+    secretState.ingredients.push({ id, label, emoji: '🍕', on: true, custom: true })
+    saveSecretRecipe()
+    renderIngredients()
+    if (addInput) addInput.value = ''
+    if (typeof sfxBtnClick === 'function') sfxBtnClick()
+  })
+
+  addInput?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') addBtn?.click()
+  })
+}
+
 // ── Utility ──────────────────────────────────────────────────
 function escapeHtml(s) {
   return String(s || '')
@@ -502,6 +654,8 @@ function init() {
     if (typeof sfxBtnClick === 'function') sfxBtnClick()
     resetRR()
   })
+
+  initSecretRecipe()
 
   // Draw hero chef on upload screen when screen-rr becomes active
   // We watch for the screen-rr becoming active

@@ -6751,3 +6751,193 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
 }
 .rr-cook-again-btn:hover { background: #10B981; color: #0A0F1E; }
 
+
+/* ═══════════════════════════════════════════════════════════════
+   SECRET RECIPE MODE
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Floating pizza button */
+.rr-secret-btn {
+  position: fixed;
+  bottom: 18px;
+  right: 18px;
+  z-index: 9999;
+  background: #1A1035;
+  border: 3px solid #7C3AED;
+  color: #fff;
+  font-size: 24px;
+  width: 52px;
+  height: 52px;
+  border-radius: 0;
+  cursor: pointer;
+  image-rendering: pixelated;
+  box-shadow: 3px 3px 0 #4C1D95;
+  transition: transform 0.1s;
+  display: none; /* shown only when screen-rr is active */
+}
+.rr-secret-btn:hover { transform: scale(1.1); }
+#screen-rr.active .rr-secret-btn { display: flex; align-items: center; justify-content: center; }
+
+/* Glowing state when Secret Recipe Mode is ON */
+.rr-secret-btn.secret-active {
+  border-color: #F59E0B;
+  box-shadow: 3px 3px 0 #92400E, 0 0 12px #F59E0B, 0 0 24px #F59E0B88;
+  animation: secret-pulse 1.5s step-end infinite;
+}
+@keyframes secret-pulse {
+  0%, 100% { box-shadow: 3px 3px 0 #92400E, 0 0 12px #F59E0B, 0 0 24px #F59E0B88; }
+  50%       { box-shadow: 3px 3px 0 #92400E, 0 0 6px #F59E0B, 0 0 10px #F59E0B44; }
+}
+
+/* Panel */
+.rr-secret-panel {
+  position: fixed;
+  bottom: 80px;
+  right: 18px;
+  z-index: 9998;
+  width: 320px;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: #0D0A1E;
+  border: 3px solid #7C3AED;
+  box-shadow: 4px 4px 0 #4C1D95;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px;
+  color: #E2E8F0;
+}
+.rr-secret-panel::-webkit-scrollbar { width: 6px; }
+.rr-secret-panel::-webkit-scrollbar-track { background: #1A1035; }
+.rr-secret-panel::-webkit-scrollbar-thumb { background: #7C3AED; }
+
+.rr-secret-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #1A1035;
+  border-bottom: 2px solid #7C3AED;
+}
+.rr-secret-title { color: #F59E0B; font-size: 10px; }
+.rr-secret-close {
+  background: none;
+  border: none;
+  color: #94A3B8;
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 14px;
+  padding: 0 4px;
+}
+.rr-secret-close:hover { color: #F87171; }
+
+/* Mode toggle row */
+.rr-secret-mode-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #14103A;
+  border-bottom: 2px solid #312E81;
+}
+.rr-secret-mode-label { color: #A78BFA; font-size: 9px; }
+
+/* Toggle switch */
+.rr-toggle {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.rr-toggle input { opacity: 0; width: 0; height: 0; }
+.rr-toggle-track {
+  position: absolute;
+  inset: 0;
+  background: #374151;
+  border: 2px solid #4B5563;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.rr-toggle input:checked + .rr-toggle-track {
+  background: #7C3AED;
+  border-color: #A78BFA;
+}
+.rr-toggle-track::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  top: 2px;
+  left: 2px;
+  background: #9CA3AF;
+  transition: transform 0.15s;
+}
+.rr-toggle input:checked + .rr-toggle-track::after {
+  transform: translateX(18px);
+  background: #F59E0B;
+}
+
+/* Subtitle */
+.rr-secret-subtitle {
+  padding: 8px 12px 4px;
+  color: #6EE7B7;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+}
+
+/* Ingredients list */
+.rr-ingredients-list { padding: 4px 8px; }
+.rr-ingredient {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border: 2px solid #312E81;
+  background: #1E1B4B;
+  transition: border-color 0.1s, opacity 0.1s;
+}
+.rr-ingredient.ing-on  { border-color: #7C3AED; }
+.rr-ingredient.ing-off { opacity: 0.45; border-color: #374151; }
+.ing-emoji { font-size: 14px; flex-shrink: 0; }
+.ing-label { flex: 1; color: #E2E8F0; font-size: 8px; line-height: 1.4; }
+.rr-ing-toggle { flex-shrink: 0; }
+.ing-delete {
+  background: none;
+  border: none;
+  color: #F87171;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+
+/* Add custom check row */
+.rr-secret-add-wrap {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px 12px;
+  border-top: 2px solid #312E81;
+}
+.rr-ingredient-input {
+  flex: 1;
+  background: #0D0A1E;
+  border: 2px solid #4B5563;
+  color: #E2E8F0;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px;
+  padding: 6px 8px;
+  outline: none;
+}
+.rr-ingredient-input:focus { border-color: #7C3AED; }
+.rr-ingredient-input::placeholder { color: #4B5563; }
+.rr-add-btn {
+  background: #7C3AED;
+  border: 2px solid #A78BFA;
+  color: #fff;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 14px;
+  padding: 4px 10px;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 #4C1D95;
+}
+.rr-add-btn:hover { background: #6D28D9; }
