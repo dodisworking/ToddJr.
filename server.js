@@ -1787,14 +1787,14 @@ app.get('/api/rr/analyze', async (req, res) => {
       clientFormat: analysisData.clientFormat,
       argusFormat:  analysisData.argusFormat,
       tenantGroups: (analysisData.tenantGroups || []).map(g => ({
-        groupId:        g.groupId,
-        suites:         g.suites,
-        overallStatus:  g.overallStatus,
-        severity:       g.severity,
-        toddAssessment: g.toddAssessment,
-        clientTenantName: g.clientRow?.tenantName || '',
-        argusTenantName:  g.argusRow?.tenantName  || '',
-        evidence:       g.evidence,
+        groupId:          g.groupId,
+        suites:           g.suites,
+        overallStatus:    g.overallStatus,
+        severity:         g.severity,
+        toddAssessment:   g.toddAssessment,
+        clientTenantName: g.clientTenantName || g.clientRow?.tenantName || '',
+        argusTenantName:  g.argusTenantName  || g.argusRow?.tenantName  || '',
+        fieldComparisons: (g.fieldComparisons || []).filter(f => f.status !== 'MATCH').slice(0, 5),
       })),
       downloadPath: `/api/rr/download/${sessionId}`
     })

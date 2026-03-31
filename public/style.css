@@ -6669,15 +6669,34 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   border: 2px solid #1E3A5F;
 }
 .rr-preview-row {
-  display: grid;
-  grid-template-columns: 60px 140px 80px 140px 1fr;
-  gap: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   padding: 8px 12px;
   border-bottom: 1px solid #1E293B;
-  align-items: start;
 }
 .rr-preview-row:last-child { border-bottom: none; }
 .rr-preview-row:nth-child(even) { background: #111827; }
+.rr-prev-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.rr-prev-field-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  background: #0D1B2E;
+  border-left: 2px solid #451A03;
+  font-family: monospace;
+  font-size: 10px;
+}
+.rr-prev-field-name  { color: #94A3B8; min-width: 100px; font-weight: bold; }
+.rr-prev-field-client { color: #93C5FD; }
+.rr-prev-field-arrow  { color: #6B7280; }
+.rr-prev-field-argus  { color: #CDB4FB; }
 .rr-prev-suite {
   font-family: var(--font-pixel);
   font-size: 7px;
@@ -6701,10 +6720,12 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   white-space: nowrap;
 }
 .rr-prev-assessment {
-  font-size: 11px;
+  font-size: 10px;
   color: #64748B;
   font-family: var(--font-ui);
   line-height: 1.4;
+  padding-top: 2px;
+  font-style: italic;
 }
 .rr-preview-empty {
   font-family: var(--font-pixel);
@@ -7581,3 +7602,179 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
 
 /* Placeholder for ingredient input — smaller font for natural language */
 .rr-ingredient-input::placeholder { color: #4B5563; font-size: 6px; }
+
+/* ═══════════════════════════════════════════
+   8-BIT CSS PIXEL-ART PIZZA ICON
+   Margherita: crust/sauce/mozzarella/basil
+   8×8 grid @ 4px per pixel = 32×32
+   ═══════════════════════════════════════════ */
+.px-pizza-wrap {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  position: relative;
+  image-rendering: pixelated;
+}
+.px-pizza-px {
+  position: absolute;
+  top: 0; left: 0;
+  width: 4px; height: 4px;
+  background: transparent;
+  /* C=#d4a054 S=#cc2200 M=#fffde0 G=#226622 */
+  box-shadow:
+    /* Row 0 */
+    8px 0 0 0 #d4a054, 12px 0 0 0 #d4a054, 16px 0 0 0 #d4a054, 20px 0 0 0 #d4a054,
+    /* Row 1 */
+    4px 4px 0 0 #d4a054, 8px 4px 0 0 #cc2200, 12px 4px 0 0 #cc2200, 16px 4px 0 0 #cc2200, 20px 4px 0 0 #cc2200, 24px 4px 0 0 #d4a054,
+    /* Row 2 */
+    0 8px 0 0 #d4a054, 4px 8px 0 0 #cc2200, 8px 8px 0 0 #cc2200, 12px 8px 0 0 #fffde0, 16px 8px 0 0 #cc2200, 20px 8px 0 0 #cc2200, 24px 8px 0 0 #cc2200, 28px 8px 0 0 #d4a054,
+    /* Row 3 */
+    0 12px 0 0 #d4a054, 4px 12px 0 0 #cc2200, 8px 12px 0 0 #cc2200, 12px 12px 0 0 #cc2200, 16px 12px 0 0 #226622, 20px 12px 0 0 #cc2200, 24px 12px 0 0 #cc2200, 28px 12px 0 0 #d4a054,
+    /* Row 4 */
+    0 16px 0 0 #d4a054, 4px 16px 0 0 #cc2200, 8px 16px 0 0 #fffde0, 12px 16px 0 0 #cc2200, 16px 16px 0 0 #cc2200, 20px 16px 0 0 #cc2200, 24px 16px 0 0 #226622, 28px 16px 0 0 #d4a054,
+    /* Row 5 */
+    0 20px 0 0 #d4a054, 4px 20px 0 0 #cc2200, 8px 20px 0 0 #cc2200, 12px 20px 0 0 #cc2200, 16px 20px 0 0 #fffde0, 20px 20px 0 0 #cc2200, 24px 20px 0 0 #cc2200, 28px 20px 0 0 #d4a054,
+    /* Row 6 */
+    4px 24px 0 0 #d4a054, 8px 24px 0 0 #cc2200, 12px 24px 0 0 #cc2200, 16px 24px 0 0 #cc2200, 20px 24px 0 0 #cc2200, 24px 24px 0 0 #d4a054,
+    /* Row 7 */
+    8px 28px 0 0 #d4a054, 12px 28px 0 0 #d4a054, 16px 28px 0 0 #d4a054, 20px 28px 0 0 #d4a054;
+}
+
+/* ═══════════════════════════════════════════
+   TURTLE MINI-GAME OVERLAY
+   ═══════════════════════════════════════════ */
+.turtle-game-overlay {
+  position: fixed;
+  inset: 0;
+  background: #001122;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Press Start 2P', monospace;
+  image-rendering: pixelated;
+}
+.turtle-game-overlay.hidden { display: none; }
+
+.tg-hud {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 640px;
+  max-width: 95vw;
+  padding: 6px 10px;
+  background: #000d1a;
+  border: 2px solid #00aaff44;
+  margin-bottom: 6px;
+}
+.tg-lives {
+  color: #ff4455;
+  font-size: 14px;
+  letter-spacing: 2px;
+  white-space: nowrap;
+}
+.tg-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.tg-level {
+  color: #aaddff;
+  font-size: 8px;
+  letter-spacing: 1px;
+}
+.tg-progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+.tg-progress-bar {
+  flex: 1;
+  height: 8px;
+  background: #002244;
+  border: 1px solid #004488;
+}
+.tg-progress-fill {
+  height: 100%;
+  background: #00ccff;
+  width: 0%;
+  transition: width 0.1s linear;
+  image-rendering: pixelated;
+}
+.tg-progress-turtle, .tg-progress-flag { font-size: 12px; }
+.tg-score {
+  color: #ffee44;
+  font-size: 10px;
+  white-space: nowrap;
+  min-width: 40px;
+  text-align: right;
+}
+.tg-close-btn {
+  background: none;
+  border: 1px solid #ff4444;
+  color: #ff4444;
+  font-family: monospace;
+  font-size: 12px;
+  width: 24px; height: 24px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+.tg-close-btn:hover { background: #ff444422; }
+
+#tg-canvas {
+  display: block;
+  width: 640px;
+  max-width: 95vw;
+  height: auto;
+  image-rendering: pixelated;
+  border: 2px solid #00aaff22;
+}
+
+.tg-msg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: 'Press Start 2P', monospace;
+  font-size: 18px;
+  text-shadow: 2px 2px 0 #000, -2px -2px 0 #000;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.tg-msg.hidden { display: none; }
+
+.tg-hint {
+  color: #446688;
+  font-size: 7px;
+  font-family: monospace;
+  margin-top: 6px;
+  letter-spacing: 1px;
+}
+
+.tg-touch-btns {
+  position: absolute;
+  right: 20px;
+  bottom: 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tg-touch-btn {
+  width: 44px; height: 44px;
+  background: #002244aa;
+  border: 2px solid #00aaff44;
+  color: #aaddff;
+  font-size: 16px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+/* Cursor pointer on RR patience turtle */
+.rr-patience .patience-turtle { cursor: pointer; }

@@ -469,13 +469,24 @@ function renderReport(data) {
         const sevColor = g.severity === 'HIGH' ? '#F87171'
           : g.severity === 'MEDIUM' ? '#FBBF24'
           : '#94A3B8'
+        const mismatches = (g.fieldComparisons || [])
+        const mismatchRows = mismatches.map(f => `
+            <div class="rr-prev-field-row">
+              <span class="rr-prev-field-name">${escapeHtml(f.field)}</span>
+              <span class="rr-prev-field-client">${escapeHtml(f.clientValue || '—')}</span>
+              <span class="rr-prev-field-arrow">→</span>
+              <span class="rr-prev-field-argus">${escapeHtml(f.argusValue || '—')}</span>
+            </div>`).join('')
         return `
           <div class="rr-preview-row">
-            <span class="rr-prev-suite">${escapeHtml(g.suites || '—')}</span>
-            <span class="rr-prev-status" style="color:${statusColor}">${g.overallStatus}</span>
-            <span class="rr-prev-sev" style="color:${sevColor}">${g.severity}</span>
-            <span class="rr-prev-name">${escapeHtml(g.clientTenantName || g.argusTenantName || '—')}</span>
-            <span class="rr-prev-assessment">${escapeHtml(g.toddAssessment || '')}</span>
+            <div class="rr-prev-header">
+              <span class="rr-prev-suite">${escapeHtml(g.suites || '—')}</span>
+              <span class="rr-prev-status" style="color:${statusColor}">${g.overallStatus}</span>
+              <span class="rr-prev-sev" style="color:${sevColor}">${g.severity}</span>
+              <span class="rr-prev-name">${escapeHtml(g.clientTenantName || g.argusTenantName || '—')}</span>
+            </div>
+            ${mismatchRows}
+            <div class="rr-prev-assessment">${escapeHtml(g.toddAssessment || '')}</div>
           </div>`
       }).join('')
     }
@@ -1085,6 +1096,7 @@ function init() {
 
   initSecretRecipe()
   initXLOrder()
+  initTurtleGame()
 
   // Draw hero chef on upload screen when screen-rr becomes active
   // We watch for the screen-rr becoming active
@@ -1107,6 +1119,277 @@ function init() {
     drawRRChef(el('rr-hero-chef-canvas'), 0)
     drawRRChef(el('rr-chef-canvas'), 0)
   }, 200)
+}
+
+// ── Turtle Mini-Game ─────────────────────────────────────────
+function initTurtleGame() {
+  const overlay = el('turtle-game-overlay')
+  const canvas  = el('tg-canvas')
+  if (!overlay || !canvas) return
+
+  const ctx = canvas.getContext('2d')
+  ctx.imageSmoothingEnabled = false
+  const W = 640, H = 320
+  canvas.width  = W
+  canvas.height = H
+
+  const livesEl    = el('tg-lives')
+  const levelEl    = el('tg-level')
+  const scoreEl    = el('tg-score')
+  const fillEl     = el('tg-progress-fill')
+  const msgEl      = el('tg-msg')
+
+  // ── state ──
+  let gState = 'idle'  // playing | levelwin | gameover | idle
+  let level = 1, lives = 3, score = 0, progress = 0
+  let invincFrames = 0, stateTimer = 0, bgScroll = 0
+  let raf = null
+
+  // ── player ──
+  let px = 80, py = H / 2, pvy = 0, pFrame = 0, pFrameTimer = 0
+
+  // ── obstacles ──
+  let obs = [], spawnTimer = 0
+
+  // ── keys ──
+  const keys = {}
+  function onKeyDown(e) {
+    keys[e.key] = true
+    if (e.key === 'Escape') closeGame()
+    e.stopPropagation()
+  }
+  function onKeyUp(e) { keys[e.key] = false; e.stopPropagation() }
+
+  // ── level config ──
+  function cfg() {
+    const lv = Math.min(level, 8)
+    return {
+      spawnInterval: Math.max(55 - lv * 5, 18),
+      fishSpeed:     2 + lv * 0.6,
+      progressRate:  0.0012 + lv * 0.00015,
+    }
+  }
+
+  function resetLevel() {
+    obs = []; progress = 0; spawnTimer = 0
+    invincFrames = 0; stateTimer = 0
+    px = 80; py = H / 2; pvy = 0
+    gState = 'playing'
+  }
+
+  // ── drawing ──
+  function drawBg() {
+    // Water bands
+    const bands = [[0,60,'#001833'],[60,130,'#002244'],[130,190,'#002a55'],[190,250,'#002244'],[250,320,'#001833']]
+    for (const [y1,y2,c] of bands) { ctx.fillStyle=c; ctx.fillRect(0,y1,W,y2-y1) }
+    // Caustic shimmer lines
+    ctx.globalAlpha = 0.12
+    ctx.strokeStyle = '#55aaff'
+    ctx.lineWidth = 1
+    for (let i = 0; i < 6; i++) {
+      const baseY = (i * 55 + bgScroll * 0.4) % H
+      ctx.beginPath()
+      for (let x = 0; x <= W; x += 4) {
+        const y = baseY + Math.sin((x + bgScroll) * 0.035) * 5
+        x === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y)
+      }
+      ctx.stroke()
+    }
+    ctx.globalAlpha = 1
+    // Seaweed at bottom
+    ctx.fillStyle = '#1a6633'
+    for (let i = 0; i < 10; i++) {
+      const sx = ((i * 68 + bgScroll * 0.7) % (W + 40)) - 20
+      ctx.fillRect(sx, H-22, 4, 22)
+      ctx.fillRect(sx+8, H-14, 4, 14)
+    }
+  }
+
+  // Simplified 8-bit turtle (faces right, centered at x,y)
+  function drawTurtleAt(x, y, frame, alpha) {
+    ctx.globalAlpha = alpha
+    const S = 2.5
+    const bob = frame === 1 ? 1 : 0
+    function r(tx, ty, tw, th, col) {
+      ctx.fillStyle = col
+      ctx.fillRect(Math.round(x + tx*S), Math.round(y + ty*S + bob), Math.round(tw*S), Math.round(th*S))
+    }
+    const SHAD='#3d1800',DARK='#6b3010',MID='#9e5020',WARM='#c87030',LITE='#e09040',GOLD='#f0b848'
+    const TD='#1a4a38',T='#38886a',TL='#60c090',EYE='#0a0808',OR='#d07010',OUT='#1a0800'
+    const rows=[[3,10,GOLD],[2,12,GOLD],[1,14,LITE],[0,16,MID],[0,16,WARM],[0,16,WARM],[0,16,MID],[0,16,MID],[0,16,DARK],[1,14,DARK],[2,12,SHAD],[3,10,SHAD]]
+    for (let i=0; i<rows.length; i++) { const [sx,sw,c]=rows[i]; r(sx-8,i-6,sw,1,c) }
+    // outline
+    r(3-8,-1-6,10,1,OUT); r(3-8,12-6,10,1,OUT)
+    // head
+    r(8,-3,4,1,TD); r(8,-4,5,3,T); r(12,-2,1,3,OUT); r(11,-4,1,1,OR); r(11,-3,1,1,EYE)
+    r(18-8,2-6,1,1,TL)
+    // tail
+    r(-9,-1,1,2,TD)
+    // legs
+    if (frame===0) {
+      r(-5,7,2,1,T); r(-6,8,2,1,TD)
+      r( 3,7,2,1,T); r( 4,8,2,1,TD)
+    } else {
+      r(-6,6,2,1,TD); r(-5,8,2,1,T)
+      r( 2,6,2,1,TD); r( 4,8,2,1,T)
+    }
+    ctx.globalAlpha = 1
+  }
+
+  // Angry fish (faces left, centered at x,y)
+  function drawFish(x, y, sz) {
+    const S = sz
+    function r(tx,ty,tw,th,c) { ctx.fillStyle=c; ctx.fillRect(Math.round(x+tx*S),Math.round(y+ty*S),Math.round(tw*S),Math.round(th*S)) }
+    r(-3,-1,6,3,'#cc2200'); r(-4,0,1,1,'#cc2200')
+    r(3,-2,2,1,'#ff4400'); r(3,2,2,1,'#ff4400'); r(3,-1,1,3,'#dd3300')
+    r(-1,-3,3,1,'#aa1100'); r(0,-2,2,1,'#cc2200')
+    r(-3,-1,1,1,'#fff'); r(-3,0,1,1,'#000')
+    r(-5,0,1,1,'#ff6644'); r(-5,1,1,1,'#661100')
+    r(-1,-1,1,1,'#aa1100'); r(1,0,1,1,'#aa1100')
+  }
+
+  // Bubble
+  function drawBubble(x, y, r) {
+    ctx.strokeStyle = 'rgba(120,190,255,0.4)'; ctx.lineWidth = 1
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.stroke()
+  }
+
+  function spawnObs() {
+    const c = cfg()
+    const y = 30 + Math.random() * (H - 60)
+    obs.push({ x: W+20, y, speed: c.fishSpeed*(0.8+Math.random()*0.4), vy: (Math.random()-0.5)*0.4 })
+  }
+
+  function updateHUD() {
+    if (livesEl) livesEl.textContent = '♥'.repeat(lives) + '♡'.repeat(Math.max(0, 3-lives))
+    if (levelEl) levelEl.textContent  = `LEVEL ${level}`
+    if (scoreEl) scoreEl.textContent  = score
+    if (fillEl)  fillEl.style.width   = (progress * 100) + '%'
+  }
+
+  function showMsg(text, color, ms=2000) {
+    if (!msgEl) return
+    msgEl.textContent = text; msgEl.style.color = color; msgEl.classList.remove('hidden')
+    setTimeout(() => msgEl?.classList.add('hidden'), ms)
+  }
+
+  function gameLoop() {
+    bgScroll += 1.5
+
+    if (gState === 'playing') {
+      const c = cfg()
+      // Input
+      const up   = keys['ArrowUp']   || keys['w'] || keys['W']
+      const down = keys['ArrowDown'] || keys['s'] || keys['S']
+      if (up)   pvy -= 0.45
+      if (down) pvy += 0.45
+      pvy *= 0.84
+      py  += pvy
+      py   = Math.max(28, Math.min(H-36, py))
+
+      // Turtle frame
+      if (++pFrameTimer >= 8) { pFrame = 1-pFrame; pFrameTimer = 0 }
+
+      // Progress + score
+      progress = Math.min(1, progress + c.progressRate)
+      score += 1
+
+      // Spawn fish
+      if (++spawnTimer >= c.spawnInterval) { spawnObs(); spawnTimer = 0 }
+
+      // Move fish
+      obs = obs.filter(o => o.x > -40)
+      for (const o of obs) { o.x -= o.speed; o.y += o.vy; o.y = Math.max(24,Math.min(H-34,o.y)) }
+
+      // Collision
+      if (invincFrames > 0) {
+        invincFrames--
+      } else {
+        for (const o of obs) {
+          const dx = px - o.x, dy = py - o.y
+          if (Math.sqrt(dx*dx + dy*dy) < 18) {
+            lives--
+            invincFrames = 90
+            if (typeof sfxBuzz === 'function') sfxBuzz()
+            if (lives <= 0) { gState = 'gameover'; stateTimer = 200; showMsg('GAME OVER', '#ff4455', 9999) }
+            break
+          }
+        }
+      }
+
+      // Level complete
+      if (progress >= 1) {
+        score += level * 250
+        gState = 'levelwin'; stateTimer = 100
+        showMsg(`LEVEL ${level} CLEAR!`, '#44ff88')
+        if (typeof sfxKitchenDing === 'function') sfxKitchenDing()
+      }
+
+    } else if (gState === 'levelwin') {
+      if (--stateTimer <= 0) { level++; resetLevel() }
+    } else if (gState === 'gameover') {
+      stateTimer--
+      if (stateTimer <= 0) closeGame()
+    }
+
+    // ── Render ──
+    ctx.clearRect(0, 0, W, H)
+    drawBg()
+
+    // Obstacles
+    for (const o of obs) drawFish(o.x, o.y, 3)
+
+    // Bubbles
+    for (let i=0; i<6; i++) {
+      drawBubble((bgScroll*0.3 + i*113) % W, (bgScroll*0.6 + i*89) % H, 2+(i%3))
+    }
+
+    // Player (flicker when invincible)
+    const alpha = invincFrames > 0 ? (Math.floor(invincFrames/5)%2===0 ? 0.3 : 1.0) : 1.0
+    drawTurtleAt(px, py, pFrame, alpha)
+
+    updateHUD()
+
+    if (gState !== 'idle') raf = requestAnimationFrame(gameLoop)
+  }
+
+  function openGame() {
+    level=1; lives=3; score=0
+    resetLevel()
+    overlay.classList.remove('hidden')
+    document.addEventListener('keydown', onKeyDown, true)
+    document.addEventListener('keyup',   onKeyUp,   true)
+    raf = requestAnimationFrame(gameLoop)
+  }
+
+  function closeGame() {
+    overlay.classList.add('hidden')
+    gState = 'idle'
+    if (raf) { cancelAnimationFrame(raf); raf = null }
+    document.removeEventListener('keydown', onKeyDown, true)
+    document.removeEventListener('keyup',   onKeyUp,   true)
+    if (msgEl) msgEl.classList.add('hidden')
+  }
+
+  // Bind to RR patience turtle
+  document.querySelectorAll('.rr-patience .patience-turtle').forEach(c => {
+    c.title = 'Click to play turtle game!'
+    c.addEventListener('click', openGame)
+  })
+
+  el('tg-close-btn')?.addEventListener('click', closeGame)
+
+  // Touch controls
+  const btnUp = el('tg-btn-up')
+  const btnDn = el('tg-btn-dn')
+  if (btnUp) {
+    btnUp.addEventListener('pointerdown', () => { keys['ArrowUp'] = true })
+    btnUp.addEventListener('pointerup',   () => { keys['ArrowUp'] = false })
+  }
+  if (btnDn) {
+    btnDn.addEventListener('pointerdown', () => { keys['ArrowDown'] = true })
+    btnDn.addEventListener('pointerup',   () => { keys['ArrowDown'] = false })
+  }
 }
 
 // Run init after DOM is fully parsed

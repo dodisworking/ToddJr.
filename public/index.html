@@ -1179,7 +1179,9 @@
     </div>
 
     <!-- SECRET RECIPE BUTTON (floating corner) -->
-    <button id="btn-rr-secret" class="rr-secret-btn" title="Secret Recipe">🍕</button>
+    <button id="btn-rr-secret" class="rr-secret-btn" title="Secret Recipe">
+      <span class="px-pizza-wrap"><span class="px-pizza-px"></span></span>
+    </button>
 
     <!-- SECRET RECIPE PANEL -->
     <div id="rr-secret-panel" class="rr-secret-panel hidden">
@@ -1236,10 +1238,34 @@
 
   </div>
 
+  <!-- TURTLE MINI-GAME OVERLAY -->
+  <div id="turtle-game-overlay" class="turtle-game-overlay hidden">
+    <div class="tg-hud">
+      <div class="tg-lives" id="tg-lives">♥♥♥</div>
+      <div class="tg-center">
+        <div class="tg-level" id="tg-level">LEVEL 1</div>
+        <div class="tg-progress-wrap">
+          <span class="tg-progress-turtle">🐢</span>
+          <div class="tg-progress-bar"><div class="tg-progress-fill" id="tg-progress-fill"></div></div>
+          <span class="tg-progress-flag">🏁</span>
+        </div>
+      </div>
+      <div class="tg-score" id="tg-score">0</div>
+      <button class="tg-close-btn" id="tg-close-btn">✕</button>
+    </div>
+    <canvas id="tg-canvas"></canvas>
+    <div class="tg-msg hidden" id="tg-msg"></div>
+    <div class="tg-hint">↑↓ or W/S to swim &nbsp;|&nbsp; ESC to exit</div>
+    <div class="tg-touch-btns">
+      <button class="tg-touch-btn" id="tg-btn-up">▲</button>
+      <button class="tg-touch-btn" id="tg-btn-dn">▼</button>
+    </div>
+  </div>
+
   <script src="drlab-flasks.js?v=6"></script>
   <script src="sbs-boxing.js?v=3"></script>
   <script src="app.js?v=73"></script>
   <script src="game-mode.js?v=4"></script>
-  <script src="rr-app.js?v=2"></script>
+  <script src="rr-app.js?v=3"></script>
 </body>
 </html>
