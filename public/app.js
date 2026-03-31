@@ -109,6 +109,35 @@ async function sfxJuice() {
   _sfxNote(659, t + 0.08, 0.12, 'square', 0.1)
 }
 
+// ── Rent Roll Chef kitchen SFX ───────────────────────────────
+async function sfxKitchenDing() {
+  if (_sfxMuted || !_sfxCtx) return
+  await _sfxResume()
+  const t = _sfxCtx.currentTime
+  // Warm bell ding — high sine tone with quick decay
+  _sfxNote(1568, t + 0.00, 0.08, 'sine', 0.22)  // G6
+  _sfxNote(1319, t + 0.06, 0.12, 'sine', 0.18)  // E6
+  _sfxNote(1047, t + 0.12, 0.30, 'sine', 0.15)  // C6
+  // Second ding
+  _sfxNote(1568, t + 0.55, 0.08, 'sine', 0.20)
+  _sfxNote(1047, t + 0.61, 0.40, 'sine', 0.13)
+}
+async function sfxDoughRoll() {
+  if (_sfxMuted || !_sfxCtx) return
+  await _sfxResume()
+  const t = _sfxCtx.currentTime
+  _sfxNote(220, t + 0.00, 0.10, 'sawtooth', 0.06)
+  _sfxNote(196, t + 0.12, 0.10, 'sawtooth', 0.06)
+  _sfxNote(220, t + 0.24, 0.10, 'sawtooth', 0.06)
+}
+async function sfxOvenDoor() {
+  if (_sfxMuted || !_sfxCtx) return
+  await _sfxResume()
+  const t = _sfxCtx.currentTime
+  _sfxNote(130, t + 0.00, 0.18, 'sawtooth', 0.08)
+  _sfxNote(110, t + 0.20, 0.25, 'sawtooth', 0.06)
+}
+
 // ── Background loop engine ───────────────────────────────────
 let _bgLoopTimer = null
 let _bgLoopActive = false
