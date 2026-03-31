@@ -854,8 +854,8 @@ function xlRenderQueue() {
       <div class="rr-xl-client-row" data-id="${c.id}">
         <div class="rr-xl-client-name">${escapeHtml(c.name)}</div>
         <div class="rr-xl-client-files">
-          <span class="rr-xl-tag rr-xl-tag-argus">📐 ${escapeHtml(c.argusFile.name)}${c.argusCount > 1 ? ` (+${c.argusCount - 1})` : ''}</span>
-          <span class="rr-xl-tag rr-xl-tag-client">📄 ${escapeHtml(c.clientFile.name)}${c.clientCount > 1 ? ` (+${c.clientCount - 1})` : ''}</span>
+          <span class="rr-xl-tag rr-xl-tag-argus">📐 ${escapeHtml(c.argusFile.name)}</span>
+          <span class="rr-xl-tag rr-xl-tag-client">📄 ${escapeHtml(c.clientFile.name)}</span>
         </div>
         <button class="rr-xl-remove" data-id="${c.id}">✕</button>
       </div>
