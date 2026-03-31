@@ -342,9 +342,16 @@ function startMasterChef() {
     try {
       const d = JSON.parse(e.data)
       updateCookProgress(d.percent || 0, d.message || '')
-      if (d.stage === 'parsing-client') setCookStage('dough')
-      else if (d.stage === 'parsing-argus') setCookStage('sauce')
-      else if (d.stage === 'analyzing') setCookStage('oven')
+      const pct = d.percent || 0
+      if (d.stage === 'parsing-client') {
+        if (pct < 15) setCookStage('dough')
+        else setCookStage('sauce')
+      } else if (d.stage === 'parsing-argus') {
+        setCookStage('toppings')
+      } else if (d.stage === 'analyzing') {
+        if (pct < 58) setCookStage('pan')
+        else setCookStage('oven')
+      }
     } catch {}
   })
 
@@ -392,7 +399,8 @@ function startMasterChef() {
 }
 
 function setCookStage(stage) {
-  const stages = ['dough', 'sauce', 'oven', 'done']
+  if (rrState.cookStage === stage) return  // no-op if same stage
+  const stages = ['dough', 'sauce', 'toppings', 'pan', 'oven', 'done']
   stages.forEach(s => {
     const el2 = el(`rr-stage-${s}`)
     if (!el2) return
@@ -400,8 +408,11 @@ function setCookStage(stage) {
   })
   rrState.cookStage = stage
 
-  if (stage === 'dough' && typeof sfxDoughRoll === 'function') sfxDoughRoll()
-  if (stage === 'oven'  && typeof sfxOvenDoor  === 'function') sfxOvenDoor()
+  if (stage === 'dough'    && typeof sfxDoughRoll   === 'function') sfxDoughRoll()
+  if (stage === 'sauce'    && typeof sfxSauceSpread  === 'function') sfxSauceSpread()
+  if (stage === 'toppings' && typeof sfxToppings     === 'function') sfxToppings()
+  if (stage === 'pan'      && typeof sfxPanSizzle    === 'function') sfxPanSizzle()
+  if (stage === 'oven'     && typeof sfxOvenDoor     === 'function') sfxOvenDoor()
 }
 
 function updateCookProgress(percent, message) {
@@ -497,7 +508,8 @@ function resetRR() {
   clearSlot(1)
   clearSlot(2)
 
-  // Reset cooking stage
+  // Reset cooking stage (force by clearing state first)
+  rrState.cookStage = 'idle'
   setCookStage('dough')
   updateCookProgress(0, 'Preparing kitchen...')
 
@@ -675,6 +687,326 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;')
 }
 
+// ══════════════════════════════════════════════════════════════
+// EXTRA LARGE PIZZA ORDER — Batch folder analysis
+// ══════════════════════════════════════════════════════════════
+
+const xlState = {
+  clients: [],        // [{ id, name, argusFile, clientFile, status, progress, msg, reportUrl }]
+  eventSources: {},   // { clientId: EventSource }
+}
+
+// Detect argus vs client from folder/file name
+function xlDetectRole(name) {
+  const n = (name || '').toLowerCase()
+  if (n.includes('argus')) return 'argus'
+  if (n.includes('client') || n.includes('accounting') || n.includes('yardi') || n.includes('mri')) return 'client'
+  return null
+}
+
+// Pick best file: xlsx > xls > csv > pdf > png
+function xlPickBest(files) {
+  if (!files || !files.length) return null
+  const order = { xlsx: 0, xls: 1, csv: 2, pdf: 3, png: 4, jpg: 5, jpeg: 5 }
+  return [...files].sort((a, b) => {
+    const ea = a.name.split('.').pop().toLowerCase()
+    const eb = b.name.split('.').pop().toLowerCase()
+    return (order[ea] ?? 99) - (order[eb] ?? 99)
+  })[0]
+}
+
+// Parse a flat array of Files (with webkitRelativePath) into client pairs
+function xlParseFiles(fileArray) {
+  const groups = {}  // clientName → { argusFiles, clientFiles }
+
+  for (const file of fileArray) {
+    const rel = file.webkitRelativePath || file.name
+    const parts = rel.split('/')
+    let clientName = null, role = null
+
+    if (parts.length >= 4) {
+      // root/client/roleFolder/file
+      clientName = parts[1]
+      role = xlDetectRole(parts[2]) || xlDetectRole(parts[3])
+    } else if (parts.length === 3) {
+      const midRole = xlDetectRole(parts[1])
+      if (midRole) {
+        clientName = parts[0]
+        role = midRole
+      } else {
+        clientName = parts[1]
+        role = xlDetectRole(parts[2]) || xlDetectRole(parts[1])
+      }
+    } else if (parts.length === 2) {
+      clientName = parts[0]
+      role = xlDetectRole(parts[1])
+    }
+
+    if (!clientName || !role) continue
+    if (!groups[clientName]) groups[clientName] = { argusFiles: [], clientFiles: [] }
+    if (role === 'argus') groups[clientName].argusFiles.push(file)
+    else groups[clientName].clientFiles.push(file)
+  }
+
+  return Object.entries(groups)
+    .map(([name, g]) => ({
+      id: 'xl_' + Math.random().toString(36).slice(2),
+      name,
+      argusFile:   xlPickBest(g.argusFiles),
+      clientFile:  xlPickBest(g.clientFiles),
+      argusCount:  g.argusFiles.length,
+      clientCount: g.clientFiles.length,
+      status: 'pending', progress: 0, msg: 'Waiting...', reportUrl: null,
+    }))
+    .filter(c => c.argusFile && c.clientFile)
+}
+
+// Recursively read a drag-drop directory entry into flat file list
+async function xlReadEntry(entry, files, pathPrefix) {
+  if (entry.isFile) {
+    return new Promise(resolve => {
+      entry.file(f => {
+        const path = (pathPrefix ? pathPrefix + '/' : '') + f.name
+        Object.defineProperty(f, 'webkitRelativePath', { value: path, writable: false })
+        files.push(f)
+        resolve()
+      })
+    })
+  } else if (entry.isDirectory) {
+    const reader = entry.createReader()
+    return new Promise(resolve => {
+      reader.readEntries(async entries => {
+        const prefix = (pathPrefix ? pathPrefix + '/' : '') + entry.name
+        await Promise.all(entries.map(e => xlReadEntry(e, files, prefix)))
+        resolve()
+      })
+    })
+  }
+}
+
+function xlRenderQueue() {
+  const list = el('rr-xl-client-list')
+  const fireBtn = el('btn-rr-xl-fire')
+  if (!list) return
+
+  if (!xlState.clients.length) {
+    list.classList.add('hidden')
+    fireBtn?.classList.add('hidden')
+    return
+  }
+
+  list.classList.remove('hidden')
+  fireBtn?.classList.remove('hidden')
+
+  list.innerHTML = `
+    <div class="rr-xl-list-header">${xlState.clients.length} CLIENT${xlState.clients.length > 1 ? 'S' : ''} DETECTED</div>
+    ${xlState.clients.map(c => `
+      <div class="rr-xl-client-row" data-id="${c.id}">
+        <div class="rr-xl-client-name">${escapeHtml(c.name)}</div>
+        <div class="rr-xl-client-files">
+          <span class="rr-xl-tag rr-xl-tag-argus">📐 ${escapeHtml(c.argusFile.name)}${c.argusCount > 1 ? ` (+${c.argusCount - 1})` : ''}</span>
+          <span class="rr-xl-tag rr-xl-tag-client">📄 ${escapeHtml(c.clientFile.name)}${c.clientCount > 1 ? ` (+${c.clientCount - 1})` : ''}</span>
+        </div>
+        <button class="rr-xl-remove" data-id="${c.id}">✕</button>
+      </div>
+    `).join('')}
+  `
+
+  list.querySelectorAll('.rr-xl-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      xlState.clients = xlState.clients.filter(c => c.id !== btn.dataset.id)
+      xlRenderQueue()
+    })
+  })
+}
+
+function xlRenderProgressList() {
+  const list = el('rr-xl-progress-list')
+  if (!list) return
+  list.innerHTML = xlState.clients.map(c => `
+    <div class="rr-xl-prog-row" id="xl-prog-${c.id}">
+      <div class="rr-xl-prog-name">${escapeHtml(c.name)}</div>
+      <div class="rr-xl-prog-track">
+        <div class="rr-xl-prog-fill" id="xl-fill-${c.id}" style="width:0%"></div>
+      </div>
+      <div class="rr-xl-prog-msg" id="xl-msg-${c.id}">Waiting...</div>
+      <div class="rr-xl-prog-icon" id="xl-icon-${c.id}">⏳</div>
+    </div>
+  `).join('')
+}
+
+function xlUpdateProgress(id, pct, msg, status) {
+  const fill = el(`xl-fill-${id}`)
+  const msgEl = el(`xl-msg-${id}`)
+  const icon  = el(`xl-icon-${id}`)
+  const row   = el(`xl-prog-${id}`)
+  if (fill)  fill.style.width = `${Math.min(100, pct)}%`
+  if (msgEl) msgEl.textContent = msg || ''
+  if (icon)  icon.textContent = status === 'done' ? '✅' : status === 'error' ? '❌' : '⏳'
+  if (row)   row.className = `rr-xl-prog-row xl-status-${status || 'running'}`
+}
+
+async function xlUploadClient(c) {
+  const fd = new FormData()
+  fd.append('files', c.argusFile)
+  fd.append('files', c.clientFile)
+  const url = typeof sameOriginApi === 'function' ? sameOriginApi('/api/rr/upload') : '/api/rr/upload'
+  const resp = await fetch(url, { method: 'POST', body: fd })
+  const data = await resp.json()
+  if (!resp.ok) throw new Error(data.error || 'Upload failed')
+  return {
+    sessionId:    data.sessionId,
+    argusFileId:  data.files.find(f => f.detectedRole === 'ARGUS')?.id || data.files[0].id,
+    clientFileId: data.files.find(f => f.detectedRole === 'CLIENT')?.id || data.files[1].id,
+  }
+}
+
+function xlAnalyzeClient(c, sessionId, argusFileId, clientFileId) {
+  return new Promise((resolve, reject) => {
+    const checks = getEnabledCheckIds()
+    const cp = checks ? `&checks=${encodeURIComponent(JSON.stringify(checks))}` : ''
+    const base = `/api/rr/analyze?sessionId=${sessionId}&clientFileId=${clientFileId}&argusFileId=${argusFileId}${cp}`
+    const url = typeof sameOriginApi === 'function' ? sameOriginApi(base) : base
+    const es = new EventSource(url)
+    xlState.eventSources[c.id] = es
+
+    es.addEventListener('rr-progress', e => {
+      try { const d = JSON.parse(e.data); xlUpdateProgress(c.id, d.percent || 0, d.message || '', 'running') } catch {}
+    })
+    es.addEventListener('rr-complete', e => {
+      try {
+        const d = JSON.parse(e.data)
+        c.reportUrl = d.downloadPath
+        c.status = 'done'
+        c.summary = d.summary
+        xlUpdateProgress(c.id, 100, 'Done!', 'done')
+        xlAddResultCard(c, d)
+      } catch {}
+      es.close(); delete xlState.eventSources[c.id]; resolve()
+    })
+    es.addEventListener('rr-error', e => {
+      try { const d = JSON.parse(e.data); c.error = d.error } catch {}
+      c.status = 'error'
+      xlUpdateProgress(c.id, 0, `Failed: ${c.error || 'Unknown error'}`, 'error')
+      es.close(); delete xlState.eventSources[c.id]; reject(new Error(c.error))
+    })
+    es.onerror = () => {
+      if (es.readyState === EventSource.CLOSED) return
+      es.close(); delete xlState.eventSources[c.id]; reject(new Error('Connection lost'))
+    }
+  })
+}
+
+function xlAddResultCard(c, data) {
+  const container = el('rr-xl-results')
+  if (!container) return
+  const s = data.summary || {}
+  const dlUrl = typeof sameOriginApi === 'function' ? sameOriginApi(data.downloadPath) : data.downloadPath
+  const card = document.createElement('div')
+  card.className = 'rr-xl-result-card'
+  card.id = `xl-result-${c.id}`
+  card.innerHTML = `
+    <div class="rr-xl-result-name">${escapeHtml(c.name)}</div>
+    <div class="rr-xl-result-stats">
+      <span class="rr-xl-stat">${s.matched ?? '—'} matched</span>
+      <span class="rr-xl-stat rr-xl-stat-warn">${s.discrepancies ?? '—'} issues</span>
+      <span class="rr-xl-stat rr-xl-stat-danger">${s.highSeverity ?? '—'} high</span>
+    </div>
+    <a class="rr-xl-result-dl" href="${escapeHtml(dlUrl)}" download>📥 DOWNLOAD EXCEL</a>
+  `
+  container.appendChild(card)
+}
+
+async function xlFireOvens() {
+  if (!xlState.clients.length) return
+  if (typeof sfxBtnClick === 'function') sfxBtnClick()
+  rrGoTo('xl-cooking')
+  xlRenderProgressList()
+
+  await Promise.all(xlState.clients.map(async c => {
+    try {
+      xlUpdateProgress(c.id, 5, 'Uploading...', 'running')
+      const { sessionId, argusFileId, clientFileId } = await xlUploadClient(c)
+      c.sessionId = sessionId
+      xlUpdateProgress(c.id, 20, 'Analyzing...', 'running')
+      await xlAnalyzeClient(c, sessionId, argusFileId, clientFileId)
+    } catch (err) {
+      c.status = 'error'
+      xlUpdateProgress(c.id, 0, `Error: ${err.message}`, 'error')
+    }
+  }))
+
+  setTimeout(() => {
+    if (typeof sfxKitchenDing === 'function') sfxKitchenDing()
+    rrGoTo('xl-done')
+  }, 600)
+}
+
+function xlReset() {
+  Object.values(xlState.eventSources).forEach(es => { try { es.close() } catch {} })
+  xlState.eventSources = {}
+  xlState.clients = []
+  const input = el('rr-xl-input')
+  if (input) input.value = ''
+  const list = el('rr-xl-client-list')
+  if (list) { list.innerHTML = ''; list.classList.add('hidden') }
+  el('btn-rr-xl-fire')?.classList.add('hidden')
+  const results = el('rr-xl-results')
+  if (results) results.innerHTML = ''
+  const prog = el('rr-xl-progress-list')
+  if (prog) prog.innerHTML = ''
+  rrGoTo('xl-queue')
+}
+
+function initXLOrder() {
+  el('btn-rr-xl-order')?.addEventListener('click', () => {
+    if (typeof sfxBtnClick === 'function') sfxBtnClick()
+    xlState.clients = []
+    const list = el('rr-xl-client-list')
+    if (list) { list.innerHTML = ''; list.classList.add('hidden') }
+    el('btn-rr-xl-fire')?.classList.add('hidden')
+    rrGoTo('xl-queue')
+  })
+
+  el('btn-rr-xl-pick')?.addEventListener('click', () => el('rr-xl-input')?.click())
+
+  el('rr-xl-input')?.addEventListener('change', e => {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    xlState.clients = xlParseFiles(files)
+    if (!xlState.clients.length) {
+      if (typeof toast === 'function') toast('No client pairs found. Check folder names contain "argus" and "client".', 'error')
+      return
+    }
+    xlRenderQueue()
+  })
+
+  const dz = el('rr-xl-dropzone')
+  dz?.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over') })
+  dz?.addEventListener('dragleave', () => dz.classList.remove('drag-over'))
+  dz?.addEventListener('drop', async e => {
+    e.preventDefault()
+    dz.classList.remove('drag-over')
+    const items = Array.from(e.dataTransfer?.items || [])
+    const allFiles = []
+    await Promise.all(items.map(item => {
+      const entry = item.webkitGetAsEntry?.()
+      return entry ? xlReadEntry(entry, allFiles, '') : Promise.resolve()
+    }))
+    if (!allFiles.length) return
+    xlState.clients = xlParseFiles(allFiles)
+    if (!xlState.clients.length) {
+      if (typeof toast === 'function') toast('No client pairs found. Check folder structure.', 'error')
+      return
+    }
+    xlRenderQueue()
+  })
+
+  el('btn-rr-xl-fire')?.addEventListener('click', xlFireOvens)
+  el('btn-rr-xl-back')?.addEventListener('click', () => rrGoTo('upload'))
+  el('btn-rr-xl-new-order')?.addEventListener('click', xlReset)
+}
+
 // ── Init ─────────────────────────────────────────────────────
 function init() {
   bindSlotPick(1)
@@ -702,6 +1034,7 @@ function init() {
   })
 
   initSecretRecipe()
+  initXLOrder()
 
   // Draw hero chef on upload screen when screen-rr becomes active
   // We watch for the screen-rr becoming active

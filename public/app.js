@@ -137,6 +137,34 @@ async function sfxOvenDoor() {
   _sfxNote(130, t + 0.00, 0.18, 'sawtooth', 0.08)
   _sfxNote(110, t + 0.20, 0.25, 'sawtooth', 0.06)
 }
+async function sfxSauceSpread() {
+  if (_sfxMuted || !_sfxCtx) return
+  await _sfxResume()
+  const t = _sfxCtx.currentTime
+  // Wet swoosh — low noise sweep
+  _sfxNote(180, t + 0.00, 0.08, 'sine', 0.05)
+  _sfxNote(160, t + 0.10, 0.10, 'sine', 0.04)
+  _sfxNote(140, t + 0.22, 0.12, 'sine', 0.04)
+}
+async function sfxToppings() {
+  if (_sfxMuted || !_sfxCtx) return
+  await _sfxResume()
+  const t = _sfxCtx.currentTime
+  // Light pitter-patter of toppings dropping
+  ;[0, 0.08, 0.18, 0.26, 0.38].forEach((offset, i) => {
+    _sfxNote(440 + i * 80, t + offset, 0.04, 'triangle', 0.05)
+  })
+}
+async function sfxPanSizzle() {
+  if (_sfxMuted || !_sfxCtx) return
+  await _sfxResume()
+  const t = _sfxCtx.currentTime
+  // Sizzle — rapid high buzz
+  _sfxNote(800, t + 0.00, 0.06, 'sawtooth', 0.04)
+  _sfxNote(750, t + 0.07, 0.06, 'sawtooth', 0.03)
+  _sfxNote(820, t + 0.14, 0.06, 'sawtooth', 0.04)
+  _sfxNote(760, t + 0.21, 0.08, 'sawtooth', 0.03)
+}
 
 // ── Background loop engine ───────────────────────────────────
 let _bgLoopTimer = null
