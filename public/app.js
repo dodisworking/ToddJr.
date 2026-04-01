@@ -3730,33 +3730,44 @@ async function runLocalTenantAnalysis(tenant, tenantsToShow, useJuice, learnings
     cheap
   })
 
-  // Retry up to 2 times on 502/503/504 (Railway gateway timeouts under load)
-  const MAX_ATTEMPTS = 3
-  let lastErr = null
+  // Retry forever on gateway errors (502/503/504) — never give up on a tenant.
+  // Only bail on genuine client/auth errors (400, 401, 403, 422, etc.)
+  const GATEWAY_ERRORS = new Set([502, 503, 504, 429])
+  const pmsg = document.getElementById(`pmsg-${tenant.id}`)
 
   try {
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let attempt = 0
+    while (true) {
+      attempt++
+
       if (attempt > 1) {
-        const delay = attempt === 2 ? 4000 : 8000
-        const pmsg = document.getElementById(`pmsg-${tenant.id}`)
-        if (pmsg) pmsg.textContent = `⏳ Retry ${attempt - 1}/${MAX_ATTEMPTS - 1} (waiting ${delay / 1000}s)...`
+        // Exponential backoff capped at 30s: 5s, 10s, 20s, 30s, 30s, …
+        const delay = Math.min(5000 * Math.pow(2, attempt - 2), 30000)
+        if (pmsg) pmsg.textContent = `⏳ Retry ${attempt - 1} — waiting ${delay / 1000}s...`
         await new Promise(r => setTimeout(r, delay))
+        if (pmsg) pmsg.textContent = `🔄 Retry ${attempt - 1} in progress...`
       }
 
-      const res = await fetch(sameOriginApi('/api/hunt/tenant'), {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    postBody
-      })
+      let res
+      try {
+        res = await fetch(sameOriginApi('/api/hunt/tenant'), {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    postBody
+        })
+      } catch (networkErr) {
+        // Network-level failure (offline, ECONNRESET) — retry
+        console.warn(`[hunt/local] ${tenant.tenantName} network error (attempt ${attempt}):`, networkErr.message)
+        continue
+      }
 
-      // Gateway errors (502/503/504) — retry; other errors — fail immediately
       if (!res.ok) {
-        const isGatewayErr = res.status === 502 || res.status === 503 || res.status === 504
-        if (isGatewayErr && attempt < MAX_ATTEMPTS) {
-          lastErr = new Error(`Server error ${res.status}`)
-          console.warn(`[hunt/local] ${tenant.tenantName} got ${res.status}, retrying (${attempt}/${MAX_ATTEMPTS})`)
+        if (GATEWAY_ERRORS.has(res.status)) {
+          // Transient server error — keep retrying
+          console.warn(`[hunt/local] ${tenant.tenantName} got ${res.status} (attempt ${attempt}), retrying...`)
           continue
         }
+        // Non-retriable error (400, 401, 413, 422 etc.)
         const data = await res.json().catch(() => ({}))
         throw new Error(data.error || `Server error ${res.status}`)
       }
@@ -3779,14 +3790,11 @@ async function runLocalTenantAnalysis(tenant, tenantsToShow, useJuice, learnings
         document.getElementById('btn-kill-hunt').classList.add('hidden')
         showCookCta()
       }
-      return  // success — exit retry loop
+      return  // success
     }
 
-    // All retries exhausted
-    throw lastErr || new Error('All retry attempts failed')
-
   } catch (err) {
-    console.error(`[hunt/local] Error on tenant ${tenant.tenantName} (all retries failed):`, err.message)
+    console.error(`[hunt/local] Permanent error on tenant ${tenant.tenantName}:`, err.message)
     const errData = {
       tenantId:     tenant.id,
       findingCount: 1,
@@ -3797,8 +3805,8 @@ async function runLocalTenantAnalysis(tenant, tenantsToShow, useJuice, learnings
         checkType:       'LEGIBILITY',
         severity:        'HIGH',
         missingDocument: 'N/A',
-        comment:         `Document analysis failed after ${MAX_ATTEMPTS} attempts: ${err.message}`,
-        evidence:        'Server timed out or was overloaded. Use Accuracy mode or retry this tenant individually.'
+        comment:         `Document analysis failed: ${err.message}`,
+        evidence:        'Non-retriable error. Check file size/format and try again.'
       }]
     }
     state.findings.set(tenant.id, errData)
