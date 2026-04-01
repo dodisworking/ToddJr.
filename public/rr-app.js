@@ -322,6 +322,12 @@ function startMasterChef() {
 
   rrGoTo('cooking')
   startChefAnimation('rr-cook-canvas')
+  // Force all stages hidden + reset cookStage so animations restart fresh
+  rrState.cookStage = 'idle'
+  ;['dough','sauce','toppings','pan','oven','done'].forEach(s => {
+    const el2 = el(`rr-stage-${s}`)
+    if (el2) { el2.classList.add('hidden'); void el2.offsetHeight }
+  })
   setCookStage('dough')
 
   const { sessionId, assignments } = rrState
@@ -356,45 +362,54 @@ function startMasterChef() {
   })
 
   es.addEventListener('rr-complete', e => {
+    es.close()
+    rrState.eventSource = null
+    let data
     try {
-      const data = JSON.parse(e.data)
+      data = JSON.parse(e.data)
+    } catch (err) {
+      console.error('[rr-complete] JSON parse error:', err, 'raw:', e.data?.slice(0, 300))
+      if (typeof toast === 'function') toast('Result parsing error — check console', 'error')
+      rrGoTo('confirm')
+      return
+    }
+    try {
       rrState.reportData = data
       setCookStage('done')
       updateCookProgress(100, 'Pizza is ready!')
       if (typeof sfxKitchenDing === 'function') sfxKitchenDing()
-      // Bounce the DING element
       const ding = el('rr-pizza-ding')
-      if (ding) {
-        ding.classList.remove('hidden')
-        ding.classList.add('ding-pop')
-      }
-      // After a short pause, go to report
+      if (ding) { ding.classList.remove('hidden'); ding.classList.add('ding-pop') }
       setTimeout(() => {
-        if (rrState.animTimer) clearInterval(rrState.animTimer)
+        if (rrState.animTimer) { clearInterval(rrState.animTimer); rrState.animTimer = null }
         renderReport(data)
         rrGoTo('report')
       }, 2200)
-    } catch {}
-    es.close()
-    rrState.eventSource = null
+    } catch (err) {
+      console.error('[rr-complete] render error:', err)
+      if (typeof toast === 'function') toast(`Render error: ${err.message}`, 'error')
+      rrGoTo('confirm')
+    }
   })
 
   es.addEventListener('rr-error', e => {
-    try {
-      const d = JSON.parse(e.data)
-      if (typeof toast === 'function') toast(`Analysis failed: ${d.error}`, 'error')
-      else alert(`Analysis failed: ${d.error}`)
-    } catch {}
+    let msg = 'Analysis failed'
+    try { msg = JSON.parse(e.data).error || msg } catch {}
+    console.error('[rr-error]', msg)
+    if (typeof toast === 'function') toast(`Analysis failed: ${msg}`, 'error')
+    else alert(`Analysis failed: ${msg}`)
     es.close()
     rrState.eventSource = null
     rrGoTo('confirm')
   })
 
-  es.onerror = () => {
+  es.onerror = (err) => {
     if (es.readyState === EventSource.CLOSED) return
+    console.error('[rr SSE onerror]', err)
     if (typeof toast === 'function') toast('Connection lost. Please try again.', 'error')
     es.close()
     rrState.eventSource = null
+    rrGoTo('confirm')
   }
 }
 
