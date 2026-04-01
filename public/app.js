@@ -3653,9 +3653,10 @@ async function startHuntLocal(testTenantId = null) {
 
   sfxStartHuntLoop()
 
-  // Concurrency: same as accuracy toggle — 1 = sequential, 5 = parallel
+  // Concurrency: accuracy=1 sequential, speed=3 parallel
+  // Capped at 3 (not 5) to avoid Railway 502s from simultaneous large requests
   const accuracyMode = document.getElementById('accuracy-toggle')?.checked !== false
-  const CONCURRENCY  = accuracyMode ? 1 : Math.min(5, tenantsToShow.length)
+  const CONCURRENCY  = accuracyMode ? 1 : Math.min(3, tenantsToShow.length)
 
   // Simple concurrent queue
   let aborted = false
@@ -3713,48 +3714,79 @@ async function runLocalTenantAnalysis(tenant, tenantsToShow, useJuice, learnings
     }
   }).filter(Boolean)
 
+  // Build POST body once (files are large — don't re-serialize on every retry)
+  const postBody = JSON.stringify({
+    sessionId: state.sessionId,
+    tenant: {
+      id:         tenant.id,
+      folderName: tenant.folderName,
+      tenantName: tenant.tenantName,
+      property:   tenant.property,
+      suite:      tenant.suite
+    },
+    files,
+    juiced:    useJuice,
+    learnings: useJuice ? learnings : [],
+    cheap
+  })
+
+  // Retry up to 2 times on 502/503/504 (Railway gateway timeouts under load)
+  const MAX_ATTEMPTS = 3
+  let lastErr = null
+
   try {
-    const res = await fetch(sameOriginApi('/api/hunt/tenant'), {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({
-        sessionId: state.sessionId,
-        tenant: {
-          id:         tenant.id,
-          folderName: tenant.folderName,
-          tenantName: tenant.tenantName,
-          property:   tenant.property,
-          suite:      tenant.suite
-        },
-        files,
-        juiced:    useJuice,
-        learnings: useJuice ? learnings : [],
-        cheap
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      if (attempt > 1) {
+        const delay = attempt === 2 ? 4000 : 8000
+        const pmsg = document.getElementById(`pmsg-${tenant.id}`)
+        if (pmsg) pmsg.textContent = `⏳ Retry ${attempt - 1}/${MAX_ATTEMPTS - 1} (waiting ${delay / 1000}s)...`
+        await new Promise(r => setTimeout(r, delay))
+      }
+
+      const res = await fetch(sameOriginApi('/api/hunt/tenant'), {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    postBody
       })
-    })
 
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error || `Server error ${res.status}`)
+      // Gateway errors (502/503/504) — retry; other errors — fail immediately
+      if (!res.ok) {
+        const isGatewayErr = res.status === 502 || res.status === 503 || res.status === 504
+        if (isGatewayErr && attempt < MAX_ATTEMPTS) {
+          lastErr = new Error(`Server error ${res.status}`)
+          console.warn(`[hunt/local] ${tenant.tenantName} got ${res.status}, retrying (${attempt}/${MAX_ATTEMPTS})`)
+          continue
+        }
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || `Server error ${res.status}`)
+      }
 
-    const result = data.result || {}
-    // result shape matches what /api/hunt folder-done returns via session.findings
-    const doneData = {
-      tenantId:     tenant.id,
-      findingCount: result.findings?.length || 0,
-      allClear:     result.allClear || false,
-      severity:     _localMaxSeverity(result.findings),
-      // Attach full result so cook/report flows can access it
-      ...result
+      const data = await res.json()
+      if (!data.result) throw new Error(data.error || 'Empty result from server')
+
+      const result = data.result || {}
+      const doneData = {
+        tenantId:     tenant.id,
+        findingCount: result.findings?.length || 0,
+        allClear:     result.allClear || false,
+        severity:     _localMaxSeverity(result.findings),
+        ...result
+      }
+      state.findings.set(tenant.id, doneData)
+      setCardDone(tenant.id, doneData)
+
+      if (state.findings.size >= tenantsToShow.length) {
+        document.getElementById('btn-kill-hunt').classList.add('hidden')
+        showCookCta()
+      }
+      return  // success — exit retry loop
     }
-    state.findings.set(tenant.id, doneData)
-    setCardDone(tenant.id, doneData)
 
-    if (state.findings.size >= tenantsToShow.length) {
-      document.getElementById('btn-kill-hunt').classList.add('hidden')
-      showCookCta()
-    }
+    // All retries exhausted
+    throw lastErr || new Error('All retry attempts failed')
+
   } catch (err) {
-    console.error(`[hunt/local] Error on tenant ${tenant.tenantName}:`, err.message)
+    console.error(`[hunt/local] Error on tenant ${tenant.tenantName} (all retries failed):`, err.message)
     const errData = {
       tenantId:     tenant.id,
       findingCount: 1,
@@ -3765,8 +3797,8 @@ async function runLocalTenantAnalysis(tenant, tenantsToShow, useJuice, learnings
         checkType:       'LEGIBILITY',
         severity:        'HIGH',
         missingDocument: 'N/A',
-        comment:         `Document analysis failed: ${err.message}`,
-        evidence:        'Client-side processing error — please retry.'
+        comment:         `Document analysis failed after ${MAX_ATTEMPTS} attempts: ${err.message}`,
+        evidence:        'Server timed out or was overloaded. Use Accuracy mode or retry this tenant individually.'
       }]
     }
     state.findings.set(tenant.id, errData)
