@@ -1123,8 +1123,13 @@ function goTo(screenName) {
 // ═══════════════════════════════════════════════════════════
 
 // ── Game 01: Lease Index & Missing Docs Hunter ──────────────
+// Resume session if tenants are already loaded, otherwise go to upload
 document.getElementById('game-card-hunter')?.addEventListener('click', () => {
-  goTo('upload')
+  if (state.tenants?.length > 0) {
+    goTo('loading')   // resume existing session
+  } else {
+    goTo('upload')    // fresh start
+  }
 })
 
 // ── Game 02: Rent Roll Chef (coming soon — disabled) ────────
@@ -4665,9 +4670,15 @@ async function navigateGlobalBack() {
 
 btnGlobalHome?.addEventListener('click', async () => {
   if (state.screen === 'home') return  // already on launcher, nothing to do
-  const ok = await pixelConfirm('Go home?\n\nThis starts a fresh session.\nAll progress will be lost.', '⌂ GO HOME?')
-  if (!ok) return
-  resetToHome()
+  // If a hunt is actively running, warn before navigating away
+  if (state.eventSource) {
+    const ok = await pixelConfirm('A hunt is running.\nGo home anyway? (Hunt keeps going in background)', '⌂ GO HOME?')
+    if (!ok) return
+  }
+  // Just navigate home — session stays intact, user can resume via Game 01
+  if (state.eventSource) { state.eventSource.close(); state.eventSource = null }
+  sfxStopBgLoop()
+  goTo('home')
 })
 
 btnGlobalBack?.addEventListener('click', () => navigateGlobalBack())
