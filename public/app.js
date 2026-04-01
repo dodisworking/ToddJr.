@@ -109,6 +109,74 @@ async function sfxJuice() {
   _sfxNote(659, t + 0.08, 0.12, 'square', 0.1)
 }
 
+// ── Kitchen SFX (Rent Roll Chef) ─────────────────────────────
+
+/** 🔔 Kitchen ding — warm bell when pizza is ready */
+async function sfxKitchenDing() {
+  if (_sfxMuted || !_sfxCtx) return
+  await _sfxResume()
+  const t = _sfxCtx.currentTime
+  // Double ding — G6, E6, C6 sine tones
+  _sfxNote(1568, t + 0.00, 0.35, 'sine', 0.20)
+  _sfxNote(1319, t + 0.10, 0.30, 'sine', 0.18)
+  _sfxNote(1047, t + 0.20, 0.50, 'sine', 0.22)
+  // Second ding (echo)
+  _sfxNote(1568, t + 0.60, 0.30, 'sine', 0.14)
+  _sfxNote(1319, t + 0.70, 0.25, 'sine', 0.12)
+  _sfxNote(1047, t + 0.80, 0.45, 'sine', 0.16)
+}
+
+/** 🫓 Dough roll — low rumble */
+async function sfxDoughRoll() {
+  if (_sfxMuted || !_sfxCtx) return
+  await _sfxResume()
+  const t = _sfxCtx.currentTime
+  _sfxNote(80, t + 0.00, 0.20, 'sawtooth', 0.10)
+  _sfxNote(90, t + 0.15, 0.15, 'sawtooth', 0.08)
+  _sfxNote(75, t + 0.30, 0.25, 'sawtooth', 0.10)
+  _sfxNote(95, t + 0.50, 0.15, 'sawtooth', 0.07)
+}
+
+/** 🍅 Sauce spread — wet swoosh */
+async function sfxSauceSpread() {
+  if (_sfxMuted || !_sfxCtx) return
+  await _sfxResume()
+  const t = _sfxCtx.currentTime
+  _sfxNote(200, t + 0.00, 0.15, 'sine', 0.06)
+  _sfxNote(350, t + 0.05, 0.20, 'sine', 0.08)
+  _sfxNote(500, t + 0.10, 0.25, 'sine', 0.06)
+  _sfxNote(300, t + 0.25, 0.15, 'sine', 0.04)
+}
+
+/** 🧅 Toppings — light pitter-patter */
+async function sfxToppings() {
+  if (_sfxMuted || !_sfxCtx) return
+  await _sfxResume()
+  const t = _sfxCtx.currentTime
+  const notes = [880, 1047, 988, 1175, 1319]
+  notes.forEach((f, i) => _sfxNote(f, t + i * 0.08, 0.06, 'triangle', 0.09))
+}
+
+/** 🍳 Pan sizzle — rapid high buzz */
+async function sfxPanSizzle() {
+  if (_sfxMuted || !_sfxCtx) return
+  await _sfxResume()
+  const t = _sfxCtx.currentTime
+  for (let i = 0; i < 6; i++) {
+    _sfxNote(2200 + Math.random() * 800, t + i * 0.04, 0.05, 'sawtooth', 0.04)
+  }
+}
+
+/** 🔥 Oven door — deep creak */
+async function sfxOvenDoor() {
+  if (_sfxMuted || !_sfxCtx) return
+  await _sfxResume()
+  const t = _sfxCtx.currentTime
+  _sfxNote(120, t + 0.00, 0.30, 'sawtooth', 0.12)
+  _sfxNote(85, t + 0.15, 0.40, 'sawtooth', 0.10)
+  _sfxNote(60, t + 0.35, 0.35, 'sawtooth', 0.08)
+}
+
 // ── Background loop engine ───────────────────────────────────
 let _bgLoopTimer = null
 let _bgLoopActive = false
@@ -163,6 +231,34 @@ async function sfxStartCookLoop() {
     const freq = seq[step % seq.length]
     _sfxNote(freq, t, 0.22, 'sine', 0.06)
     if (step % 16 === 0 || step % 16 === 8) _sfxNote(freq * 2, t, 0.08, 'square', 0.04)
+    step++
+    _bgLoopTimer = setTimeout(playStep, stepMs)
+  }
+  playStep()
+}
+
+/**
+ * 🎵 Kitchen loop — jazzy Italian kitchen vibe for RR Chef
+ */
+async function sfxStartKitchenLoop() {
+  sfxStopBgLoop()
+  if (_sfxMuted || !_sfxCtx) return
+  await _sfxResume()
+  _bgLoopActive = true
+
+  // Jazzy minor pentatonic — kitchen hustle vibe
+  const seq = [330, 392, 440, 523, 440, 392, 330, 294,
+               330, 440, 392, 523, 587, 523, 440, 330]
+  const stepMs = 480
+  let step = 0
+
+  function playStep() {
+    if (!_bgLoopActive || _sfxMuted) return
+    const t = _sfxCtx.currentTime
+    const freq = seq[step % seq.length]
+    _sfxNote(freq, t, 0.20, 'triangle', 0.06)
+    if (step % 4 === 0) _sfxNote(110, t, 0.15, 'sine', 0.05)  // bass note
+    if (step % 8 === 4) _sfxNote(freq * 1.5, t, 0.08, 'square', 0.03)  // harmonic accent
     step++
     _bgLoopTimer = setTimeout(playStep, stepMs)
   }
@@ -4538,10 +4634,14 @@ function gymLaunchWorkout(data) {
   renderGymFindingCards()
   gymUpdateReviewStatus()
 
-  // Load first PDF
+  // Load first PDF immediately, then silently pre-load all others in background
   const firstPDF = gymState.files.find(f => f.isPDF)
-  if (firstPDF) gymLoadDoc(firstPDF.index)
-  else document.getElementById('gym-pdf-hint').textContent = 'No PDF files in this folder'
+  if (firstPDF) {
+    gymLoadDoc(firstPDF.index)
+    gymPreloadAllPDFs()  // background — no await, fires silently
+  } else {
+    document.getElementById('gym-pdf-hint').textContent = 'No PDF files in this folder'
+  }
 }
 
 // ── Finding cards ──────────────────────────────────────────
@@ -5070,6 +5170,31 @@ function gymParseEvidenceLocation(evidence) {
   return { docIdx: pdfs[0].index, pageNum }
 }
 
+// ── Background PDF pre-loader ───────────────────────────────
+// Silently fetches and caches every PDF referenced by any finding so that
+// clicking a finding is instant — no network round-trip needed.
+async function gymPreloadAllPDFs() {
+  if (typeof pdfjsLib === 'undefined') return
+  // Collect unique doc indices referenced by findings
+  const docIndices = new Set()
+  gymState.findings.forEach(f => {
+    try { docIndices.add(gymParseEvidenceLocation(f.evidence).docIdx) } catch {}
+  })
+  // Also add every PDF file so navigating the drawer is instant too
+  gymState.files.forEach(f => { if (f.isPDF) docIndices.add(f.index) })
+
+  for (const fileIndex of docIndices) {
+    if (gymState.pdfCache[fileIndex]) continue  // already loaded
+    const file = gymState.files[fileIndex]
+    if (!file || !file.isPDF) continue
+    try {
+      const pdfDoc = await pdfjsLib.getDocument(file.url).promise
+      gymState.pdfCache[fileIndex] = pdfDoc
+      await gymCachePageLabels(fileIndex, pdfDoc)
+    } catch (e) { /* silently skip — user will get an error if they click this doc */ }
+  }
+}
+
 // ── PDF page-label helpers ──────────────────────────────────
 // Some PDFs embed printed page labels (e.g. cover pages labeled "i","ii" then
 // main body starting at "1" on scan page 4). When labels exist we can map
@@ -5152,13 +5277,21 @@ async function gymGoToPage(pageNum) {
   document.getElementById('gym-pdf-next').disabled = pageNum >= total
 
   try {
-    const page    = await gymState.pdfDoc.getPage(pageNum)
-    const scale   = 1.4
-    const vp      = page.getViewport({ scale })
-    const canvas  = document.getElementById('gym-pdf-canvas')
+    const page  = await gymState.pdfDoc.getPage(pageNum)
+    const scale = 1.4
+    const vp    = page.getViewport({ scale })
+
+    // Render to offscreen canvas first — eliminates blank flash on the display canvas
+    const offscreen = document.createElement('canvas')
+    offscreen.width  = vp.width
+    offscreen.height = vp.height
+    await page.render({ canvasContext: offscreen.getContext('2d'), viewport: vp }).promise
+
+    // Swap onto the visible canvas in one synchronous step — instant, no flicker
+    const canvas = document.getElementById('gym-pdf-canvas')
     canvas.width  = vp.width
     canvas.height = vp.height
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise
+    canvas.getContext('2d').drawImage(offscreen, 0, 0)
   } catch (err) {
     console.error('[gym render page]', err)
   }
