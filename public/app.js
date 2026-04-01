@@ -55,16 +55,18 @@ function updateSpeakerIcon() {
 
 /** 🎵 Button click — quick square blip */
 async function sfxBtnClick() {
-  if (_sfxMuted || !_sfxCtx) return
+  if (_sfxMuted) return
   await _sfxResume()
+  if (!_sfxCtx) return
   const t = _sfxCtx.currentTime
   _sfxNote(440, t, 0.04, 'square', 0.09)
 }
 
 /** 🎵 Hunt complete — ascending 4-note 8-bit fanfare */
 async function sfxHuntComplete() {
-  if (_sfxMuted || !_sfxCtx) return
+  if (_sfxMuted) return
   await _sfxResume()
+  if (!_sfxCtx) return
   const t = _sfxCtx.currentTime
   _sfxNote(523,  t + 0.00, 0.12)   // C5
   _sfxNote(659,  t + 0.13, 0.12)   // E5
@@ -74,8 +76,9 @@ async function sfxHuntComplete() {
 
 /** 🎵 All clear — clean 3-note chime */
 async function sfxAllClear() {
-  if (_sfxMuted || !_sfxCtx) return
+  if (_sfxMuted) return
   await _sfxResume()
+  if (!_sfxCtx) return
   const t = _sfxCtx.currentTime
   _sfxNote(784,  t + 0.00, 0.15, 'sine', 0.14)  // G5
   _sfxNote(988,  t + 0.16, 0.15, 'sine', 0.14)  // B5
@@ -84,8 +87,9 @@ async function sfxAllClear() {
 
 /** 🎵 Test/verdict ready — 2-tone notification ping */
 async function sfxReady() {
-  if (_sfxMuted || !_sfxCtx) return
+  if (_sfxMuted) return
   await _sfxResume()
+  if (!_sfxCtx) return
   const t = _sfxCtx.currentTime
   _sfxNote(880,  t + 0.00, 0.10, 'square', 0.12) // A5
   _sfxNote(1175, t + 0.12, 0.18, 'square', 0.12) // D6
@@ -93,8 +97,9 @@ async function sfxReady() {
 
 /** 🎵 Error — low descending buzz */
 async function sfxError() {
-  if (_sfxMuted || !_sfxCtx) return
+  if (_sfxMuted) return
   await _sfxResume()
+  if (!_sfxCtx) return
   const t = _sfxCtx.currentTime
   _sfxNote(220, t + 0.00, 0.12, 'sawtooth', 0.15)
   _sfxNote(165, t + 0.13, 0.20, 'sawtooth', 0.13)
@@ -102,8 +107,9 @@ async function sfxError() {
 
 /** 🎵 Juice saved — quick bloop */
 async function sfxJuice() {
-  if (_sfxMuted || !_sfxCtx) return
+  if (_sfxMuted) return
   await _sfxResume()
+  if (!_sfxCtx) return
   const t = _sfxCtx.currentTime
   _sfxNote(440, t + 0.00, 0.07, 'square', 0.1)
   _sfxNote(659, t + 0.08, 0.12, 'square', 0.1)
@@ -113,8 +119,9 @@ async function sfxJuice() {
 
 /** 🔔 Kitchen ding — warm bell when pizza is ready */
 async function sfxKitchenDing() {
-  if (_sfxMuted || !_sfxCtx) return
+  if (_sfxMuted) return
   await _sfxResume()
+  if (!_sfxCtx) return
   const t = _sfxCtx.currentTime
   // Double ding — G6, E6, C6 sine tones
   _sfxNote(1568, t + 0.00, 0.35, 'sine', 0.20)
@@ -128,8 +135,9 @@ async function sfxKitchenDing() {
 
 /** 🫓 Dough roll — low rumble */
 async function sfxDoughRoll() {
-  if (_sfxMuted || !_sfxCtx) return
+  if (_sfxMuted) return
   await _sfxResume()
+  if (!_sfxCtx) return
   const t = _sfxCtx.currentTime
   _sfxNote(80, t + 0.00, 0.20, 'sawtooth', 0.10)
   _sfxNote(90, t + 0.15, 0.15, 'sawtooth', 0.08)
@@ -139,8 +147,9 @@ async function sfxDoughRoll() {
 
 /** 🍅 Sauce spread — wet swoosh */
 async function sfxSauceSpread() {
-  if (_sfxMuted || !_sfxCtx) return
+  if (_sfxMuted) return
   await _sfxResume()
+  if (!_sfxCtx) return
   const t = _sfxCtx.currentTime
   _sfxNote(200, t + 0.00, 0.15, 'sine', 0.06)
   _sfxNote(350, t + 0.05, 0.20, 'sine', 0.08)
@@ -150,8 +159,9 @@ async function sfxSauceSpread() {
 
 /** 🧅 Toppings — light pitter-patter */
 async function sfxToppings() {
-  if (_sfxMuted || !_sfxCtx) return
+  if (_sfxMuted) return
   await _sfxResume()
+  if (!_sfxCtx) return
   const t = _sfxCtx.currentTime
   const notes = [880, 1047, 988, 1175, 1319]
   notes.forEach((f, i) => _sfxNote(f, t + i * 0.08, 0.06, 'triangle', 0.09))
@@ -159,8 +169,9 @@ async function sfxToppings() {
 
 /** 🍳 Pan sizzle — rapid high buzz */
 async function sfxPanSizzle() {
-  if (_sfxMuted || !_sfxCtx) return
+  if (_sfxMuted) return
   await _sfxResume()
+  if (!_sfxCtx) return
   const t = _sfxCtx.currentTime
   for (let i = 0; i < 6; i++) {
     _sfxNote(2200 + Math.random() * 800, t + i * 0.04, 0.05, 'sawtooth', 0.04)
@@ -169,8 +180,9 @@ async function sfxPanSizzle() {
 
 /** 🔥 Oven door — deep creak */
 async function sfxOvenDoor() {
-  if (_sfxMuted || !_sfxCtx) return
+  if (_sfxMuted) return
   await _sfxResume()
+  if (!_sfxCtx) return
   const t = _sfxCtx.currentTime
   _sfxNote(120, t + 0.00, 0.30, 'sawtooth', 0.12)
   _sfxNote(85, t + 0.15, 0.40, 'sawtooth', 0.10)
@@ -191,8 +203,9 @@ function sfxStopBgLoop() {
  */
 async function sfxStartHuntLoop() {
   sfxStopBgLoop()
-  if (_sfxMuted || !_sfxCtx) return
+  if (_sfxMuted) return
   await _sfxResume()
+  if (!_sfxCtx) return
   _bgLoopActive = true
 
   const seq = [220, 261, 293, 329, 261, 392, 329, 261,
