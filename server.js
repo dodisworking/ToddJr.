@@ -1755,6 +1755,15 @@ app.post('/api/gym/workout-feedback', async (req, res) => {
 
 
 // ═══════════════════════════════════════════════════════════
+// RENT ROLL CHEF — coming soon; routes stubbed out
+// (rr-parser.js / rr-claude.js / rr-reporter.js are not
+//  committed to git — do NOT import them here)
+// ═══════════════════════════════════════════════════════════
+app.post('/api/rr/upload',    (_req, res) => res.status(503).json({ error: 'Rent Roll Chef coming soon.' }))
+app.get('/api/rr/analyze',    (_req, res) => res.status(503).json({ error: 'Rent Roll Chef coming soon.' }))
+app.get('/api/rr/download/:sid', (_req, res) => res.status(503).json({ error: 'Rent Roll Chef coming soon.' }))
+
+// ═══════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════
 
