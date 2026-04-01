@@ -12,6 +12,9 @@ import { analyzeTenant, gymAnalyzeTenant, beefedUpAnalyzeTenant, doubleCheckTena
 import { openaiAnalyzeTenant, isOpenAiKeyConfigured, getServerOpenAiKeyHint } from './lib/openai.js'
 import { generateReport } from './lib/reporter.js'
 import { mountIsaacRoutes } from './lib/isaac-routes.js'
+import { parseRRFile } from './lib/rr-parser.js'
+import { analyzeRentRolls } from './lib/rr-claude.js'
+import { generateRRReport } from './lib/rr-reporter.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname  = path.dirname(__filename)
@@ -1755,13 +1758,55 @@ app.post('/api/gym/workout-feedback', async (req, res) => {
 
 
 // ═══════════════════════════════════════════════════════════
-// RENT ROLL CHEF — coming soon; routes stubbed out
-// (rr-parser.js / rr-claude.js / rr-reporter.js are not
-//  committed to git — do NOT import them here)
+// RENT ROLL CHEF — in-memory only, nothing written to volume
 // ═══════════════════════════════════════════════════════════
-app.post('/api/rr/upload',    (_req, res) => res.status(503).json({ error: 'Rent Roll Chef coming soon.' }))
-app.get('/api/rr/analyze',    (_req, res) => res.status(503).json({ error: 'Rent Roll Chef coming soon.' }))
-app.get('/api/rr/download/:sid', (_req, res) => res.status(503).json({ error: 'Rent Roll Chef coming soon.' }))
+
+app.post('/api/rr/analyze', express.json({ limit: '200mb' }), async (req, res) => {
+  const { argusFile, clientFile } = req.body || {}
+  if (!argusFile?.base64 || !clientFile?.base64) {
+    return res.status(400).json({ error: 'Need argusFile and clientFile with base64 data.' })
+  }
+
+  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' })
+  res.flushHeaders()
+  const emit = (ev, d) => { try { res.write(`event: ${ev}\ndata: ${JSON.stringify(d)}\n\n`) } catch {} }
+  const hb = setInterval(() => { try { res.write(': ping\n\n') } catch { clearInterval(hb) } }, 15000)
+
+  try {
+    emit('rr-progress', { stage: 'dough', percent: 10, message: 'Parsing Argus rent roll...' })
+    const argusBuf = Buffer.from(argusFile.base64, 'base64')
+    const argusData = await parseRRFile(argusBuf, argusFile.name)
+
+    emit('rr-progress', { stage: 'sauce', percent: 30, message: 'Parsing client rent roll...' })
+    const clientBuf = Buffer.from(clientFile.base64, 'base64')
+    const clientData = await parseRRFile(clientBuf, clientFile.name)
+
+    if (argusData.scanned || clientData.scanned) {
+      emit('rr-progress', { stage: 'toppings', percent: 40, message: 'PDF appears scanned — text extraction limited, Claude will do its best...' })
+    }
+
+    emit('rr-progress', { stage: 'toppings', percent: 50, message: 'Sending to Claude for standardization & comparison...' })
+    const comparison = await analyzeRentRolls(
+      { argusText: argusData.text, argusType: argusData.type, clientText: clientData.text, clientType: clientData.type },
+      (p) => emit('rr-progress', p)
+    )
+
+    emit('rr-progress', { stage: 'oven', percent: 85, message: 'Generating Excel report...' })
+    const excelBuf = await generateRRReport(comparison)
+
+    emit('rr-progress', { stage: 'done', percent: 100, message: 'Done!' })
+    emit('rr-complete', { comparison, excelBase64: excelBuf.toString('base64') })
+  } catch (e) {
+    console.error('[rr/analyze]', e)
+    emit('rr-error', { error: e.message })
+  } finally {
+    clearInterval(hb)
+    res.end()
+  }
+})
+
+app.get('/api/rr/analyze', (_req, res) => res.status(405).json({ error: 'Use POST /api/rr/analyze' }))
+app.get('/api/rr/download/:sid', (_req, res) => res.status(410).json({ error: 'Downloads are now client-side from base64.' }))
 
 // ═══════════════════════════════════════════════════════════
 // HELPERS
