@@ -12,6 +12,9 @@ import { analyzeTenant, gymAnalyzeTenant, beefedUpAnalyzeTenant, doubleCheckTena
 import { openaiAnalyzeTenant, isOpenAiKeyConfigured, getServerOpenAiKeyHint } from './lib/openai.js'
 import { generateReport } from './lib/reporter.js'
 import { mountIsaacRoutes } from './lib/isaac-routes.js'
+import { parseRRFile } from './lib/rr-parser.js'
+import { detectFileRoles, analyzeRentRolls } from './lib/rr-claude.js'
+import { generateRRReport } from './lib/rr-reporter.js'
 
 
 const __filename = fileURLToPath(import.meta.url)
@@ -33,6 +36,7 @@ function isCheapMode(req) {
 
 // In-memory session store: sessionId -> SessionData
 const sessions = new Map()
+const rrSessions = new Map()  // RR Chef sessions (separate from Hunter)
 
 /** OpenAI key from OPENAI_API_KEY or openai.key only (see lib/openai.js). */
 function resolveSessionOpenAi(_session) {
@@ -450,6 +454,76 @@ app.post('/api/upload', upload.array('files', 10000), async (req, res) => {
 
   } catch (err) {
     console.error('[upload] Error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ═══════════════════════════════════════════════════════════
+// POST /api/session/register  — register local-extraction session metadata
+// (no files uploaded — files live in browser RAM for analysis)
+// ═══════════════════════════════════════════════════════════
+
+app.post('/api/session/register', express.json({ limit: '1mb' }), (req, res) => {
+  try {
+    const { sessionId, tenants } = req.body
+    if (!sessionId) return res.status(400).json({ error: 'Missing sessionId' })
+    if (!Array.isArray(tenants)) return res.status(400).json({ error: 'tenants must be an array' })
+
+    sessions.set(sessionId, {
+      tenants:   tenants.map(t => ({ ...t, files: [] })), // no disk files
+      findings:  new Map(),
+      createdAt: Date.now(),
+      isLocal:   true  // flag: files are NOT on disk
+    })
+
+    console.log(`[session/register] sessionId=${sessionId} tenants=${tenants.length}`)
+    res.json({ ok: true, sessionId, tenantCount: tenants.length })
+  } catch (err) {
+    console.error('[session/register]', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ═══════════════════════════════════════════════════════════
+// POST /api/hunt/tenant  — analyze one tenant with inline base64 files
+// (client-side extraction: files sent in request body, no disk writes)
+// ═══════════════════════════════════════════════════════════
+
+app.post('/api/hunt/tenant', express.json({ limit: '500mb' }), async (req, res) => {
+  try {
+    const { sessionId, tenant, files, juiced, learnings, cheap } = req.body
+    if (!tenant || !Array.isArray(files)) {
+      return res.status(400).json({ error: 'Missing tenant or files' })
+    }
+
+    // Convert base64 files to buffer-based file objects the analyzer understands
+    const fileObjs = files.map(f => ({
+      originalName: f.name,
+      buffer:       Buffer.from(f.base64, 'base64'),
+      size:         f.size,
+      isPDF:        f.name.toLowerCase().endsWith('.pdf')
+    }))
+
+    const useJuice     = !!juiced
+    const cheapOpts    = { cheapMode: !!cheap }
+    const learningsArr = Array.isArray(learnings) ? learnings : []
+
+    console.log(`[hunt/tenant] ${tenant.tenantName}: ${fileObjs.length} file(s), juice=${useJuice}, cheap=${cheapOpts.cheapMode}`)
+
+    let result
+    if (useJuice && learningsArr.length > 0) {
+      result = await beefedUpAnalyzeTenant(tenant, fileObjs, () => {}, learningsArr, cheapOpts)
+    } else {
+      result = await analyzeTenant(tenant, fileObjs, () => {}, cheapOpts)
+    }
+
+    // Store in session findings if session exists
+    const session = sessions.get(sessionId)
+    if (session) session.findings.set(tenant.id, result)
+
+    res.json({ ok: true, tenantId: tenant.id, result })
+  } catch (err) {
+    console.error('[hunt/tenant]', err)
     res.status(500).json({ error: err.message })
   }
 })
@@ -1641,6 +1715,130 @@ app.post('/api/gym/workout-feedback', async (req, res) => {
 
 
 // ═══════════════════════════════════════════════════════════
+// RENT ROLL CHEF — API ROUTES
+// ═══════════════════════════════════════════════════════════
+
+const rrUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      const sessionId = req.headers['x-session-id'] || randomUUID()
+      req._rrSessionId = sessionId
+      const dir = path.join(UPLOADS_DIR, 'rr', sessionId)
+      fs.mkdirSync(dir, { recursive: true })
+      cb(null, dir)
+    },
+    filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`)
+  }),
+  limits: { fileSize: 100 * 1024 * 1024 }
+}).array('files', 2)
+
+// Upload + parse only — NO Claude call here. Slot 1 = ARGUS, Slot 2 = CLIENT (labeled in UI).
+app.post('/api/rr/upload', (req, res) => {
+  rrUpload(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: `Upload failed: ${err.message}` })
+    if (!req.files || req.files.length < 2) return res.status(400).json({ error: 'Please upload exactly 2 files.' })
+
+    const sessionId = req._rrSessionId || req.headers['x-session-id'] || randomUUID()
+
+    try {
+      const [f1, f2] = req.files
+      const data1 = await parseRRFile(f1.path)
+      const data2 = await parseRRFile(f2.path)
+
+      rrSessions.set(sessionId, {
+        createdAt: Date.now(),
+        uploadDir: path.join(UPLOADS_DIR, 'rr', sessionId),
+        files: [
+          { name: f1.originalname, path: f1.path, data: data1, role: 'ARGUS' },
+          { name: f2.originalname, path: f2.path, data: data2, role: 'CLIENT' }
+        ]
+      })
+
+      res.json({ sessionId, parsed: true })
+    } catch (parseErr) {
+      console.error('[rr/upload]', parseErr)
+      res.status(500).json({ error: `Failed to process files: ${parseErr.message}` })
+    }
+  })
+})
+
+app.get('/api/rr/analyze', async (req, res) => {
+  const sessionId = String(req.query.sessionId || '').trim()
+  const session = rrSessions.get(sessionId)
+  if (!session) return res.status(404).json({ error: 'RR session not found.' })
+
+  const swapped = req.query.swap === '1'
+  const cheapMode = req.query?.cheap === '1'
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  })
+  res.flushHeaders()
+
+  const emit = (event, data) => {
+    try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`) } catch {}
+  }
+  const heartbeat = setInterval(() => { try { res.write(': ping\n\n') } catch { clearInterval(heartbeat) } }, 15000)
+  let aborted = false
+  req.on('close', () => { aborted = true; clearInterval(heartbeat) })
+
+  try {
+    let clientFile, argusFile
+    for (const f of session.files) {
+      const effectiveRole = swapped
+        ? (f.role === 'CLIENT' ? 'ARGUS' : 'CLIENT')
+        : f.role
+      if (effectiveRole === 'CLIENT') clientFile = f
+      else argusFile = f
+    }
+    if (!clientFile) clientFile = session.files[1]
+    if (!argusFile)  argusFile  = session.files[0]
+
+    emit('progress', { stage: 'dough', percent: 5, message: 'Rolling the dough...' })
+
+    const result = await analyzeRentRolls(
+      { clientData: clientFile.data, argusData: argusFile.data, clientName: clientFile.name, argusName: argusFile.name },
+      (progress) => { if (!aborted) emit('progress', progress) },
+      cheapMode
+    )
+
+    if (aborted) return
+
+    emit('progress', { stage: 'done', percent: 95, message: 'Generating Excel report...' })
+
+    const outputPath = path.join(OUTPUTS_DIR, `rr-${sessionId}.xlsx`)
+    await generateRRReport(result, outputPath)
+
+    emit('rr-complete', {
+      downloadUrl: `/api/rr/download/${sessionId}`,
+      summary: result.summary,
+      property: result.property,
+      tenantGroups: result.tenantGroups
+    })
+  } catch (err) {
+    console.error('[rr/analyze]', err)
+    emit('rr-error', { error: err.message })
+  } finally {
+    clearInterval(heartbeat)
+    if (!aborted) res.end()
+  }
+})
+
+app.get('/api/rr/download/:sessionId', (req, res) => {
+  const { sessionId } = req.params
+  const outputPath = path.join(OUTPUTS_DIR, `rr-${sessionId}.xlsx`)
+  if (!fs.existsSync(outputPath)) return res.status(404).json({ error: 'Report not found.' })
+
+  const date = new Date().toLocaleDateString('en-US').replace(/\//g, '-')
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  res.setHeader('Content-Disposition', `attachment; filename="Todd Jr Chef - RR Comparison - ${date}.xlsx"`)
+  fs.createReadStream(outputPath).pipe(res)
+})
+
+// ═══════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════
 
@@ -1671,10 +1869,20 @@ setInterval(() => {
   const cutoff = Date.now() - 2 * 60 * 60 * 1000 // 2 hours
   for (const [id, session] of sessions) {
     if (session.createdAt < cutoff) {
-      try { fs.rmSync(session.uploadDir, { recursive: true, force: true }) } catch {}
+      // isLocal sessions have no uploadDir (files were in browser RAM, never written to disk)
+      if (!session.isLocal && session.uploadDir) {
+        try { fs.rmSync(session.uploadDir, { recursive: true, force: true }) } catch {}
+      }
       try { fs.rmSync(path.join(OUTPUTS_DIR, `${id}.xlsx`), { force: true }) } catch {}
       sessions.delete(id)
       console.log(`[cleanup] Removed session ${id}`)
+    }
+  }
+  for (const [id, session] of rrSessions) {
+    if (session.createdAt < cutoff) {
+      try { fs.rmSync(session.uploadDir, { recursive: true, force: true }) } catch {}
+      try { fs.rmSync(path.join(OUTPUTS_DIR, `rr-${id}.xlsx`), { force: true }) } catch {}
+      rrSessions.delete(id)
     }
   }
 }, 30 * 60 * 1000)

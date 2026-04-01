@@ -16,6 +16,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css?v=58" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
 <body>
 
@@ -55,11 +56,10 @@
         </button>
 
         <!-- GAME 02: Rent Roll Chef -->
-        <button type="button" class="home-game-row home-game-row--soon" id="game-card-rr" disabled>
-          <span class="home-game-cursor"> </span>
+        <button type="button" class="home-game-row" id="game-card-rr">
+          <span class="home-game-cursor">▶</span>
           <span class="home-game-num">02</span>
           <span class="home-game-title">RENT ROLL CHEF</span>
-          <span class="home-game-soon">COMING SOON</span>
         </button>
 
         <!-- GAME 03+ rows go here -->
@@ -864,18 +864,183 @@
        Nothing here touches the hunter flow above.
   ═══════════════════════════════════════════════════════════ -->
   <div id="screen-rr" class="screen">
-    <div class="rr-placeholder">
-      <div class="rr-placeholder-badge">GAME 02</div>
-      <h2 class="rr-placeholder-title">RENT ROLL CHEF</h2>
-      <p class="rr-placeholder-sub">LOADING KITCHEN...</p>
-      <p class="rr-placeholder-hint">Compare accounting vs. Argus rent rolls and surface every discrepancy.</p>
-      <button type="button" id="btn-rr-back" class="rr-back-btn">← BACK TO MENU</button>
+
+    <!-- ── Topbar ────────────────────────────────────── -->
+    <div class="rr-topbar" id="rr-topbar" style="display:none">
+      <div class="rr-topbar-left">
+        <button type="button" id="btn-rr-back" class="rr-back-btn">◀ BACK</button>
+        <canvas id="rr-topbar-canvas" width="60" height="84" style="width:30px;height:42px"></canvas>
+        <span class="rr-topbar-title">RENT ROLL CHEF</span>
+      </div>
     </div>
+
+    <!-- ══════════════════════════════════════════════════
+         SUB: UPLOAD — two file slots
+    ══════════════════════════════════════════════════ -->
+    <div id="rr-sub-upload" class="rr-sub active rr-upload-wrap">
+      <div class="rr-upload-hero">
+        <canvas id="rr-hero-canvas" width="60" height="84" style="width:60px;height:84px;image-rendering:pixelated"></canvas>
+        <h2>RENT ROLL CHEF</h2>
+        <p>Upload two rent rolls — one Client, one Argus.<br>Any combo: Excel, PDF, PNG, CSV.</p>
+      </div>
+
+      <div class="rr-slots-row">
+        <!-- Slot 1: ARGUS (left) -->
+        <div class="rr-slot" id="rr-slot-1">
+          <input type="file" id="rr-input-1" accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg,.webp" style="display:none">
+          <div class="rr-slot-empty" id="rr-slot-1-empty">
+            <div class="rr-slot-icon">📊</div>
+            <div class="rr-slot-label">ARGUS RR</div>
+            <button type="button" class="rr-upload-btn" style="font-size:7px;padding:8px 16px" id="btn-rr-pick-1">CHOOSE FILE</button>
+            <div class="rr-slot-hint">or drag & drop here</div>
+          </div>
+          <div class="rr-slot-filled">
+            <div class="rr-slot-filename" id="rr-slot-1-name"></div>
+            <div class="rr-slot-filesize" id="rr-slot-1-size"></div>
+            <button type="button" class="rr-slot-remove" id="btn-rr-remove-1">✕ REMOVE</button>
+          </div>
+        </div>
+
+        <div class="rr-vs-divider"><span class="rr-vs-text">VS</span></div>
+
+        <!-- Slot 2: CLIENT (right) -->
+        <div class="rr-slot" id="rr-slot-2">
+          <input type="file" id="rr-input-2" accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg,.webp" style="display:none">
+          <div class="rr-slot-empty" id="rr-slot-2-empty">
+            <div class="rr-slot-icon">📋</div>
+            <div class="rr-slot-label">CLIENT RR</div>
+            <button type="button" class="rr-upload-btn" style="font-size:7px;padding:8px 16px" id="btn-rr-pick-2">CHOOSE FILE</button>
+            <div class="rr-slot-hint">or drag & drop here</div>
+          </div>
+          <div class="rr-slot-filled">
+            <div class="rr-slot-filename" id="rr-slot-2-name"></div>
+            <div class="rr-slot-filesize" id="rr-slot-2-size"></div>
+            <button type="button" class="rr-slot-remove" id="btn-rr-remove-2">✕ REMOVE</button>
+          </div>
+        </div>
+      </div>
+
+      <button type="button" class="rr-upload-btn" id="btn-rr-upload" disabled>🫓 ROLL THE DOUGH</button>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════
+         SUB: CONFIRM — detected roles + Master/Trainer Chef
+    ══════════════════════════════════════════════════ -->
+    <div id="rr-sub-confirm" class="rr-sub rr-confirm-wrap">
+      <div class="rr-confirm-title">🔍 INGREDIENTS IDENTIFIED</div>
+
+      <div class="rr-confirm-cards">
+        <div class="rr-confirm-card" id="rr-card-file1">
+          <span class="rr-confirm-card-role rr-role-client" id="rr-card-1-role">CLIENT</span>
+          <span class="rr-confirm-card-name" id="rr-card-1-name">file1.xlsx</span>
+          <span class="rr-confirm-card-reason" id="rr-card-1-reason"></span>
+        </div>
+        <div class="rr-confirm-card" id="rr-card-file2">
+          <span class="rr-confirm-card-role rr-role-argus" id="rr-card-2-role">ARGUS</span>
+          <span class="rr-confirm-card-name" id="rr-card-2-name">file2.pdf</span>
+          <span class="rr-confirm-card-reason" id="rr-card-2-reason"></span>
+        </div>
+      </div>
+
+      <div class="rr-confirm-confidence" id="rr-confidence">CONFIDENCE: HIGH</div>
+
+      <button type="button" class="rr-swap-btn" id="btn-rr-swap">⇄ SWAP ROLES</button>
+
+      <div class="rr-confirm-actions">
+        <button type="button" class="rr-master-chef-btn" id="btn-rr-master-chef">👨‍🍳 SEND TO TODD JR. MASTER CHEF</button>
+        <button type="button" class="rr-trainer-btn" disabled id="btn-rr-trainer-chef">
+          🏋️ SEND TO TODD JR. TRAINER CHEF
+          <span class="rr-soon-badge">SOON</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════
+         SUB: COOKING — pizza animation stages
+    ══════════════════════════════════════════════════ -->
+    <div id="rr-sub-cooking" class="rr-sub rr-cooking-wrap">
+      <div class="rr-chef-canvas-wrap">
+        <canvas id="rr-cook-canvas" width="60" height="84" style="width:60px;height:84px;image-rendering:pixelated"></canvas>
+      </div>
+
+      <!-- Stage: Dough -->
+      <div class="rr-pizza-stage active" id="rr-stage-dough">
+        <div class="rr-stage-icon">🫓</div>
+        <div class="rr-stage-label">ROLLING THE DOUGH</div>
+        <div class="rr-stage-sub">Loading rent rolls...</div>
+      </div>
+
+      <!-- Stage: Sauce -->
+      <div class="rr-pizza-stage" id="rr-stage-sauce">
+        <div class="rr-stage-icon">🍅</div>
+        <div class="rr-stage-label">SPREADING THE SAUCE</div>
+        <div class="rr-stage-sub">Analyzing formats...</div>
+      </div>
+
+      <!-- Stage: Toppings (kosher — no meat!) -->
+      <div class="rr-pizza-stage" id="rr-stage-toppings">
+        <div class="rr-stage-icon">🧀</div>
+        <div class="rr-stage-label">ADDING TOPPINGS</div>
+        <div class="rr-stage-sub">Matching tenants... mushroom, pepper, olive, cheese!</div>
+      </div>
+
+      <!-- Stage: Pan -->
+      <div class="rr-pizza-stage" id="rr-stage-pan">
+        <div class="rr-stage-icon">🍳</div>
+        <div class="rr-stage-label">INTO THE PAN</div>
+        <div class="rr-stage-sub">Preparing the comparison...</div>
+      </div>
+
+      <!-- Stage: Oven -->
+      <div class="rr-pizza-stage" id="rr-stage-oven">
+        <div class="rr-stage-icon">🔥</div>
+        <div class="rr-stage-label">BAKING IN THE OVEN</div>
+        <div class="rr-stage-sub">Deep field-by-field analysis in progress...</div>
+        <div class="rr-oven-glow"></div>
+      </div>
+
+      <!-- Stage: Done -->
+      <div class="rr-pizza-stage" id="rr-stage-done">
+        <div class="rr-stage-icon" style="font-size:56px">🍕</div>
+        <div class="rr-stage-label" style="color:#fcd34d">DING! PIZZA IS READY!</div>
+        <div class="rr-stage-sub">The comparison report is fresh out of the oven.</div>
+      </div>
+
+      <!-- Progress bar -->
+      <div class="rr-progress-wrap">
+        <div class="rr-progress-fill" id="rr-cook-fill"></div>
+      </div>
+      <div class="rr-progress-text" id="rr-cook-msg">Preparing ingredients...</div>
+
+      <div class="rr-ding-flash" id="rr-ding-flash"></div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════
+         SUB: REPORT — stats + download
+    ══════════════════════════════════════════════════ -->
+    <div id="rr-sub-report" class="rr-sub rr-report-wrap">
+      <div class="rr-report-header">
+        <canvas id="rr-report-canvas" width="60" height="84" style="width:60px;height:84px;image-rendering:pixelated"></canvas>
+        <h2>🍕 PIZZA SERVED!</h2>
+        <div class="rr-report-property" id="rr-report-property">Unknown Property</div>
+      </div>
+
+      <div class="rr-stats-grid" id="rr-stats-grid"></div>
+
+      <div class="rr-preview-list" id="rr-preview-list"></div>
+
+      <div class="rr-report-actions">
+        <button type="button" class="rr-download-btn" id="btn-rr-download">📥 DOWNLOAD EXCEL</button>
+        <button type="button" class="rr-new-btn" id="btn-rr-new">🔄 NEW COMPARISON</button>
+      </div>
+    </div>
+
   </div>
 
   <script src="drlab-flasks.js?v=6"></script>
   <script src="sbs-boxing.js?v=3"></script>
-  <script src="app.js?v=72"></script>
+  <script src="app.js?v=73"></script>
   <script src="game-mode.js?v=4"></script>
+  <script src="rr-app.js?v=1"></script>
 </body>
 </html>

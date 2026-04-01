@@ -375,6 +375,9 @@ const state = {
   /** Screen we were on before opening side-by-side (for Back / errors). */
   sbsSourceScreen:  null,
   drlabMode:        null,
+  // Local file extraction (client-side, never uploaded to Railway for analysis)
+  localFiles:       new Map(), // relativePath -> { name, buffer: ArrayBuffer, size }
+  localTenants:     [],        // tenant objects built locally (mirrors server tenant list)
 }
 
 /**
@@ -1159,16 +1162,16 @@ fileInput.addEventListener('change', () => {
 })
 
 fileInputZip.addEventListener('change', () => {
-  if (fileInputZip.files.length > 0) startUpload(fileInputZip.files)
+  if (fileInputZip.files.length > 0) startLocalExtract(Array.from(fileInputZip.files))
 })
 
-/** File inputs often populate webkitRelativePath — normalize to relativePath for the server */
+/** File inputs often populate webkitRelativePath — normalize relativePath for extraction */
 function startUploadWithWebkitOrRaw(fileList) {
   const arr = Array.from(fileList)
   for (const f of arr) {
     if (f.webkitRelativePath) f.relativePath = f.webkitRelativePath.replace(/^\/+/, '')
   }
-  startUpload(arr)
+  startLocalExtract(arr)
 }
 
 dropZone.addEventListener('dragover', e => {
@@ -1206,7 +1209,7 @@ dropZone.addEventListener('drop', async e => {
 
   if (zipFiles.length === 1 && dirEntries.length === 0) {
     console.log('[drop] ZIP only')
-    startUpload(zipFiles)
+    startLocalExtract(zipFiles)
     return
   }
 
@@ -1224,7 +1227,7 @@ dropZone.addEventListener('drop', async e => {
 
   if (dtFiles.length > 0 && tryStartUploadWithWebkitPaths(dtFiles)) return
 
-  if (dtFiles.length > 0) startUpload(dtFiles)
+  if (dtFiles.length > 0) startLocalExtract(dtFiles)
 })
 
 /** When browsers expose files with webkitRelativePath but no DirectoryEntry */
@@ -1237,7 +1240,7 @@ function tryStartUploadWithWebkitPaths(dtFiles) {
     f.relativePath = f.webkitRelativePath.replace(/^\/+/, '')
   }
   console.log('[drop] Using webkitRelativePath for', arr.length, 'files')
-  startUpload(withPath)
+  startLocalExtract(withPath)
   return true
 }
 
@@ -1309,7 +1312,7 @@ async function uploadFolderFromEntry(dirEntry) {
     toast('No files found in that folder.', 'error')
     return
   }
-  startUpload(files)
+  startLocalExtract(files)
 }
 
 /** Several folders dropped at once (e.g. multiple tenant folders from Finder) */
@@ -1324,7 +1327,7 @@ async function uploadMultipleFolderEntries(dirEntries) {
     toast('No files found in those folders.', 'error')
     return
   }
-  startUpload(all)
+  startLocalExtract(all)
 }
 
 // Recursively collect files from a directory handle (File System Access API)
@@ -1371,7 +1374,7 @@ async function uploadFolder(dirHandle) {
 
   const files = Array.from(fileMap.values())
   console.log('[uploadFolder] Collected', files.length, 'files, single-tenant:', isSingleTenant)
-  startUpload(files)
+  startLocalExtract(files)
 }
 
 async function startUpload(files) {
@@ -1464,6 +1467,244 @@ function uploadWithProgress(formData, onProgress) {
     })
     xhr.send(formData)
   })
+}
+
+// ═══════════════════════════════════════════════════════════
+// CLIENT-SIDE FILE EXTRACTION — files never uploaded to Railway for analysis
+// ═══════════════════════════════════════════════════════════
+
+/** Mirror of server parseFolderName — same logic, runs in browser */
+function parseFolderNameClient(name) {
+  const s = name || ''
+  const dashIdx = s.indexOf(' - ')
+  if (dashIdx === -1) {
+    return { property: 'UNKNOWN', suite: 'N/A', tenantName: s.trim() || 'Unknown' }
+  }
+  const prefix = s.substring(0, dashIdx).trim()
+  const tenantName = s.substring(dashIdx + 3).trim()
+  const parts = prefix.split(/\s+/)
+  const property = parts[0] || 'UNKNOWN'
+  const suite = parts.slice(1).join(' ') || 'N/A'
+  return { property, suite, tenantName }
+}
+
+/**
+ * Convert ArrayBuffer to base64 string safely (handles large buffers without call-stack overflow).
+ */
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer)
+  const CHUNK = 8192
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
+  }
+  return btoa(binary)
+}
+
+/**
+ * Extract files locally (in-browser) from a ZIP or a flat file list,
+ * build tenant list, register metadata with server, then show cards.
+ *
+ * Replaces the XHR upload flow — files stay in RAM, never written to Railway.
+ */
+async function startLocalExtract(files) {
+  goTo('loading')
+  setProgress(0, 'Reading files...')
+
+  const allFiles = Array.from(files)
+  if (allFiles.length === 0) {
+    toast('No files selected.', 'error')
+    goTo('upload')
+    return
+  }
+
+  // Clear previous local state
+  state.localFiles = new Map()
+  state.localTenants = []
+
+  try {
+    // ── Collect { relativePath, name, buffer, size } entries ──────────────
+    const rawEntries = [] // { relativePath, name, buffer, size }
+
+    const isZip = allFiles.length === 1 && allFiles[0].name.toLowerCase().endsWith('.zip')
+
+    if (isZip) {
+      setProgress(5, 'Reading ZIP...')
+      const zipBuffer = await allFiles[0].arrayBuffer()
+      const zip = await JSZip.loadAsync(zipBuffer)
+
+      const SKIP_DIRS  = new Set(['__MACOSX', '__pycache__', '.git'])
+      const SKIP_FILES = new Set(['.DS_Store', 'Thumbs.db', 'desktop.ini'])
+
+      // Load all file entries (no folders) and normalize path
+      const fileEntries = []
+      zip.forEach((relPath, entry) => {
+        if (entry.dir) return
+        // Filter skip dirs and skip files
+        const parts = relPath.replace(/\\/g, '/').split('/')
+        if (parts.some(p => SKIP_DIRS.has(p) || p.startsWith('.'))) return
+        const fileName = parts[parts.length - 1]
+        if (SKIP_FILES.has(fileName) || fileName.startsWith('.')) return
+        fileEntries.push({ relPath: relPath.replace(/\\/g, '/'), entry })
+      })
+
+      // Detect wrapper folder: if all paths share same top-level prefix and at least one is ≥ 3 deep
+      const pathParts = fileEntries.map(e => e.relPath.split('/'))
+      const uniqueTop = new Set(pathParts.map(p => p[0]))
+      const hasWrapper = uniqueTop.size === 1 && pathParts.some(p => p.length >= 3)
+      const skipDepth  = hasWrapper ? 1 : 0
+
+      for (const { relPath, entry } of fileEntries) {
+        const parts = relPath.split('/')
+        // Strip wrapper prefix if present
+        const strippedParts = parts.slice(skipDepth)
+        if (strippedParts.length === 0) continue
+        const strippedPath = strippedParts.join('/')
+        const buffer = await entry.async('arraybuffer')
+        rawEntries.push({
+          relativePath: strippedPath,
+          name: strippedParts[strippedParts.length - 1],
+          buffer,
+          size: buffer.byteLength
+        })
+      }
+    } else {
+      // Flat file list from folder drag-drop or <input>
+      for (const file of allFiles) {
+        const rawPath = (file.relativePath || file.webkitRelativePath || file.name).replace(/\\/g, '/')
+        const buffer = await file.arrayBuffer()
+        rawEntries.push({
+          relativePath: rawPath,
+          name: file.name,
+          buffer,
+          size: buffer.byteLength
+        })
+      }
+    }
+
+    setProgress(30, 'Grouping tenants...')
+
+    if (rawEntries.length === 0) {
+      toast('No files found.', 'error')
+      goTo('upload')
+      return
+    }
+
+    // ── Build tenant map (mirrors server upload logic) ─────────────────────
+    const allParsedParts = rawEntries.map(e => e.relativePath.split('/'))
+    const pathFiles      = allParsedParts.filter(p => p.length >= 2)
+    const uniqueTopLevel = new Set(pathFiles.map(p => p[0]))
+    const hasWrapperFolder = uniqueTopLevel.size === 1 && pathFiles.some(p => p.length >= 3)
+    const tenantDepth    = hasWrapperFolder ? 1 : 0
+
+    const tenantMap = new Map() // folderName -> { folderName, fileKeys: [] }
+
+    for (let i = 0; i < rawEntries.length; i++) {
+      const entry = rawEntries[i]
+      const parts = allParsedParts[i]
+
+      // Store in localFiles by relativePath
+      state.localFiles.set(entry.relativePath, {
+        name:   entry.name,
+        buffer: entry.buffer,
+        size:   entry.size
+      })
+
+      if (parts.length >= 2) {
+        const tenantFolder = parts[tenantDepth] || parts[0]
+        if (!tenantMap.has(tenantFolder)) {
+          tenantMap.set(tenantFolder, { folderName: tenantFolder, fileKeys: [] })
+        }
+        tenantMap.get(tenantFolder).fileKeys.push(entry.relativePath)
+      } else {
+        const bucketName = '_single_tenant_'
+        if (!tenantMap.has(bucketName)) {
+          tenantMap.set(bucketName, { folderName: bucketName, fileKeys: [] })
+        }
+        tenantMap.get(bucketName).fileKeys.push(entry.relativePath)
+      }
+    }
+
+    setProgress(50, 'Parsing tenant names...')
+
+    const PDF_MAX_BYTES = 32 * 1024 * 1024
+    const tenants = []
+    for (const [folderName, data] of tenantMap) {
+      const fileObjects = data.fileKeys.map(k => {
+        const f = state.localFiles.get(k)
+        return { relativePath: k, name: f.name, size: f.size }
+      })
+
+      const oversizedFiles = fileObjects
+        .filter(f => f.name.toLowerCase().endsWith('.pdf') && f.size > PDF_MAX_BYTES)
+        .map(f => f.name)
+
+      if (folderName === '_single_tenant_') {
+        tenants.push({
+          id:            crypto.randomUUID(),
+          folderName:    'Uploaded Files',
+          property:      '--',
+          suite:         '--',
+          tenantName:    'Uploaded Files',
+          fileCount:     fileObjects.length,
+          files:         fileObjects.map(f => ({ name: f.name, sizeBytes: f.size, relativePath: f.relativePath })),
+          oversizedFiles
+        })
+      } else {
+        const parsed = parseFolderNameClient(folderName)
+        tenants.push({
+          id:            crypto.randomUUID(),
+          folderName,
+          property:      parsed.property,
+          suite:         parsed.suite,
+          tenantName:    parsed.tenantName,
+          fileCount:     fileObjects.length,
+          files:         fileObjects.map(f => ({ name: f.name, sizeBytes: f.size, relativePath: f.relativePath })),
+          oversizedFiles
+        })
+      }
+    }
+
+    // Sort by property then suite
+    tenants.sort((a, b) => {
+      const propCmp = a.property.localeCompare(b.property)
+      if (propCmp !== 0) return propCmp
+      return String(a.suite).localeCompare(String(b.suite), undefined, { numeric: true })
+    })
+
+    state.localTenants = tenants
+
+    // ── Register metadata with server (no file bytes) ─────────────────────
+    setProgress(70, 'Registering session...')
+
+    const regRes = await fetch(sameOriginApi('/api/session/register'), {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ sessionId: state.sessionId, tenants: tenants.map(t => ({ id: t.id, folderName: t.folderName, property: t.property, suite: t.suite, tenantName: t.tenantName, fileCount: t.fileCount })) })
+    })
+    if (!regRes.ok) {
+      const err = await regRes.json().catch(() => ({}))
+      throw new Error(err.error || 'Session register failed')
+    }
+
+    // ── Show tenant cards (instant, no upload wait) ───────────────────────
+    setProgress(100, '')
+    state.tenants = tenants
+    renderTenantCards(tenants)
+    showOversizeWarnings(tenants)
+    sfxReady()
+    showHuntCta()
+
+    if (state.singleTenantMode && tenants.length > 0) {
+      state.singleTenantMode = false
+      setTimeout(() => startHunt(tenants[0].id), 400)
+    }
+
+  } catch (err) {
+    sfxError()
+    toast(err.message || 'Could not read files', 'error')
+    goTo('upload')
+  }
 }
 
 const _progressQuips = [
@@ -1599,10 +1840,12 @@ function fmtBytes(bytes) {
 
 // ── HUD buttons ───────────────────────────────────────────────
 document.getElementById('btn-clear-all').addEventListener('click', () => {
-  state.tenants    = []
-  state.findings   = new Map()
-  state.sessionId  = crypto.randomUUID()
+  state.tenants     = []
+  state.findings    = new Map()
+  state.sessionId   = crypto.randomUUID()
   state.downloadUrl = null
+  state.localFiles  = new Map()
+  state.localTenants = []
   document.getElementById('tenant-grid-loading').innerHTML = ''
   document.getElementById('hunt-cta-wrap').classList.remove('ready')
   updateHud()
@@ -3236,6 +3479,11 @@ async function startHunt(testTenantId = null) {
     if (!await pixelConfirm(msg, '⚠ LARGE FILES')) return
   }
 
+  // If files are in local RAM (client-side extraction), use inline POST flow
+  if (state.localFiles && state.localFiles.size > 0) {
+    return startHuntLocal(testTenantId)
+  }
+
   goTo('hunt')
   startArena()
 
@@ -3332,6 +3580,188 @@ async function startHunt(testTenantId = null) {
   es.onerror = () => {
     // SSE closed normally after hunt-complete — ignore
   }
+}
+
+/**
+ * Local-file hunt: files are in RAM (state.localFiles), sent inline via POST /api/hunt/tenant.
+ * Mirrors startHunt's card UI but driven by Promise resolution instead of SSE.
+ */
+async function startHuntLocal(testTenantId = null) {
+  goTo('hunt')
+  startArena()
+
+  document.getElementById('cook-cta-wrap').classList.add('hidden')
+
+  const tenantsToShow = testTenantId
+    ? state.tenants.filter(t => t.id === testTenantId)
+    : state.tenants
+
+  if (testTenantId) {
+    const t = state.tenants.find(t => t.id === testTenantId)
+    updateHuntSubtitle(`🎲 Test Mode — scanning: ${t?.tenantName || ''}`)
+  }
+
+  document.getElementById('tenant-grid-loading').innerHTML = ''
+  const huntGrid = document.getElementById('tenant-grid-hunt')
+  huntGrid.innerHTML = ''
+  tenantsToShow.forEach((t, i) => {
+    huntGrid.appendChild(makeTenantCard(t, i))
+  })
+
+  document.getElementById('btn-kill-hunt').classList.remove('hidden')
+
+  const useJuice = !!juiceToggle?.checked
+  const cheap    = isCheapModeActive()
+
+  // Fetch active learnings if juice is on
+  let learnings = []
+  if (useJuice) {
+    try {
+      const r = await fetch(sameOriginApi('/api/gym/learnings'))
+      const list = await r.json()
+      learnings = Array.isArray(list) ? list : []
+      const activeCount = learnings.filter(l => l.active).length
+      if (activeCount === 0) {
+        toast('Juice on but no rules activated — standard Todd this run. Turn ON in Gym → Results.', 'info')
+      } else {
+        updateHuntSubtitle(`🧃 Juiced — ${activeCount} rule${activeCount !== 1 ? 's' : ''} (Gym / Dr. Todd)`)
+      }
+    } catch { /* non-critical */ }
+  }
+
+  sfxStartHuntLoop()
+
+  // Concurrency: same as accuracy toggle — 1 = sequential, 5 = parallel
+  const accuracyMode = document.getElementById('accuracy-toggle')?.checked !== false
+  const CONCURRENCY  = accuracyMode ? 1 : Math.min(5, tenantsToShow.length)
+
+  // Simple concurrent queue
+  let aborted = false
+  const killBtn = document.getElementById('btn-kill-hunt')
+  const origKillHandler = killBtn?._localKillHandler
+  if (killBtn) {
+    killBtn._localKillHandler = () => { aborted = true }
+    killBtn.addEventListener('click', killBtn._localKillHandler)
+  }
+
+  const queue   = [...tenantsToShow]
+  const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+    while (queue.length > 0 && !aborted) {
+      const tenant = queue.shift()
+      if (!tenant) continue
+      await runLocalTenantAnalysis(tenant, tenantsToShow, useJuice, learnings, cheap)
+    }
+  })
+
+  await Promise.allSettled(workers)
+
+  if (killBtn && killBtn._localKillHandler) {
+    killBtn.removeEventListener('click', killBtn._localKillHandler)
+    delete killBtn._localKillHandler
+  }
+
+  sfxStopBgLoop()
+  killBtn?.classList.add('hidden')
+
+  if (!aborted) {
+    sfxHuntComplete()
+    showCookCta()
+    updateHuntSubtitle(`🦁 Prey caught! ${tenantsToShow.length} tenant${tenantsToShow.length !== 1 ? 's' : ''} scanned.`)
+  } else {
+    showCookCta()
+  }
+}
+
+/**
+ * Analyze one tenant's files inline — convert ArrayBuffers to base64 and POST to /api/hunt/tenant.
+ */
+async function runLocalTenantAnalysis(tenant, tenantsToShow, useJuice, learnings, cheap) {
+  setCardActive(tenant.id)
+  setCardHunting(tenant.id)
+  updateHuntSubtitle(`🏹 Hunting: ${tenant.tenantName}`)
+
+  // Build file list from local RAM
+  const files = (tenant.files || []).map(f => {
+    const local = state.localFiles.get(f.relativePath)
+    if (!local) return null
+    return {
+      name:   f.name,
+      base64: arrayBufferToBase64(local.buffer),
+      size:   local.size
+    }
+  }).filter(Boolean)
+
+  try {
+    const res = await fetch(sameOriginApi('/api/hunt/tenant'), {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        sessionId: state.sessionId,
+        tenant: {
+          id:         tenant.id,
+          folderName: tenant.folderName,
+          tenantName: tenant.tenantName,
+          property:   tenant.property,
+          suite:      tenant.suite
+        },
+        files,
+        juiced:    useJuice,
+        learnings: useJuice ? learnings : [],
+        cheap
+      })
+    })
+
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || `Server error ${res.status}`)
+
+    const result = data.result || {}
+    // result shape matches what /api/hunt folder-done returns via session.findings
+    const doneData = {
+      tenantId:     tenant.id,
+      findingCount: result.findings?.length || 0,
+      allClear:     result.allClear || false,
+      severity:     _localMaxSeverity(result.findings),
+      // Attach full result so cook/report flows can access it
+      ...result
+    }
+    state.findings.set(tenant.id, doneData)
+    setCardDone(tenant.id, doneData)
+
+    if (state.findings.size >= tenantsToShow.length) {
+      document.getElementById('btn-kill-hunt').classList.add('hidden')
+      showCookCta()
+    }
+  } catch (err) {
+    console.error(`[hunt/local] Error on tenant ${tenant.tenantName}:`, err.message)
+    const errData = {
+      tenantId:     tenant.id,
+      findingCount: 1,
+      allClear:     false,
+      severity:     'HIGH',
+      error:        true,
+      findings: [{
+        checkType:       'LEGIBILITY',
+        severity:        'HIGH',
+        missingDocument: 'N/A',
+        comment:         `Document analysis failed: ${err.message}`,
+        evidence:        'Client-side processing error — please retry.'
+      }]
+    }
+    state.findings.set(tenant.id, errData)
+    setCardDone(tenant.id, errData)
+
+    if (state.findings.size >= tenantsToShow.length) {
+      document.getElementById('btn-kill-hunt').classList.add('hidden')
+      showCookCta()
+    }
+  }
+}
+
+function _localMaxSeverity(findings) {
+  if (!findings || findings.length === 0) return 'NONE'
+  if (findings.some(f => f.severity === 'HIGH'))   return 'HIGH'
+  if (findings.some(f => f.severity === 'MEDIUM')) return 'MEDIUM'
+  return 'LOW'
 }
 
 function startDrToddHunt() {
@@ -3692,10 +4122,12 @@ document.getElementById('btn-restart').addEventListener('click', () => {
     state.eventSource = null
   }
   stopArena()
-  state.tenants  = []
-  state.findings = new Map()
-  state.downloadUrl = null
-  state.sessionId = crypto.randomUUID()
+  state.tenants      = []
+  state.findings     = new Map()
+  state.downloadUrl  = null
+  state.sessionId    = crypto.randomUUID()
+  state.localFiles   = new Map()
+  state.localTenants = []
 
   document.getElementById('tenant-grid-loading').innerHTML = ''
   document.getElementById('tenant-grid-hunt').innerHTML    = ''
@@ -4089,10 +4521,12 @@ function fullResetSession() {
   if (state.eventSource) { state.eventSource.close(); state.eventSource = null }
   stopArena()
   gymReset()
-  state.tenants     = []
-  state.findings    = new Map()
-  state.downloadUrl = null
-  state.sessionId   = crypto.randomUUID()
+  state.tenants      = []
+  state.findings     = new Map()
+  state.downloadUrl  = null
+  state.sessionId    = crypto.randomUUID()
+  state.localFiles   = new Map()
+  state.localTenants = []
   animState.toddMode = 'idle'
   document.getElementById('btn-kill-hunt')?.classList.add('hidden')
   document.getElementById('cook-cta-wrap')?.classList.add('hidden')
@@ -4458,6 +4892,7 @@ async function gymExSaveAndNext() {
   const btn = document.getElementById('gym-ex-save-next-btn')
   if (btn) btn.disabled = true
   try {
+    const _isaacLocalFiles = buildIsaacLocalFiles(gymState.tenantId)
     const payload = {
       tenantName:      gymState.tenantName,
       folderName:      gymState.folderName,
@@ -4469,7 +4904,8 @@ async function gymExSaveAndNext() {
       sessionTotal:    gymExSession.tenants.length,
       reviewerName:    gymExSession.reviewerName,
       uploadSessionId: state.sessionId,
-      tenantId:        gymState.tenantId
+      tenantId:        gymState.tenantId,
+      ...(_isaacLocalFiles ? { localFiles: _isaacLocalFiles } : {})
     }
     const res = await fetch(sameOriginApi('/api/gym/save-for-isaac'), {
       method: 'POST',
@@ -4825,6 +5261,24 @@ function gymAnnotationsForIsaacExcel() {
 const ISAAC_CLIENT_EVIDENCE_CAP = 32000
 
 /** Slim findings for Save for Isaac — avoids 413 / huge JSON (gym evidence strings can be massive). */
+/**
+ * Build the localFiles array for Isaac save payloads.
+ * When files are in browser RAM (local extraction flow), we send them as base64
+ * so the server can write them to the Isaac docs/ folder on Railway volume.
+ * Returns null if this is an old-style upload session (files already on disk).
+ */
+function buildIsaacLocalFiles(tenantId) {
+  if (!state.localFiles || state.localFiles.size === 0) return null
+  // Find the tenant's files
+  const tenant = state.tenants.find(t => t.id === tenantId)
+  if (!tenant) return null
+  return (tenant.files || []).map(f => {
+    const local = state.localFiles.get(f.relativePath)
+    if (!local) return null
+    return { name: f.name, base64: arrayBufferToBase64(local.buffer), size: local.size }
+  }).filter(Boolean)
+}
+
 function gymFindingsForIsaacPayload() {
   return (gymState.findings || []).map(f => {
     const ev = f.evidence
@@ -4914,6 +5368,7 @@ document.getElementById('gym-save-isaac-btn')?.addEventListener('click', async (
   btn.disabled = true
   const tenantId = gymState.tenantId || document.getElementById('gym-select')?.value || ''
   try {
+    const _isaacLocalFiles = buildIsaacLocalFiles(tenantId)
     const payload = {
       tenantName:      gymState.tenantName,
       folderName:      gymState.folderName,
@@ -4921,7 +5376,8 @@ document.getElementById('gym-save-isaac-btn')?.addEventListener('click', async (
       feedbacks:       gymFeedbacksArray(),
       annotations:     gymAnnotationsForIsaacExcel(),
       uploadSessionId: state.sessionId,
-      tenantId
+      tenantId,
+      ...(_isaacLocalFiles ? { localFiles: _isaacLocalFiles } : {})
     }
     let body
     try {
