@@ -5073,7 +5073,7 @@ function gymShowPanel(name) {
 }
 
 // ── Start workout ──────────────────────────────────────────
-document.getElementById('gym-start-btn').addEventListener('click', () => {
+document.getElementById('gym-start-btn').addEventListener('click', async () => {
   const tenantId = document.getElementById('gym-select').value
   if (!tenantId) return
   const tenant = state.tenants.find(t => t.id === tenantId)
