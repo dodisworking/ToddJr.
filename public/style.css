@@ -4006,6 +4006,14 @@ input:checked + .toggle-slider:before { transform:translateX(22px); background:#
   background: var(--card2);
 }
 
+/* ── Canvas wrapper (gives overlay a scrolling positioned ancestor) ── */
+#gym-canvas-wrap {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+  align-self: flex-start;
+}
+
 /* ── Annotation overlay ───────────────────────────────────── */
 .gym-anno-overlay {
   position: absolute;

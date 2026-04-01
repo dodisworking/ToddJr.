@@ -694,10 +694,12 @@
           </div>
 
           <div class="gym-pdf-viewport" id="gym-pdf-viewport">
-            <canvas id="gym-pdf-canvas"></canvas>
-            <!-- annotation overlay — rect is INSIDE so coords share the same space -->
-            <div id="gym-anno-overlay" class="gym-anno-overlay">
-              <div id="gym-anno-rect" class="gym-anno-rect hidden"></div>
+            <!-- canvas-wrap gives overlay a positioned ancestor that scrolls with the canvas -->
+            <div id="gym-canvas-wrap">
+              <canvas id="gym-pdf-canvas"></canvas>
+              <div id="gym-anno-overlay" class="gym-anno-overlay">
+                <div id="gym-anno-rect" class="gym-anno-rect hidden"></div>
+              </div>
             </div>
           </div>
           <div class="gym-pdf-hint" id="gym-pdf-hint">Click a finding to jump to its document</div>

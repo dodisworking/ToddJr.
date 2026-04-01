@@ -4231,6 +4231,7 @@ const gymState = {
   totalPages:       0,
   pdfDoc:           null,
   pdfCache:         {},   // fileIndex -> PDFDocumentProxy  (prevents re-fetching)
+  pdfPageLabels:    {},   // fileIndex -> string[]|null     (PDF printed page labels)
   annotating:       false,
   annoStart:        null,
   pendingAnno:      null, // {docIdx, pageNum}
@@ -4448,6 +4449,7 @@ function gymReset() {
   gymState.activeFindingId = null
   gymState.pdfDoc = null
   gymState.pdfCache = {}
+  gymState.pdfPageLabels = {}
   gymState.annotating = false
   gymState.pendingAnno = null
   gymState.sweatDrops = []
@@ -4995,10 +4997,11 @@ function gymJumpToFinding(idx) {
   }
 
   const { docIdx, pageNum } = gymParseEvidenceLocation(finding.evidence)
+  const scanPage = gymPrintedToScan(docIdx, pageNum)
   if (docIdx !== gymState.currentDocIdx || !gymState.pdfDoc) {
-    gymLoadDoc(docIdx, pageNum)
+    gymLoadDoc(docIdx, scanPage)
   } else {
-    gymGoToPage(pageNum)
+    gymGoToPage(scanPage)
   }
 }
 
@@ -5067,6 +5070,28 @@ function gymParseEvidenceLocation(evidence) {
   return { docIdx: pdfs[0].index, pageNum }
 }
 
+// ── PDF page-label helpers ──────────────────────────────────
+// Some PDFs embed printed page labels (e.g. cover pages labeled "i","ii" then
+// main body starting at "1" on scan page 4). When labels exist we can map
+// Claude's cited printed page → correct scan page index.
+
+async function gymCachePageLabels(fileIndex, pdfDoc) {
+  if (gymState.pdfPageLabels[fileIndex] !== undefined) return  // already cached
+  try {
+    gymState.pdfPageLabels[fileIndex] = await pdfDoc.getPageLabels()  // null if PDF has none
+  } catch (e) {
+    gymState.pdfPageLabels[fileIndex] = null
+  }
+}
+
+function gymPrintedToScan(docIdx, printedPage) {
+  const labels = gymState.pdfPageLabels[docIdx]
+  if (!labels) return printedPage  // no labels — 1:1 mapping
+  const target = String(printedPage)
+  const idx = labels.findIndex(l => l === target || (l != null && l.trim() === target))
+  return idx >= 0 ? idx + 1 : printedPage  // convert to 1-based scan page; fall back if not found
+}
+
 // ── Skip to next finding ────────────────────────────────────
 document.getElementById('gym-skip-btn').addEventListener('click', () => {
   const ids    = gymState.findings.map(f => f.id)
@@ -5105,6 +5130,7 @@ async function gymLoadDoc(fileIndex, goToPage = 1) {
       gymState.totalPages = gymState.pdfDoc.numPages
       gymState.pdfCache[fileIndex] = gymState.pdfDoc  // store in cache
     }
+    await gymCachePageLabels(fileIndex, gymState.pdfDoc)  // cache printed→scan label map
 
     document.getElementById('gym-pdf-prev').disabled = false
     document.getElementById('gym-pdf-next').disabled = false
@@ -5291,16 +5317,14 @@ function _gymFinishDraw(clientX, clientY) {
   if (w < 10 || h < 10) { _gymRect.classList.add('hidden'); return }
 
   // ── Crop the exact area from the live PDF canvas ──────────
-  // The overlay covers the full viewport (inset:0). The canvas sits inside
-  // the viewport with padding, so we need to map overlay coords → canvas pixels.
-  const canvasEl   = document.getElementById('gym-pdf-canvas')
-  const viewportEl = document.getElementById('gym-pdf-viewport')
-  const vr = viewportEl.getBoundingClientRect()
+  // The overlay wraps the canvas directly (same parent, inset:0 → overlay ≡ canvas bounds).
+  // Drag coords are relative to overlay top-left which equals canvas top-left → offset = 0.
+  const canvasEl = document.getElementById('gym-pdf-canvas')
   const cr = canvasEl.getBoundingClientRect()
 
-  // Canvas offset relative to the viewport (= overlay) top-left
-  const canvasOffX = cr.left - vr.left
-  const canvasOffY = cr.top  - vr.top
+  // Overlay sits directly on canvas; compute residual offset (should be ~0)
+  const canvasOffX = cr.left - overlayRect.left
+  const canvasOffY = cr.top  - overlayRect.top
 
   // Scale: canvas internal pixel size vs its displayed CSS pixel size
   const scaleX = canvasEl.width  / cr.width
