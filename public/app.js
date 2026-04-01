@@ -3932,6 +3932,43 @@ function setCardDone(tenantId, data) {
       resultText.innerHTML = `${data.findingCount} issue${data.findingCount !== 1 ? 's' : ''} &nbsp;<span class="sev-pill sev-${sevLabel.toLowerCase()}">${sevLabel}</span>`
     }
   }
+
+  // Add per-tenant download button
+  const existingDlBtn = card.querySelector('.card-dl-btn')
+  if (!existingDlBtn) {
+    const dlBtn = document.createElement('button')
+    dlBtn.className = 'card-dl-btn'
+    dlBtn.textContent = '⬇ Download'
+    dlBtn.title = 'Download findings for this tenant'
+    dlBtn.addEventListener('click', async e => {
+      e.stopPropagation()
+      dlBtn.textContent = '⏳ Generating...'
+      dlBtn.disabled = true
+      try {
+        const tenant = state.tenants.find(t => t.id === data.tenantId)
+        const result = state.findings.get(data.tenantId)
+        const resp = await fetch(sameOriginApi('/api/download/tenant'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tenant, result })
+        })
+        if (!resp.ok) throw new Error('Download failed')
+        const blob = await resp.blob()
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        a.href     = url
+        a.download = `Todd Jr - ${tenant?.tenantName || 'Report'}.xlsx`
+        a.click()
+        URL.revokeObjectURL(url)
+      } catch (err) {
+        toast('Download failed: ' + err.message, 'error')
+      } finally {
+        dlBtn.textContent = '⬇ Download'
+        dlBtn.disabled = false
+      }
+    })
+    card.appendChild(dlBtn)
+  }
 }
 
 
@@ -4798,7 +4835,7 @@ async function startExerciseSession() {
   gymExStartTenant(0)
 }
 
-function gymExStartTenant(idx) {
+async function gymExStartTenant(idx) {
   const tenant = gymExSession.tenants[idx]
   if (!tenant) return
   const total = gymExSession.tenants.length
@@ -4808,6 +4845,9 @@ function gymExStartTenant(idx) {
   document.getElementById('gym-subtitle').textContent = `Session ${idx + 1}/${total}: ${tenant.tenantName}`
   document.getElementById('gym-progress-fill').style.width = '0%'
   document.getElementById('gym-loading-msg').textContent = 'Starting analysis...'
+
+  // If files are local (not on Railway disk), push them to server first
+  await gymRegisterLocalFiles(tenant.id)
 
   const url = sameOriginApi(
     `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenant.id)}${cheapQs()}`
@@ -4970,6 +5010,29 @@ document.getElementById('gym-back').addEventListener('click', () => {
   goTo('loading')
 })
 
+/**
+ * If files are local (state.localFiles), push them to the server session so
+ * /api/gym/analyze can read them. No-op when files are already on Railway disk.
+ */
+async function gymRegisterLocalFiles(tenantId) {
+  if (!state.localFiles || state.localFiles.size === 0) return
+  const tenant = state.tenants.find(t => t.id === tenantId)
+  if (!tenant) return
+  const files = (tenant.files || []).map(f => {
+    const local = state.localFiles.get(f.relativePath)
+    if (!local) return null
+    return { name: f.name, base64: arrayBufferToBase64(local.buffer), size: local.size }
+  }).filter(Boolean)
+  if (files.length === 0) return
+  try {
+    await fetch(sameOriginApi('/api/gym/register-files'), {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ sessionId: state.sessionId, tenantId, files })
+    })
+  } catch (e) { console.warn('[gym] register-files failed:', e.message) }
+}
+
 function gymReset() {
   gymState.findings = []
   gymState.feedbacks = {}
@@ -5018,6 +5081,9 @@ document.getElementById('gym-start-btn').addEventListener('click', () => {
   document.getElementById('gym-subtitle').textContent = `Analyzing ${tenant?.tenantName || ''}...`
   document.getElementById('gym-progress-fill').style.width = '0%'
   document.getElementById('gym-loading-msg').textContent = 'Starting analysis...'
+
+  // Push local files to server if needed
+  await gymRegisterLocalFiles(tenantId)
 
   const url = sameOriginApi(
     `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenantId)}${cheapQs()}`

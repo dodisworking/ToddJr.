@@ -13,7 +13,6 @@ import { openaiAnalyzeTenant, isOpenAiKeyConfigured, getServerOpenAiKeyHint } fr
 import { generateReport } from './lib/reporter.js'
 import { mountIsaacRoutes } from './lib/isaac-routes.js'
 
-
 const __filename = fileURLToPath(import.meta.url)
 const __dirname  = path.dirname(__filename)
 
@@ -1556,9 +1555,47 @@ app.get('/api/download/:sessionId', (req, res) => {
   })
 })
 
+// POST /api/download/tenant — generate Excel for a single completed tenant
+app.post('/api/download/tenant', express.json({ limit: '2mb' }), async (req, res) => {
+  const { tenant, result } = req.body
+  if (!tenant || !result) return res.status(400).json({ error: 'Missing tenant or result' })
+  try {
+    const tmpPath = path.join(OUTPUTS_DIR, `tenant-${randomUUID()}.xlsx`)
+    await generateReport([{ tenant, result }], tmpPath)
+    const date     = new Date().toLocaleDateString('en-US').replace(/\//g, '-')
+    const filename = `Todd Jr - ${tenant.tenantName} - ${date}.xlsx`
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    const stream = fs.createReadStream(tmpPath)
+    stream.pipe(res)
+    stream.on('finish', () => { try { fs.unlinkSync(tmpPath) } catch {} })
+    stream.on('error',  () => { if (!res.headersSent) res.status(500).end() })
+  } catch (err) {
+    console.error('[download/tenant]', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ═══════════════════════════════════════════════════════════
 // GYM TEACHER — serve raw PDF files to browser PDF.js viewer
 // ═══════════════════════════════════════════════════════════
+
+// POST /api/gym/register-files — store local file buffers in session for gym use
+// Called by client before opening /api/gym/analyze when files are in browser RAM
+app.post('/api/gym/register-files', express.json({ limit: '500mb' }), (req, res) => {
+  const { sessionId, tenantId, files } = req.body
+  const session = sessions.get(sessionId)
+  if (!session) return res.status(404).json({ error: 'Session not found' })
+  const tenant = session.tenants.find(t => t.id === tenantId)
+  if (!tenant) return res.status(404).json({ error: 'Tenant not found' })
+  tenant.files = (files || []).map(f => ({
+    originalName: f.name,
+    buffer:       Buffer.from(f.base64, 'base64'),
+    size:         f.size,
+    isPDF:        f.name.toLowerCase().endsWith('.pdf')
+  }))
+  res.json({ ok: true, fileCount: tenant.files.length })
+})
 
 app.get('/api/gym/file/:sessionId/:tenantId/:fileIndex', (req, res) => {
   const { sessionId, tenantId, fileIndex } = req.params
@@ -1569,11 +1606,17 @@ app.get('/api/gym/file/:sessionId/:tenantId/:fileIndex', (req, res) => {
   const idx = parseInt(fileIndex)
   if (isNaN(idx) || idx < 0 || idx >= tenant.files.length) return res.status(404).end()
   const file = tenant.files[idx]
-  if (!file || !fs.existsSync(file.diskPath)) return res.status(404).end()
+  if (!file) return res.status(404).end()
 
   res.setHeader('Content-Type', 'application/pdf')
   res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(file.originalName)}"`)
   res.setHeader('Access-Control-Allow-Origin', '*')
+
+  // Local session: file is in memory buffer
+  if (file.buffer) return res.send(file.buffer)
+
+  // Disk-based session: stream from file path
+  if (!file.diskPath || !fs.existsSync(file.diskPath)) return res.status(404).end()
   const stream = fs.createReadStream(file.diskPath)
   stream.pipe(res)
   stream.on('error', () => { if (!res.headersSent) res.status(404).end() })
