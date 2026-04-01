@@ -452,7 +452,7 @@ function renderReport(data) {
       { label: 'CLIENT TENANTS',    value: s.clientTenants   ?? '—', color: '#93C5FD' },
       { label: 'ARGUS TENANTS',     value: s.argusTenants    ?? '—', color: '#CDB4FB' },
       { label: 'MATCHED',           value: s.matched         ?? '—', color: '#6EE7B7' },
-      { label: 'DISCREPANCIES',     value: s.discrepancies   ?? '—', color: '#FBBF24' },
+      { label: 'DISCREPANCIES',     value: s.discrepancyCount ?? s.discrepancies ?? '—', color: '#FBBF24' },
       { label: 'MISSING CLIENT',    value: s.missingFromClient ?? '—', color: '#F9A8D4' },
       { label: 'MISSING ARGUS',     value: s.missingFromArgus  ?? '—', color: '#FCA5A5' },
       { label: 'HIGH SEVERITY',     value: s.highSeverity    ?? '—', color: '#F87171' },
@@ -466,44 +466,42 @@ function renderReport(data) {
     `).join('')
   }
 
-  // Preview table — first 5 groups with discrepancies/issues
+  // Preview table — first 10 discrepancies from flat list
   const previewTable = el('rr-preview-table')
   if (previewTable) {
-    const groups = (data.tenantGroups || [])
-      .filter(g => g.overallStatus !== 'MATCH')
-      .slice(0, 5)
+    const disc    = (data.discrepancies || []).slice(0, 10)
+    const missing = (data.missing || []).slice(0, 5)
 
-    if (groups.length === 0) {
-      previewTable.innerHTML = '<div class="rr-preview-empty">✅ No discrepancies found!</div>'
+    if (disc.length === 0 && missing.length === 0) {
+      previewTable.innerHTML = '<div class="rr-preview-empty">✅ No discrepancies found — all tenants match!</div>'
     } else {
-      previewTable.innerHTML = groups.map(g => {
-        const statusColor = g.overallStatus === 'DISCREPANCY' ? '#FBBF24'
-          : g.overallStatus === 'MISSING_CLIENT' ? '#E879F9'
-          : g.overallStatus === 'MISSING_ARGUS'  ? '#FCA5A5'
-          : '#6EE7B7'
-        const sevColor = g.severity === 'HIGH' ? '#F87171'
-          : g.severity === 'MEDIUM' ? '#FBBF24'
-          : '#94A3B8'
-        const mismatches = (g.fieldComparisons || [])
-        const mismatchRows = mismatches.map(f => `
-            <div class="rr-prev-field-row">
-              <span class="rr-prev-field-name">${escapeHtml(f.field)}</span>
-              <span class="rr-prev-field-client">${escapeHtml(f.clientValue || '—')}</span>
-              <span class="rr-prev-field-arrow">→</span>
-              <span class="rr-prev-field-argus">${escapeHtml(f.argusValue || '—')}</span>
-            </div>`).join('')
+      const discRows = disc.map((d, i) => {
+        const sevColor = d.severity === 'HIGH' ? '#F87171' : d.severity === 'LOW' ? '#94A3B8' : '#FBBF24'
         return `
           <div class="rr-preview-row">
             <div class="rr-prev-header">
-              <span class="rr-prev-suite">${escapeHtml(g.suites || '—')}</span>
-              <span class="rr-prev-status" style="color:${statusColor}">${g.overallStatus}</span>
-              <span class="rr-prev-sev" style="color:${sevColor}">${g.severity}</span>
-              <span class="rr-prev-name">${escapeHtml(g.clientTenantName || g.argusTenantName || '—')}</span>
+              <span class="rr-prev-suite">${escapeHtml(d.suite || '—')}</span>
+              <span class="rr-prev-sev" style="color:${sevColor}">${escapeHtml(d.severity || '')}</span>
+              <span class="rr-prev-name">${escapeHtml(d.clientTenant || d.argusTenant || '—')}</span>
             </div>
-            ${mismatchRows}
-            <div class="rr-prev-assessment">${escapeHtml(g.toddAssessment || '')}</div>
+            <div class="rr-prev-field-row">
+              <span class="rr-prev-field-name">${escapeHtml(d.field || '—')}</span>
+              <span class="rr-prev-field-client">${escapeHtml(d.clientValue || '—')}</span>
+              <span class="rr-prev-field-arrow">→</span>
+              <span class="rr-prev-field-argus">${escapeHtml(d.argusValue || '—')}</span>
+            </div>
+            ${d.note ? `<div class="rr-prev-assessment">${escapeHtml(d.note)}</div>` : ''}
           </div>`
-      }).join('')
+      })
+      const missingRows = missing.map(m => `
+          <div class="rr-preview-row">
+            <div class="rr-prev-header">
+              <span class="rr-prev-suite">${escapeHtml(m.suite || '—')}</span>
+              <span class="rr-prev-sev" style="color:#E879F9">${escapeHtml(m.side || 'MISSING')}</span>
+              <span class="rr-prev-name">${escapeHtml(m.name || '—')}</span>
+            </div>
+          </div>`)
+      previewTable.innerHTML = [...discRows, ...missingRows].join('')
     }
   }
 
