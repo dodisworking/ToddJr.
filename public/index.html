@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=58" />
+  <link rel="stylesheet" href="style.css?v=59" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
@@ -392,6 +392,14 @@
           <span class="drlab-tube-title">OPENAI TEST LAB</span>
           <span class="drlab-tube-desc">OpenAI only — no Claude. Confirms PDFs go as native files and shows batch/debug details.</span>
         </button>
+      </div>
+
+      <!-- Tenant selector — populated from state.tenants when screen opens -->
+      <div class="drlab-tenant-row">
+        <label class="drlab-tenant-label" for="drlab-tenant-select">TENANT TO TEST:</label>
+        <select id="drlab-tenant-select" class="drlab-tenant-select">
+          <option value="">— upload folders first —</option>
+        </select>
       </div>
 
       <div class="drlab-launch-row">
@@ -1039,7 +1047,7 @@
 
   <script src="drlab-flasks.js?v=6"></script>
   <script src="sbs-boxing.js?v=3"></script>
-  <script src="app.js?v=74"></script>
+  <script src="app.js?v=75"></script>
   <script src="game-mode.js?v=4"></script>
 </body>
 </html>

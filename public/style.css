@@ -2129,6 +2129,34 @@ input:checked + .toggle-slider:before { transform:translateX(22px); background:#
   margin-top: 4px;
 }
 
+/* Tenant selector in Dr. Todd lab */
+.drlab-tenant-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  justify-content: center;
+}
+.drlab-tenant-label {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: #a78bfa;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.drlab-tenant-select {
+  flex: 1;
+  max-width: 420px;
+  padding: 8px 12px;
+  background: #0d0625;
+  border: 1px solid #3b1f6e;
+  border-radius: 6px;
+  color: #e2e8f0;
+  font-size: 12px;
+  cursor: pointer;
+}
+.drlab-tenant-select:focus { outline: none; border-color: #7c3aed; }
+
 .drlab-launch-row {
   display: flex;
   align-items: center;

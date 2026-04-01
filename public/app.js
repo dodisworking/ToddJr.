@@ -1099,6 +1099,17 @@ function goTo(screenName) {
     }
     document.querySelectorAll('.drlab-tube').forEach(el => el.classList.remove('selected'))
     window.__refreshLabFlasks?.()
+    // Populate tenant selector
+    const sel = document.getElementById('drlab-tenant-select')
+    if (sel) {
+      if (state.tenants?.length) {
+        sel.innerHTML = state.tenants.map(t =>
+          `<option value="${t.id}">${escHtml(t.tenantName)} (${t.fileCount} file${t.fileCount !== 1 ? 's' : ''})</option>`
+        ).join('')
+      } else {
+        sel.innerHTML = '<option value="">— upload folders first —</option>'
+      }
+    }
   }
   updateGlobalNav()
   if (screenName === 'upload' || screenName === 'loading') void refreshJuiceHomePanel()
@@ -2557,8 +2568,9 @@ function launchDrLabMode() {
   if (!state.tenants?.length) {
     return toast('Load tenant folders on the Hunt screen first — these tests need documents in your session.', 'info')
   }
-  if (state.drlabMode === 'triple') return startDrToddHunt()
-  void startSideBySide(null, state.drlabMode)
+  const tenantId = document.getElementById('drlab-tenant-select')?.value || null
+  if (state.drlabMode === 'triple') return startDrToddHunt(tenantId)
+  void startSideBySide(tenantId, state.drlabMode)
 }
 document.getElementById('btn-drlab-juice')?.addEventListener('click', () => setDrLabMode('juice'))
 document.getElementById('btn-drlab-triple')?.addEventListener('click', () => setDrLabMode('triple'))
@@ -2833,6 +2845,11 @@ async function startSideBySide(tenantId = null, mode = 'juice') {
   if (mode === 'openaitest') {
     resetOpenAiBrewLog()
     appendOpenAiBrewLog(`Connecting… ${cfg.endpoint}`)
+  }
+
+  // If local files in RAM, push them to server before SSE opens
+  if (state.localFiles?.size > 0 && tenantId) {
+    await gymRegisterLocalFiles(tenantId)
   }
 
   let qs = `sessionId=${encodeURIComponent(state.sessionId)}`
@@ -3764,7 +3781,12 @@ function _localMaxSeverity(findings) {
   return 'LOW'
 }
 
-function startDrToddHunt() {
+async function startDrToddHunt(tenantId = null) {
+  // If local files in RAM, push them to server before SSE opens
+  if (state.localFiles?.size > 0 && tenantId) {
+    await gymRegisterLocalFiles(tenantId)
+  }
+
   // Reset the Dr. Todd screen UI
   for (let i = 1; i <= 3; i++) {
     const status = document.getElementById(`drtodd-status-${i}`)
@@ -3786,7 +3808,10 @@ function startDrToddHunt() {
 
   goTo('drtoddhunt')
 
-  const url = sameOriginApi(`/api/drtoddhunt?sessionId=${encodeURIComponent(state.sessionId)}${cheapQs()}`)
+  let qs = `sessionId=${encodeURIComponent(state.sessionId)}`
+  if (tenantId) qs += `&tenantId=${encodeURIComponent(tenantId)}`
+  qs += cheapQs()
+  const url = sameOriginApi(`/api/drtoddhunt?${qs}`)
   const es = new EventSource(url)
   state.eventSource = es
   sfxStartHuntLoop()
