@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Timeline — Gantt Chart Editor</title>
+  <link rel="stylesheet" href="gantt-style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+</head>
+<body>
+  <!-- Top toolbar -->
+  <header class="toolbar">
+    <div class="toolbar-left">
+      <button class="btn-icon" id="btn-charts" title="My Charts">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+        </svg>
+      </button>
+      <div class="toolbar-title-group">
+        <h1 class="toolbar-title" id="chart-title" contenteditable="true" spellcheck="false">Timeline</h1>
+      </div>
+    </div>
+    <div class="toolbar-right">
+      <button class="btn-secondary" id="btn-add-phase">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Phase
+      </button>
+      <button class="btn-ai" id="btn-ai-generate">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        AI Generate
+      </button>
+      <button class="btn-secondary" id="btn-edit-note">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        Note
+      </button>
+      <div class="dropdown" id="export-dropdown">
+        <button class="btn-primary" id="btn-export">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="dropdown-menu">
+          <button class="dropdown-item" id="export-png">Export as PNG</button>
+          <button class="dropdown-item" id="export-pdf">Export as PDF</button>
+        </div>
+      </div>
+      <div class="zoom-controls">
+        <button class="btn-icon" id="btn-zoom-out" title="Zoom out (−)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+        </button>
+        <input type="range" id="zoom-slider" class="zoom-slider" min="20" max="220" value="100" step="10">
+        <button class="btn-icon" id="btn-zoom-in" title="Zoom in (+)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+        </button>
+        <span class="zoom-label" id="zoom-label">100%</span>
+      </div>
+      <button class="btn-icon btn-toggle active" id="btn-toggle-subtitles" title="Toggle subtitles">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/></svg>
+      </button>
+      <div class="toolbar-divider"></div>
+      <button class="btn-icon" id="btn-undo" title="Undo (⌘Z)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+      </button>
+      <button class="btn-icon" id="btn-redo" title="Redo (⌘⇧Z)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Chart area -->
+  <main class="chart-wrapper" id="chart-wrapper">
+    <div class="chart-container" id="gantt-chart">
+      <!-- Editable header section -->
+      <div class="chart-header" id="chart-header">
+        <h1 class="chart-header-title" id="chart-header-title" contenteditable="true" spellcheck="false"></h1>
+        <p class="chart-header-subtitle" id="chart-header-subtitle" contenteditable="true" spellcheck="false" data-placeholder="Click to add a description..."></p>
+      </div>
+      <!-- Note banner -->
+      <div class="chart-note" id="chart-note" style="display:none;">
+        <span class="note-text" id="note-text" contenteditable="true" spellcheck="false"></span>
+        <button class="note-close" id="note-close">&times;</button>
+      </div>
+      <!-- Rendered by JS -->
+      <div class="chart-grid" id="chart-grid"></div>
+    </div>
+  </main>
+
+  <!-- Phase editor panel (slides in from right) -->
+  <div class="panel-overlay" id="panel-overlay"></div>
+  <aside class="editor-panel" id="editor-panel">
+    <div class="panel-header">
+      <h2 class="panel-title" id="panel-title-text">Edit Phase</h2>
+      <div class="panel-header-actions">
+        <button class="btn-panel-done" id="panel-done">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Done
+        </button>
+        <button class="btn-icon panel-close" id="panel-close">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="field">
+        <label class="field-label">Title</label>
+        <input type="text" class="field-input" id="field-title" placeholder="Phase name">
+      </div>
+      <div class="field">
+        <label class="field-label">Subtitle</label>
+        <input type="text" class="field-input" id="field-subtitle" placeholder="Brief description">
+      </div>
+      <div class="field">
+        <label class="field-label">Icon</label>
+        <div class="icon-picker" id="icon-picker"></div>
+      </div>
+      <div class="field">
+        <label class="field-label">Color</label>
+        <div class="color-picker" id="color-picker"></div>
+      </div>
+      <div class="field">
+        <label class="field-label">Bar Style</label>
+        <div class="toggle-group" id="bar-style-toggle">
+          <button class="toggle-btn active" data-value="solid">Solid</button>
+          <button class="toggle-btn" data-value="blocks">Blocks</button>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field-label">Highlight Row</label>
+        <label class="switch">
+          <input type="checkbox" id="field-highlight">
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+      <div class="field">
+        <label class="field-label">Date Spans</label>
+        <div class="spans-editor" id="spans-editor"></div>
+        <button class="btn-text" id="btn-add-span">+ Add span</button>
+      </div>
+    </div>
+    <div class="panel-footer">
+      <button class="btn-danger" id="btn-delete-phase">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        Delete Phase
+      </button>
+    </div>
+  </aside>
+
+  <!-- Charts list modal -->
+  <div class="modal-overlay" id="modal-overlay"></div>
+  <div class="modal" id="charts-modal">
+    <div class="modal-header">
+      <h2 class="modal-title">My Charts</h2>
+      <button class="btn-icon modal-close" id="modal-close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="charts-list"></div>
+    <div class="modal-footer">
+      <button class="btn-primary" id="btn-new-chart">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Chart
+      </button>
+    </div>
+  </div>
+
+  <!-- Note editor modal -->
+  <div class="modal-overlay" id="note-modal-overlay"></div>
+  <div class="modal modal-sm" id="note-modal">
+    <div class="modal-header">
+      <h2 class="modal-title">Chart Note</h2>
+      <button class="btn-icon modal-close" id="note-modal-close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <textarea class="field-input field-textarea" id="note-textarea" placeholder="Add a note that appears at the top of your chart..."></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="note-clear">Clear</button>
+      <button class="btn-primary" id="note-save">Save</button>
+    </div>
+  </div>
+
+  <!-- AI Generate modal -->
+  <div class="modal-overlay" id="ai-modal-overlay"></div>
+  <div class="modal modal-ai" id="ai-modal">
+    <div class="modal-header">
+      <div class="modal-header-left">
+        <div class="ai-icon-wrap">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
+        <h2 class="modal-title">AI Generate</h2>
+      </div>
+      <button class="btn-icon modal-close" id="ai-modal-close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="ai-description">Describe your project, timeline, or workflow and AI will generate a complete Gantt chart for you.</p>
+      <textarea class="field-input field-textarea ai-textarea" id="ai-prompt" placeholder="Example: We're planning a product launch for a SaaS app. We need design mockups, development sprints, QA testing, beta release, marketing prep, and public launch. The whole thing should take about 3 months starting in May 2026."></textarea>
+      <div class="ai-examples">
+        <span class="ai-examples-label">Try:</span>
+        <button class="ai-example-chip" data-prompt="A 6-week marketing campaign for a new product launch including research, creative development, media buying, content creation, influencer outreach, and launch event">Marketing campaign</button>
+        <button class="ai-example-chip" data-prompt="A film production schedule from pre-production through post-production including casting, location scouting, rehearsals, 3 weeks of principal photography, editing, color grading, sound design, and final delivery">Film production</button>
+        <button class="ai-example-chip" data-prompt="A software development sprint plan for building a mobile app MVP over 4 months including user research, wireframes, UI design, backend API development, frontend development, testing, beta release, and app store submission">App development</button>
+        <button class="ai-example-chip" data-prompt="Planning a destination wedding over 6 months including venue booking, vendor selection, save the dates, dress shopping, menu tasting, travel arrangements, rehearsal dinner, and the wedding weekend">Wedding planning</button>
+      </div>
+      <div class="ai-error" id="ai-error" style="display:none;"></div>
+    </div>
+    <div class="modal-footer">
+      <div class="ai-mode-info" id="ai-mode-info"></div>
+      <button class="btn-secondary" id="ai-cancel">Cancel</button>
+      <button class="btn-ai" id="ai-submit" disabled>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        <span id="ai-submit-text">Generate</span>
+      </button>
+    </div>
+  </div>
+
+  <script src="gantt-app.js"></script>
+</body>
+</html>
