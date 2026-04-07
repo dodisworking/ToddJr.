@@ -5085,22 +5085,9 @@ async function gymExSaveAndNext() {
 async function startTargetPractice() {
   if (state.tenants.length === 0) { toast('Upload files first', 'error'); return }
 
-  // Give immediate feedback while we fetch models
-  const launchBtn = document.getElementById('btn-target-launch')
-  if (launchBtn) { launchBtn.disabled = true; launchBtn.textContent = '🎯 Loading...' }
-
-  // Fetch saved juice models
-  let savedModels = []
-  try {
-    const modelsRes = await fetch(sameOriginApi('/api/target/models'))
-    if (modelsRes.ok) savedModels = await modelsRes.json()
-  } catch { /* none saved */ }
-
-  // Restore button — setup screen is now open
-  if (launchBtn) { launchBtn.disabled = false; launchBtn.textContent = '🎯 Todd Target Practice' }
-
-  // Show the combined setup screen and wait for user to start or cancel
-  const setup = await showTargetSetupScreen(savedModels)
+  // Show setup screen IMMEDIATELY — don't wait for network
+  // Models list will populate in the background
+  const setup = await showTargetSetupScreen(null)   // null = loading state
   if (!setup) return   // user cancelled
 
   const { reviewerName, loadedModel } = setup
@@ -5148,10 +5135,10 @@ async function startTargetPractice() {
 }
 
 /**
- * Show the Target Practice setup screen.
+ * Show the Target Practice setup screen immediately, then load models async.
  * Returns { reviewerName, loadedModel } or null if cancelled.
  */
-function showTargetSetupScreen(savedModels) {
+function showTargetSetupScreen() {
   return new Promise(resolve => {
     const overlay    = document.getElementById('target-setup-overlay')
     const modelList  = document.getElementById('tso-model-list')
@@ -5161,40 +5148,48 @@ function showTargetSetupScreen(savedModels) {
     const cancelBtn  = document.getElementById('tso-cancel-btn')
     if (!overlay) { resolve(null); return }
 
-    // Build model buttons
-    modelList.innerHTML = savedModels.map(m => {
-      const score   = m.errorReduction != null ? `${m.errorReduction}% error reduction` : ''
-      const tenants = m.tenantCount ? `${m.tenantCount} tenants` : ''
-      const meta    = [score, tenants, m.reviewerName].filter(Boolean).join(' · ')
-      return `<button class="tso-model-btn" data-id="${m.id}" data-name="${escHtml(m.name)}">
-        <span class="tso-model-name">🧠 ${escHtml(m.name)}</span>
-        ${meta ? `<span class="tso-model-meta">${escHtml(meta)}</span>` : ''}
-        ${m.comment ? `<span class="tso-model-comment">"${escHtml(m.comment)}"</span>` : ''}
-      </button>`
-    }).join('')
-
-    // Track selected model (null = fresh start)
+    // Show screen immediately
     let selectedModel = null
+    modelList.innerHTML = '<span class="tso-model-meta" style="padding:4px 0;display:block">Loading saved models...</span>'
     freshBtn.classList.add('active')
+    reviewerIn.value = ''
+    overlay.classList.remove('hidden')
+    setTimeout(() => reviewerIn.focus(), 80)
 
-    // Model button click — select/deselect
-    modelList.querySelectorAll('.tso-model-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        modelList.querySelectorAll('.tso-model-btn').forEach(b => b.classList.remove('active'))
-        freshBtn.classList.remove('active')
-        btn.classList.add('active')
-        selectedModel = { id: btn.dataset.id, name: btn.dataset.name }
+    // Fetch models in background — populate list when ready
+    fetch(sameOriginApi('/api/target/models'))
+      .then(r => r.ok ? r.json() : [])
+      .catch(() => [])
+      .then(savedModels => {
+        if (!savedModels.length) {
+          modelList.innerHTML = '<span class="tso-model-meta" style="padding:4px 0;display:block;color:#475569">No saved models yet — starting fresh.</span>'
+          return
+        }
+        modelList.innerHTML = savedModels.map(m => {
+          const score   = m.errorReduction != null ? `${m.errorReduction}% error reduction` : ''
+          const tenants = m.tenantCount ? `${m.tenantCount} tenants` : ''
+          const meta    = [score, tenants, m.reviewerName].filter(Boolean).join(' · ')
+          return `<button class="tso-model-btn" data-id="${m.id}" data-name="${escHtml(m.name)}">
+            <span class="tso-model-name">🧠 ${escHtml(m.name)}</span>
+            ${meta ? `<span class="tso-model-meta">${escHtml(meta)}</span>` : ''}
+            ${m.comment ? `<span class="tso-model-comment">"${escHtml(m.comment)}"</span>` : ''}
+          </button>`
+        }).join('')
+        modelList.querySelectorAll('.tso-model-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            modelList.querySelectorAll('.tso-model-btn').forEach(b => b.classList.remove('active'))
+            freshBtn.classList.remove('active')
+            btn.classList.add('active')
+            selectedModel = { id: btn.dataset.id, name: btn.dataset.name }
+          })
+        })
       })
-    })
+
     freshBtn.addEventListener('click', () => {
       modelList.querySelectorAll('.tso-model-btn').forEach(b => b.classList.remove('active'))
       freshBtn.classList.add('active')
       selectedModel = null
     })
-
-    reviewerIn.value = ''
-    overlay.classList.remove('hidden')
-    setTimeout(() => reviewerIn.focus(), 80)
 
     function cleanup(result) {
       overlay.classList.add('hidden')
