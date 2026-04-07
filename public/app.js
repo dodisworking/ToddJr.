@@ -5085,6 +5085,11 @@ async function gymExSaveAndNext() {
 async function startTargetPractice() {
   if (state.tenants.length === 0) { toast('Upload files first', 'error'); return }
 
+  // Give immediate feedback — disable button while async steps run
+  const launchBtn = document.getElementById('btn-target-launch')
+  if (launchBtn) { launchBtn.disabled = true; launchBtn.textContent = '🎯 Starting...' }
+  const restoreBtn = () => { if (launchBtn) { launchBtn.disabled = false; launchBtn.textContent = '🎯 Todd Target Practice' } }
+
   // ── Step 1: Offer to load a saved juice model ──────────────────────
   let loadedModel = null
   try {
@@ -5093,7 +5098,7 @@ async function startTargetPractice() {
     if (models.length > 0) {
       loadedModel = await showJuiceModelPicker(models)
       // null = start fresh, object = picked model, false = cancelled
-      if (loadedModel === false) return
+      if (loadedModel === false) { restoreBtn(); return }
     }
   } catch { /* no models saved yet, skip picker */ }
 
@@ -5103,7 +5108,7 @@ async function startTargetPractice() {
     '🎯 START TARGET PRACTICE',
     'e.g. Sarah M.'
   )
-  if (name === null) return
+  if (name === null) { restoreBtn(); return }
 
   // ── Step 3: Reset juice in session, optionally load model rules ───
   await fetch(sameOriginApi('/api/target/reset-juice'), {
