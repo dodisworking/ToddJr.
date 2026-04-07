@@ -6426,3 +6426,43 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   .rr-confirm-cards { flex-direction: column; }
   .rr-stats-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ══════════════════════════════════════════════════════
+   TARGET PRACTICE
+══════════════════════════════════════════════════════ */
+
+/* Target Practice button (hunt screen CTA) */
+.btn-target-practice {
+  display: none;
+  padding: 12px 28px;
+  background: linear-gradient(135deg, #4c1d95, #7c3aed);
+  color: #fff;
+  border: 2px solid #6d28d9;
+  border-radius: 8px;
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  transition: background 0.15s, transform 0.1s;
+  margin-top: 10px;
+}
+.btn-target-practice:hover  { background: linear-gradient(135deg, #5b21b6, #8b5cf6); }
+.btn-target-practice:active { transform: scale(0.97); }
+#cook-cta-wrap:not(.hidden) .btn-target-practice { display: inline-block; }
+
+/* Target save button (gym bottom bar) */
+.btn-gym-target-save {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #4c1d95, #7c3aed);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: background 0.15s, opacity 0.15s;
+}
+.btn-gym-target-save:hover    { background: linear-gradient(135deg, #5b21b6, #8b5cf6); }
+.btn-gym-target-save:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-gym-target-save.hidden   { display: none; }

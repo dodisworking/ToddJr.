@@ -4063,6 +4063,7 @@ function updateHuntSubtitle(text) {
 function showCookCta() {
   const wrap = document.getElementById('cook-cta-wrap')
   if (wrap) wrap.classList.remove('hidden')
+  document.getElementById('btn-target-practice')?.classList.remove('hidden')
   // Trigger victory animation — all enemies die, Todd celebrates
   if (!arenaAnim.victory) {
     arenaAnim.victory = true
@@ -4075,6 +4076,7 @@ function showCookCta() {
 // ═══════════════════════════════════════════════════════════
 
 document.getElementById('btn-cook').addEventListener('click', startCook)
+document.getElementById('btn-target-practice')?.addEventListener('click', startTargetPractice)
 
 async function startCook() {
   stopArena()
@@ -4650,6 +4652,7 @@ function fullResetSession() {
   animState.toddMode = 'idle'
   document.getElementById('btn-kill-hunt')?.classList.add('hidden')
   document.getElementById('cook-cta-wrap')?.classList.add('hidden')
+  document.getElementById('btn-target-practice')?.classList.add('hidden')
   document.getElementById('tenant-grid-loading').innerHTML = ''
   document.getElementById('tenant-grid-hunt').innerHTML = ''
   document.getElementById('hunt-cta-wrap')?.classList.remove('ready')
@@ -4896,6 +4899,16 @@ const gymState = {
   sweatDrops:       [],
 }
 
+// ── Target Practice session state ──────────────────────────
+const targetSession = {
+  active:       false,
+  tenants:      [],
+  currentIdx:   0,
+  sessionId:    null,
+  savedCount:   0,
+  reviewerName: ''
+}
+
 // ── Exercise Session state ─────────────────────────────────
 const gymExSession = {
   active:       false,
@@ -5058,6 +5071,166 @@ async function gymExSaveAndNext() {
     if (btn) btn.disabled = false
   }
 }
+
+// ═══════════════════════════════════════════════════════════
+// TODD TARGET PRACTICE — review completed hunt findings
+// ═══════════════════════════════════════════════════════════
+
+async function startTargetPractice() {
+  const tenantsWithFindings = state.tenants.filter(t => state.findings.has(t.id))
+  if (tenantsWithFindings.length === 0) {
+    toast('Run the hunt first — no findings to review yet.', 'info')
+    return
+  }
+  const name = await pixelPrompt(
+    'Who is reviewing these findings?\nEnter your name to log the audit.',
+    '🎯 START REVIEW',
+    'e.g. Sarah M.'
+  )
+  if (name === null) return
+
+  targetSession.active       = true
+  targetSession.tenants      = tenantsWithFindings
+  targetSession.currentIdx   = 0
+  targetSession.sessionId    = 'target-' + Date.now()
+  targetSession.savedCount   = 0
+  targetSession.reviewerName = name || 'Unknown'
+
+  gymState.mode = 'target'
+  goTo('gym')
+  gymShowPanel('loading')
+  const lbl = document.getElementById('gym-load-label')
+  if (lbl) lbl.textContent = 'Loading findings...'
+  await targetStartTenant(0)
+}
+
+async function targetStartTenant(idx) {
+  const tenant = targetSession.tenants[idx]
+  if (!tenant) return
+
+  // Register local files so PDF viewer works
+  if (state.localFiles?.size > 0) {
+    await gymRegisterLocalFiles(tenant.id)
+  }
+
+  // Pull findings from already-completed hunt results
+  const huntData = state.findings.get(tenant.id)
+  const rawFindings = huntData?.findings || []
+
+  // Reset gym state for this tenant
+  gymState.tenantId    = tenant.id
+  gymState.tenantName  = tenant.tenantName
+  gymState.folderName  = tenant.folderName
+  gymState.findings    = rawFindings.map((f, i) => ({
+    ...f,
+    id: f.id || ('tp-' + idx + '-' + i)
+  }))
+  gymState.feedbacks   = {}
+  gymState.annotations = []
+  gymState.files       = (tenant.files || []).map(f => ({ name: f.name, sizeBytes: f.sizeBytes, relativePath: f.relativePath }))
+  gymState.currentDocIdx = 0
+  gymState.currentPage   = 1
+
+  // Update progress UI (reuse exercise session progress bar)
+  const wrap = document.getElementById('gym-ex-progress-wrap')
+  if (wrap) wrap.classList.remove('hidden')
+  const fill  = document.getElementById('gym-ex-progress-fill')
+  const label = document.getElementById('gym-ex-progress-label')
+  const pct = targetSession.tenants.length > 1
+    ? Math.round((idx / targetSession.tenants.length) * 100) : 0
+  if (fill)  fill.style.width = pct + '%'
+  if (label) label.textContent = `🎯 Review: ${idx + 1} of ${targetSession.tenants.length} — ${tenant.tenantName}`
+
+  // Show target save button, hide gym/exercise save buttons
+  document.getElementById('gym-save-isaac-btn')?.classList.add('hidden')
+  document.getElementById('gym-ex-save-next-btn')?.classList.add('hidden')
+  document.getElementById('gym-submit-btn')?.classList.add('hidden')
+  const targetSaveBtn = document.getElementById('gym-target-save-btn')
+  if (targetSaveBtn) {
+    targetSaveBtn.classList.remove('hidden')
+    targetSaveBtn.disabled = false
+    targetSaveBtn.textContent = idx < targetSession.tenants.length - 1
+      ? '💾 Save Report & Next →'
+      : '💾 Save Final Report'
+  }
+
+  gymShowPanel('workout')
+  gymRenderFindings()
+
+  // Load first PDF if files available
+  if (gymState.files.length > 0) {
+    gymState.currentDocIdx = 0
+    await gymGoToDoc(0)
+  }
+}
+
+async function targetSaveAndNext() {
+  const btn = document.getElementById('gym-target-save-btn')
+  if (btn) { btn.disabled = true; btn.textContent = '💾 Saving...' }
+
+  const findings  = gymFindingsForIsaacPayload()
+  const feedbacks = gymFeedbacksArray()
+  const annotations = gymAnnotationsForIsaacExcel()
+
+  const payload = {
+    type:            'target-practice',
+    tenantName:      gymState.tenantName,
+    folderName:      gymState.folderName,
+    findings,
+    feedbacks,
+    annotations,
+    sessionId:       targetSession.sessionId,
+    sessionIdx:      targetSession.currentIdx,
+    sessionTotal:    targetSession.tenants.length,
+    reviewerName:    targetSession.reviewerName,
+    uploadSessionId: state.sessionId,
+    tenantId:        gymState.tenantId
+  }
+
+  // Attach local files if needed (for doc viewer links in Isaac)
+  const localFiles = buildIsaacLocalFiles(gymState.tenantId)
+  if (localFiles) payload.localFiles = localFiles
+
+  try {
+    const res  = await fetch(sameOriginApi('/api/gym/save-for-isaac'), {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload)
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Save failed')
+
+    targetSession.savedCount++
+
+    if (btn) { btn.textContent = '✅ Saved!' }
+    sfxReady()
+
+    await new Promise(r => setTimeout(r, 900)) // brief flash
+
+    const next = targetSession.currentIdx + 1
+    if (next < targetSession.tenants.length) {
+      targetSession.currentIdx = next
+      gymShowPanel('loading')
+      const lbl = document.getElementById('gym-load-label')
+      if (lbl) lbl.textContent = `Loading ${targetSession.tenants[next].tenantName}...`
+      await targetStartTenant(next)
+    } else {
+      // Session complete
+      targetSession.active = false
+      gymState.mode = null
+      document.getElementById('gym-ex-progress-wrap')?.classList.add('hidden')
+      toast(`🎯 Review complete — ${targetSession.savedCount} report${targetSession.savedCount !== 1 ? 's' : ''} saved.`, 'success')
+      sfxHuntComplete()
+      gymOpenPicker()
+    }
+  } catch (err) {
+    sfxError()
+    toast('Save failed: ' + err.message, 'error')
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Save Report & Next →' }
+  }
+}
+
+document.getElementById('gym-target-save-btn')?.addEventListener('click', targetSaveAndNext)
 
 // ── Running animation loop ─────────────────────────────────
 const GYM_RUN_CANVAS = document.getElementById('gym-run-canvas')
@@ -5614,9 +5787,11 @@ function renderIsaacLogsHtml(entries) {
         const total    = entry.sessionTotal || sessionEntries.length
         const reviewer = entry.reviewerName ? ` · Reviewed by: ${escHtml(entry.reviewerName)}` : ''
         const sessionPkgHref = toddApiUrl(`/api/gym/isaac-session-package/${encodeURIComponent(entry.sessionId)}`)
+        const sessionIcon = entry.type === 'target-practice' ? '🎯' : '⚡'
+        const sessionLabel = entry.type === 'target-practice' ? 'Target Practice Review' : 'Exercise Session'
         rendered.push(`<div class="isaac-session-group">
           <div class="isaac-session-header">
-            ⚡ Exercise Session · ${escHtml(dt)}${reviewer} · ${sessionEntries.length} of ${total} tenants
+            ${sessionIcon} ${sessionLabel} · ${escHtml(dt)}${reviewer} · ${sessionEntries.length} of ${total} tenants
             <a class="isaac-session-pkg-btn" href="${sessionPkgHref}" download title="Download all reports + PDFs for this session as a zip">📦 Download Full Session</a>
           </div>
           ${sessionEntries.map(se => {
@@ -5635,9 +5810,10 @@ function renderIsaacLogsHtml(entries) {
         </div>`)
       }
     } else {
+      const cardIcon = entry.type === 'target-practice' ? '🎯 ' : ''
       rendered.push(`<div class="isaac-log-card">
         <button class="isaac-delete-btn" data-id="${escHtml(id)}" title="Delete this report">✕</button>
-        <div class="isaac-log-meta">${escHtml(dt)} · ${escHtml(entry.tenantName || '')} · ${escHtml(entry.folderName || '')}</div>
+        <div class="isaac-log-meta">${cardIcon}${escHtml(dt)} · ${escHtml(entry.tenantName || '')} · ${escHtml(entry.folderName || '')}</div>
         <div class="isaac-download-row">
           <a class="isaac-download-link" href="${href}" download>⬇ Download .xlsx</a>
           ${isaacPackageBtn(entry)}
