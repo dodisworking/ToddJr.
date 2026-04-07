@@ -5223,16 +5223,8 @@ async function targetStartTenant(idx) {
     const d = JSON.parse(e.data)
     document.getElementById('gym-progress-fill').style.width = '100%'
 
-    gymState.tenantId      = tenant.id
-    gymState.tenantName    = tenant.tenantName
-    gymState.folderName    = tenant.folderName
-    gymState.findings      = (d.findings || []).map((f, i) => ({ ...f, id: f.id || ('tp-' + idx + '-' + i) }))
-    gymState.feedbacks     = {}
-    gymState.annotations   = []
-    gymState.files         = d.files || []
-    gymState.currentDocIdx = 0
-    gymState.currentPage   = 1
-    gymState.mode          = 'target'
+    gymLaunchWorkout(d)
+    gymState.mode = 'target'
 
     document.getElementById('gym-save-isaac-btn')?.classList.add('hidden')
     document.getElementById('gym-ex-save-next-btn')?.classList.add('hidden')
@@ -5243,10 +5235,6 @@ async function targetStartTenant(idx) {
       targetSaveBtn.disabled = false
       targetSaveBtn.textContent = idx < total - 1 ? '💾 Save & Learn Next →' : '💾 Save Final Report'
     }
-
-    gymShowPanel('workout')
-    gymRenderFindings()
-    if (gymState.files.length > 0) gymGoToDoc(0)
   })
   es.addEventListener('gym-error', e => {
     es.close(); state.eventSource = null
