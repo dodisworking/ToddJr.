@@ -5548,6 +5548,14 @@ async function targetStartTenant(idx) {
 
   await gymRegisterLocalFiles(tenant.id)
 
+  // Wait for any in-progress synthesis before opening the analyze SSE,
+  // so session.targetJuiceRules is set on the server before the gym call fires.
+  // File upload above typically buys enough time — usually zero extra wait here.
+  if (targetSession.synthPromise) {
+    await targetSession.synthPromise
+    targetSession.synthPromise = null
+  }
+
   const url = sameOriginApi(
     `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenant.id)}${cheapQs()}`
   )
@@ -5658,15 +5666,17 @@ async function targetSaveAndNext() {
     if (btn) { btn.textContent = '✅ Saved!' }
     sfxReady()
 
-    // 2. Active learning synthesis — truly non-blocking background task.
-    // Fire immediately; DO NOT await. Navigation proceeds after the short "Saved!" flash.
-    // gymRegisterLocalFiles + SSE startup for the next tenant buys enough time that
-    // synthesis often finishes before the actual gym analysis Claude call fires.
+    // 2. Active learning synthesis — fire immediately so UI stays responsive,
+    // but store the promise so targetStartTenant can await it before opening
+    // the analyze SSE (ensuring rules are on the server before analysis fires).
+    // gymRegisterLocalFiles takes a few seconds, so synthesis often finishes
+    // during that window — meaning zero extra wait in practice.
     const isLast = targetSession.currentIdx + 1 >= targetSession.tenants.length
+    targetSession.synthPromise = null
     if (!isLast && (rejectedFindings.length > 0 || annotations.length > 0)) {
       targetSession.synthesizing = true
       targetLearningIndicator(true)
-      fetch(sameOriginApi('/api/target/synthesize'), {
+      targetSession.synthPromise = fetch(sameOriginApi('/api/target/synthesize'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId: state.sessionId,
