@@ -5785,6 +5785,54 @@ document.getElementById('tsc-download-btn')?.addEventListener('click', targetDow
 document.getElementById('tsc-save-model-btn')?.addEventListener('click', targetSaveModel)
 document.getElementById('tsc-done-btn')?.addEventListener('click', () => gymOpenPicker())
 
+// ── TSC tab switching ──────────────────────────────────────
+document.querySelectorAll('.tsc-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tsc-tab').forEach(t => t.classList.remove('active'))
+    document.querySelectorAll('.tsc-tab-panel').forEach(p => p.classList.add('hidden'))
+    tab.classList.add('active')
+    const panel = document.getElementById('tsc-tab-' + tab.dataset.tab)
+    if (panel) panel.classList.remove('hidden')
+    if (tab.dataset.tab === 'findings') buildTscFindingsTable()
+  })
+})
+
+function buildTscFindingsTable() {
+  const wrap = document.getElementById('tsc-findings-table-wrap')
+  if (!wrap) return
+  const results = targetSession.allTenantResults
+  if (!results || results.length === 0) {
+    wrap.innerHTML = '<p style="padding:16px;color:#64748b;font-size:12px;">No findings recorded yet.</p>'
+    return
+  }
+  const rows = []
+  results.forEach(r => {
+    const findings = r.confirmedFindings || []
+    if (findings.length === 0) {
+      rows.push(`<tr>
+        <td>${r.property || ''}</td><td>${r.tenantName || ''}</td><td>${r.suite || ''}</td>
+        <td style="color:#4ade80">None</td><td>All clear</td><td class="sev-CLEAR">CLEAR</td>
+      </tr>`)
+    } else {
+      findings.forEach(f => {
+        const sevClass = 'sev-' + (f.severity || 'LOW')
+        const comment = [f.comment, f.evidence ? 'Evidence: ' + f.evidence : ''].filter(Boolean).join(' | ')
+        rows.push(`<tr>
+          <td>${r.property || ''}</td><td>${r.tenantName || ''}</td><td>${r.suite || ''}</td>
+          <td>${f.missingDocument || f.checkType || ''}</td>
+          <td style="max-width:280px;word-break:break-word">${comment}</td>
+          <td class="${sevClass}">${f.severity || ''}</td>
+        </tr>`)
+      })
+    }
+  })
+  wrap.innerHTML = `<table class="findings-table">
+    <thead><tr><th>Property</th><th>Tenant</th><th>Suite</th>
+    <th>Missing / Issue</th><th>Comment / Evidence</th><th>Severity</th></tr></thead>
+    <tbody>${rows.join('')}</tbody>
+  </table>`
+}
+
 document.getElementById('gym-target-save-btn')?.addEventListener('click', targetSaveAndNext)
 
 // ── Running animation loop ─────────────────────────────────

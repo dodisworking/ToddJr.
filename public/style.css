@@ -6656,6 +6656,66 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
 }
 .btn-tsc-done:hover { background: #273449; color: #cbd5e1; }
 
+/* ── TSC Tabs ───────────────────────────────────────────── */
+.tsc-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid #1e293b;
+  margin-bottom: 16px;
+}
+.tsc-tab {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  padding: 8px 18px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: #64748b;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  margin-bottom: -2px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tsc-tab:hover { color: #a78bfa; }
+.tsc-tab.active { color: #c4b5fd; border-bottom-color: #7c3aed; }
+.tsc-tab-panel { display: block; }
+.tsc-tab-panel.hidden { display: none; }
+.tsc-findings-wrap {
+  max-height: 340px;
+  overflow-y: auto;
+  border: 1px solid #1e293b;
+  border-radius: 4px;
+}
+.tsc-findings-wrap .findings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.tsc-findings-wrap .findings-table th {
+  background: #0c1929;
+  color: #7c3aed;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  letter-spacing: 0.05em;
+  padding: 8px 10px;
+  text-align: left;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.tsc-findings-wrap .findings-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #0f172a;
+  color: #cbd5e1;
+  vertical-align: top;
+  line-height: 1.4;
+}
+.tsc-findings-wrap .findings-table tr:hover td { background: #0d1e35; }
+.tsc-findings-wrap .findings-table .sev-HIGH   { color: #f87171; font-weight: 600; }
+.tsc-findings-wrap .findings-table .sev-MEDIUM { color: #fb923c; }
+.tsc-findings-wrap .findings-table .sev-LOW    { color: #facc15; }
+.tsc-findings-wrap .findings-table .sev-CLEAR  { color: #4ade80; }
+
 /* ── Juice Model Picker overlay ──────────────────────────── */
 /* ── Target Practice Setup overlay (8-bit) ───────────────── */
 .target-setup-overlay {

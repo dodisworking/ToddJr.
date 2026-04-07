@@ -758,17 +758,33 @@
     <div id="target-session-complete" class="gym-panel gym-panel-center hidden">
       <div class="tsc-box">
         <h2 class="tsc-title">🎯 Target Practice Complete</h2>
-        <div class="tsc-stats-row">
-          <div class="tsc-stat"><span class="tsc-stat-val" id="tsc-tenants">—</span><span class="tsc-stat-lbl">Tenants</span></div>
-          <div class="tsc-stat"><span class="tsc-stat-val" id="tsc-rules">—</span><span class="tsc-stat-lbl">Rules Generated</span></div>
-          <div class="tsc-stat"><span class="tsc-stat-val tsc-stat-score" id="tsc-reduction">—</span><span class="tsc-stat-lbl">Error Reduction</span></div>
+
+        <!-- Tab bar -->
+        <div class="tsc-tabs">
+          <button class="tsc-tab active" data-tab="overview">📊 Overview</button>
+          <button class="tsc-tab" data-tab="findings">📋 Findings</button>
         </div>
-        <p class="tsc-reviewer-line">Reviewed by: <strong id="tsc-reviewer"></strong></p>
-        <p class="tsc-parent-row hidden" id="tsc-parent-row"></p>
-        <div class="tsc-graph-wrap">
-          <p class="tsc-graph-label">Corrections per tenant (should go ↓)</p>
-          <div class="tsc-graph" id="tsc-graph"></div>
+
+        <!-- Tab: Overview -->
+        <div class="tsc-tab-panel" id="tsc-tab-overview">
+          <div class="tsc-stats-row">
+            <div class="tsc-stat"><span class="tsc-stat-val" id="tsc-tenants">—</span><span class="tsc-stat-lbl">Tenants</span></div>
+            <div class="tsc-stat"><span class="tsc-stat-val" id="tsc-rules">—</span><span class="tsc-stat-lbl">Rules Generated</span></div>
+            <div class="tsc-stat"><span class="tsc-stat-val tsc-stat-score" id="tsc-reduction">—</span><span class="tsc-stat-lbl">Error Reduction</span></div>
+          </div>
+          <p class="tsc-reviewer-line">Reviewed by: <strong id="tsc-reviewer"></strong></p>
+          <p class="tsc-parent-row hidden" id="tsc-parent-row"></p>
+          <div class="tsc-graph-wrap">
+            <p class="tsc-graph-label">Corrections per tenant (should go ↓)</p>
+            <div class="tsc-graph" id="tsc-graph"></div>
+          </div>
         </div>
+
+        <!-- Tab: Findings (same layout as hunt report) -->
+        <div class="tsc-tab-panel hidden" id="tsc-tab-findings">
+          <div class="tsc-findings-wrap" id="tsc-findings-table-wrap"></div>
+        </div>
+
         <div class="tsc-actions">
           <button id="tsc-download-btn" class="btn-tsc-download">📥 Download Findings</button>
           <button id="tsc-save-model-btn" class="btn-tsc-save">💾 Save as Juice Model</button>
@@ -1153,7 +1169,7 @@
   <script src="drlab-flasks.js?v=6"></script>
   <script src="sbs-boxing.js?v=3"></script>
   <script src="target-game.js?v=3"></script>
-  <script src="app.js?v=85"></script>
+  <script src="app.js?v=86"></script>
   <script src="game-mode.js?v=4"></script>
   <script src="rr-app.js?v=1"></script>
 </body>
