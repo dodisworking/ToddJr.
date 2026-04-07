@@ -7,6 +7,7 @@ import { randomUUID } from 'crypto'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
+import os from 'os'
 import unzipper from 'unzipper'
 import { analyzeTenant, gymAnalyzeTenant, beefedUpAnalyzeTenant, doubleCheckTenant } from './lib/analyzer.js'
 import { synthesizeActiveLearning } from './lib/claude.js'
@@ -1763,13 +1764,53 @@ app.post('/api/target/reset-juice', express.json({ limit: '1kb' }), (req, res) =
   res.json({ ok: true })
 })
 
-// POST /api/target/download-excel — generate session-level Excel for download
+// ── Target Practice session report storage ─────────────────
+const TP_REPORTS_SUBDIR  = 'target-session-reports'
+const TP_REPORTS_MANIFEST = 'tp-manifest.json'
+
+function resolveTPReportsDir() {
+  if (process.env.ISAAC_SAVE_DIR) return path.join(process.env.ISAAC_SAVE_DIR, TP_REPORTS_SUBDIR)
+  const primary = path.join(OUTPUTS_DIR, TP_REPORTS_SUBDIR)
+  try { fs.mkdirSync(primary, { recursive: true }); return primary } catch {}
+  const fallback = path.join(os.tmpdir(), 'todd-tp-reports')
+  fs.mkdirSync(fallback, { recursive: true })
+  return fallback
+}
+
+function readTPManifest(dir) {
+  try { return JSON.parse(fs.readFileSync(path.join(dir, TP_REPORTS_MANIFEST), 'utf8')) } catch { return [] }
+}
+function writeTPManifest(dir, entries) {
+  fs.writeFileSync(path.join(dir, TP_REPORTS_MANIFEST), JSON.stringify(entries.slice(-100), null, 2))
+}
+
+// POST /api/target/download-excel — generate, persist, and stream session Excel
 app.post('/api/target/download-excel', express.json({ limit: '10mb' }), async (req, res) => {
   try {
-    const { tenantResults = [], reviewerName = 'Unknown', juiceRules = [] } = req.body
+    const { tenantResults = [], reviewerName = 'Unknown', juiceRules = [], sessionId } = req.body
     const { generateTargetPracticeSessionExcel } = await import('./lib/reporter.js')
+
+    // Generate to temp first
     const tmpPath = path.join(UPLOADS_DIR, `tp-session-${Date.now()}.xlsx`)
     await generateTargetPracticeSessionExcel({ tenantResults, reviewerName, juiceRules }, tmpPath)
+
+    // Persist a copy to cloud storage
+    try {
+      const dir   = resolveTPReportsDir()
+      const id    = (sessionId || Date.now().toString())
+      const fname = `Target-Practice-${new Date().toISOString().slice(0, 10)}-${id.slice(-6)}.xlsx`
+      const dest  = path.join(dir, fname)
+      fs.copyFileSync(tmpPath, dest)
+      const entries = readTPManifest(dir)
+      entries.push({
+        id, fname, savedAt: new Date().toISOString(),
+        reviewerName, tenantCount: tenantResults.length
+      })
+      writeTPManifest(dir, entries)
+    } catch (saveErr) {
+      console.warn('[target/download-excel] cloud save failed (non-fatal):', saveErr.message)
+    }
+
     const stat = fs.statSync(tmpPath)
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     res.setHeader('Content-Disposition', `attachment; filename="Target-Practice-${new Date().toISOString().slice(0, 10)}.xlsx"`)
@@ -1779,6 +1820,32 @@ app.post('/api/target/download-excel', express.json({ limit: '10mb' }), async (r
     stream.on('end', () => { try { fs.unlinkSync(tmpPath) } catch {} })
   } catch (err) {
     console.error('[target/download-excel]', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/target/session-reports — list saved session reports
+app.get('/api/target/session-reports', (req, res) => {
+  try {
+    const dir     = resolveTPReportsDir()
+    const entries = readTPManifest(dir)
+    res.json({ reports: entries.slice().reverse() })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/target/session-reports/:fname — download a saved report
+app.get('/api/target/session-reports/:fname', (req, res) => {
+  try {
+    const dir   = resolveTPReportsDir()
+    const fname = path.basename(req.params.fname)   // sanitize — no path traversal
+    const fpath = path.join(dir, fname)
+    if (!fs.existsSync(fpath)) return res.status(404).json({ error: 'Not found' })
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="${fname}"`)
+    fs.createReadStream(fpath).pipe(res)
+  } catch (err) {
     res.status(500).json({ error: err.message })
   }
 })

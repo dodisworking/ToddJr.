@@ -5549,14 +5549,18 @@ async function targetSaveAndNext() {
   const feedbacks   = gymFeedbacksArray()
   const annotations = gymAnnotationsForIsaacExcel()
 
-  // Count corrections for this tenant (rejections + annotations added)
+  // Count corrections — partial counts as rejected (Excel + learning), not confirmed
   const rejectedFindings  = findings.filter(f => {
     const fb = (gymState.feedbacks || {})[f.id]
-    return fb && fb.verdict === 'wrong'
+    return fb && (fb.verdict === 'wrong' || fb.verdict === 'partial')
+  }).map(f => {
+    const fb = (gymState.feedbacks || {})[f.id] || {}
+    const prefix = fb.verdict === 'partial' ? '◐ Partial: ' : ''
+    return { ...f, reviewerNote: prefix + (fb.comment || '') }
   })
   const confirmedFindings = findings.filter(f => {
     const fb = (gymState.feedbacks || {})[f.id]
-    return !fb || fb.verdict !== 'wrong'
+    return !fb || fb.verdict === 'correct'
   })
   const correctionCount = rejectedFindings.length + annotations.length
   targetSession.correctionsByTenant.push(correctionCount)
@@ -5613,10 +5617,7 @@ async function targetSaveAndNext() {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             sessionId: state.sessionId,
-            rejectedFindings: rejectedFindings.map(f => ({
-              ...f,
-              reviewerNote: (gymState.feedbacks[f.id] || {}).comment || ''
-            })),
+            rejectedFindings,   // already have reviewerNote (+ partial prefix) attached above
             confirmedFindings,
             annotations: gymAnnotationsForIsaacExcel(),
             currentRules: targetSession.juiceRules
