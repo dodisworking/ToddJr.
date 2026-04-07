@@ -312,43 +312,33 @@
     _ctx.clearRect(0, 0, W, H)
     drawBG()
 
-    // Phase machine
-    switch (A.phase) {
-      case 'idle':
-        if (A.timer > 70) { A.phase = 'draw'; A.timer = 0 }
-        break
-      case 'draw':
-        if (A.timer > 55) { A.phase = 'release'; A.timer = 0 }
-        break
-      case 'release':
-        if (A.timer > 6) {
-          A.phase = 'fly'
-          A.arrowX  = TODD_X + 14
-          A.arrowY  = TODD_Y - 50
-          // Aim at target
-          const dx  = TGT_X - A.arrowX
-          const dy  = TGT_Y - A.arrowY
-          const spd = 7
-          const dist = Math.sqrt(dx * dx + dy * dy)
-          A.arrowVX = (dx / dist) * spd
-          A.arrowVY = (dy / dist) * spd - 2.5  // arc upward
-          A.timer = 0
-        }
-        break
-      case 'fly':
-        A.arrowX += A.arrowVX
-        A.arrowY += A.arrowVY
-        A.arrowVY += 0.18  // gravity
-        // Hit check
-        const adx = A.arrowX - TGT_X, ady = A.arrowY - TGT_Y
-        if (Math.sqrt(adx * adx + ady * ady) < TGT_R[0] + 4 || A.timer > 90) {
-          A.phase = 'hit'; A.hitFlash = 1; A.timer = 0
-        }
-        break
-      case 'hit':
-        A.hitFlash = Math.max(0, A.hitFlash - 0.045)
-        if (A.timer > 90) { A.phase = 'idle'; A.timer = 0 }
-        break
+    // Phase machine — use if/else to avoid const-in-switch TDZ issues
+    if (A.phase === 'idle') {
+      if (A.timer > 70) { A.phase = 'draw'; A.timer = 0 }
+    } else if (A.phase === 'draw') {
+      if (A.timer > 55) { A.phase = 'release'; A.timer = 0 }
+    } else if (A.phase === 'release') {
+      if (A.timer > 6) {
+        A.phase = 'fly'
+        A.arrowX = TODD_X + 14
+        A.arrowY = TODD_Y - 50
+        var _dx = TGT_X - A.arrowX, _dy = TGT_Y - A.arrowY
+        var _spd = 7, _dist = Math.sqrt(_dx * _dx + _dy * _dy)
+        A.arrowVX = (_dx / _dist) * _spd
+        A.arrowVY = (_dy / _dist) * _spd - 2.5
+        A.timer = 0
+      }
+    } else if (A.phase === 'fly') {
+      A.arrowX += A.arrowVX
+      A.arrowY += A.arrowVY
+      A.arrowVY += 0.18
+      var _adx = A.arrowX - TGT_X, _ady = A.arrowY - TGT_Y
+      if (Math.sqrt(_adx * _adx + _ady * _ady) < TGT_R[0] + 4 || A.timer > 90) {
+        A.phase = 'hit'; A.hitFlash = 1; A.timer = 0
+      }
+    } else if (A.phase === 'hit') {
+      A.hitFlash = Math.max(0, A.hitFlash - 0.045)
+      if (A.timer > 90) { A.phase = 'idle'; A.timer = 0 }
     }
 
     // Target hit glow

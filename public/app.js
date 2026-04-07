@@ -5904,9 +5904,16 @@ function gymShowPanel(name) {
     if (runWrap)    runWrap.classList.toggle('hidden', isTP)
     if (targetWrap) targetWrap.classList.toggle('hidden', !isTP)
     if (label) label.textContent = isTP ? 'Todd Jr. is on the hunt...' : 'Todd is working out...'
+    const titleEl = document.getElementById('gym-title')
+    if (titleEl) titleEl.textContent = isTP ? '🎯 Target Practice' : '🏋️ Gym Teacher'
     if (isTP) {
       const tc = document.getElementById('gym-target-canvas')
       if (tc && window.initTargetPracticeAnim) initTargetPracticeAnim(tc)
+      // Wire PLAY button
+      const playBtn = document.getElementById('gym-play-game-btn')
+      if (playBtn) {
+        playBtn.onclick = () => { if (window.initTargetPracticeAnim) initTargetPracticeAnim(tc, true) }
+      }
     }
   } else {
     // Leaving loading panel — stop archer anim
