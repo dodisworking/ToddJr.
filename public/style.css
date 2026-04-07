@@ -3519,6 +3519,14 @@ input:checked + .toggle-slider:before { transform:translateX(22px); background:#
   height: 84px;
 }
 #gym-run-canvas { image-rendering: pixelated; }
+.gym-target-wrap {
+  width: 320px;
+  max-width: 100%;
+  border: 1px solid #1e293b;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.gym-target-wrap.hidden { display: none; }
 .gym-sweat-container {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;

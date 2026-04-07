@@ -4897,6 +4897,7 @@ const gymState = {
   gymRunFrame:      0,
   gymRunTimer:      0,
   sweatDrops:       [],
+  isTargetPractice: false,
 }
 
 // ── Target Practice session state ──────────────────────────
@@ -5130,6 +5131,7 @@ async function startTargetPractice() {
   gymState.mode = 'target'
   goTo('gym')
   gymReset()
+  gymState.isTargetPractice = true
   gymShowPanel('loading')
   await targetStartTenant(0)
 }
@@ -5475,6 +5477,7 @@ async function targetStartTenant(idx) {
 
   gymReset()
   gymState.mode = 'target'
+  gymState.isTargetPractice = true
   gymShowPanel('loading')
 
   const rulesNote = targetSession.juiceRules.length > 0
@@ -5867,6 +5870,7 @@ function gymReset() {
   gymState.annotating = false
   gymState.pendingAnno = null
   gymState.sweatDrops = []
+  gymState.isTargetPractice = false
   // reset panels
   gymShowPanel('picker')
   document.getElementById('gym-skip-btn').classList.add('hidden')
@@ -5890,6 +5894,24 @@ function gymShowPanel(name) {
   document.getElementById('gym-panel-workout').classList.toggle('hidden', name !== 'workout')
   document.getElementById('gym-panel-results').classList.toggle('hidden', name !== 'results')
   document.getElementById('target-session-complete')?.classList.toggle('hidden', name !== 'target-complete')
+
+  if (name === 'loading') {
+    const isTP = !!gymState.isTargetPractice
+    // Toggle between running-Todd and Robin Hood archer
+    const runWrap    = document.getElementById('gym-run-wrap')
+    const targetWrap = document.getElementById('gym-target-wrap')
+    const label      = document.getElementById('gym-loading-label')
+    if (runWrap)    runWrap.classList.toggle('hidden', isTP)
+    if (targetWrap) targetWrap.classList.toggle('hidden', !isTP)
+    if (label) label.textContent = isTP ? 'Todd Jr. is on the hunt...' : 'Todd is working out...'
+    if (isTP) {
+      const tc = document.getElementById('gym-target-canvas')
+      if (tc && window.initTargetPracticeAnim) initTargetPracticeAnim(tc)
+    }
+  } else {
+    // Leaving loading panel — stop archer anim
+    if (window.stopTargetPracticeAnim) stopTargetPracticeAnim()
+  }
 }
 
 // ── Start workout ──────────────────────────────────────────
