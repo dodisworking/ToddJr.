@@ -374,6 +374,10 @@ document.addEventListener('click', e => {
 // TODD JR. — Frontend State Machine
 // ═══════════════════════════════════════════════════════════
 
+// ── Client mode: 'public' (lawyer/reviewer) or 'full' (owner) ─
+// Starts as public every page load; unlock via secret red button + PIN.
+let clientMode = 'public'
+
 // ── State ────────────────────────────────────────────────────
 const state = {
   screen:           'home',
@@ -1154,6 +1158,53 @@ document.getElementById('game-card-rr')?.addEventListener('click', () => {
 // Back button inside screen-rr → return to launcher
 document.getElementById('btn-rr-back')?.addEventListener('click', () => {
   goTo('home')
+})
+
+// ═══════════════════════════════════════════════════════════
+// CLIENT MODE — public (lawyer/reviewer) vs full (owner)
+// ═══════════════════════════════════════════════════════════
+
+function applyClientMode() {
+  const pub = clientMode === 'public'
+
+  // Home screen: hide game-02, rename game-01 title
+  const rrCard = document.getElementById('game-card-rr')
+  if (rrCard) rrCard.classList.toggle('hidden', pub)
+  const hunterTitle = document.querySelector('#game-card-hunter .home-game-title')
+  if (hunterTitle) hunterTitle.textContent = pub ? 'MISSING DOCUMENTS' : 'LEASE INDEX \u0026 MISSING DOCS HUNTER'
+
+  // Loading screen: in public mode show only the Target Practice button
+  const btnHunt      = document.getElementById('btn-hunt')
+  const btnDrTodd    = document.getElementById('btn-drtoddhunt')
+  const btnWorkout   = document.getElementById('btn-workout')
+  const togglesPanel = document.querySelector('.hunt-toggles-panel')
+  if (btnHunt)      btnHunt.classList.toggle('hidden', pub)
+  if (btnDrTodd)    btnDrTodd.classList.toggle('hidden', pub)
+  if (btnWorkout)   btnWorkout.classList.toggle('hidden', pub)
+  if (togglesPanel) togglesPanel.classList.toggle('hidden', pub)
+
+  // Secret button visual
+  const unlockBtn = document.getElementById('btn-secret-unlock')
+  if (unlockBtn) unlockBtn.classList.toggle('unlocked', !pub)
+}
+
+// Run once on load
+applyClientMode()
+
+// Secret owner unlock button
+document.getElementById('btn-secret-unlock')?.addEventListener('click', async () => {
+  if (clientMode === 'full') {
+    toast('\u{1F512} Owner mode active', 'success')
+    return
+  }
+  const pin = await pixelPrompt('ENTER OWNER PIN', '\uD83D\uDD10 UNLOCK', '')
+  if (pin === '123') {
+    clientMode = 'full'
+    applyClientMode()
+    toast('\u2705 Owner mode unlocked', 'success')
+  } else if (pin !== null && pin !== '') {
+    toast('Wrong PIN', 'error')
+  }
 })
 
 // ═══════════════════════════════════════════════════════════
