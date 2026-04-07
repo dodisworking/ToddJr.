@@ -4911,7 +4911,8 @@ const targetSession = {
   correctionsByTenant: [],   // [8, 5, 3, 1, 0] — corrections per tenant for the graph
   loadedModelId:       null, // which juice model was loaded at session start
   loadedModelName:     null,
-  synthesizing:        false // true while synthesis call is in flight
+  synthesizing:        false, // true while synthesis call is in flight
+  allTenantResults:    []    // accumulated per-tenant findings for session download
 }
 
 // ── Exercise Session state ─────────────────────────────────
@@ -5138,6 +5139,7 @@ async function startTargetPractice() {
   targetSession.savedCount         = 0
   targetSession.reviewerName       = name || 'Unknown'
   targetSession.correctionsByTenant = []
+  targetSession.allTenantResults    = []
 
   gymState.mode = 'target'
   goTo('gym')
@@ -5294,6 +5296,17 @@ async function targetSaveAndNext() {
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Save failed')
     targetSession.savedCount++
+    // Accumulate for session-level download Excel
+    const tenantMeta = state.tenants.find(t => t.id === gymState.tenantId) || {}
+    targetSession.allTenantResults.push({
+      tenantName:        gymState.tenantName,
+      folderName:        gymState.folderName,
+      property:          tenantMeta.property || '',
+      suite:             tenantMeta.suite    || '',
+      confirmedFindings,
+      rejectedFindings,
+      annotations:       gymAnnotationsForIsaacExcel()
+    })
 
     if (btn) { btn.textContent = '✅ Saved!' }
     sfxReady()
@@ -5446,6 +5459,37 @@ async function targetSaveModel() {
   }
 }
 
+async function targetDownloadFindings() {
+  const btn = document.getElementById('tsc-download-btn')
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Generating...' }
+  try {
+    const res = await fetch(sameOriginApi('/api/target/download-excel'), {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tenantResults: targetSession.allTenantResults,
+        reviewerName:  targetSession.reviewerName,
+        juiceRules:    targetSession.juiceRules,
+        sessionId:     targetSession.sessionId
+      })
+    })
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Download failed')
+    const blob = await res.blob()
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = `Target-Practice-${new Date().toISOString().slice(0, 10)}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+    if (btn) { btn.disabled = false; btn.textContent = '📥 Download Findings' }
+  } catch (err) {
+    sfxError()
+    toast('Download failed: ' + err.message, 'error')
+    if (btn) { btn.disabled = false; btn.textContent = '📥 Download Findings' }
+  }
+}
+
+document.getElementById('tsc-download-btn')?.addEventListener('click', targetDownloadFindings)
 document.getElementById('tsc-save-model-btn')?.addEventListener('click', targetSaveModel)
 document.getElementById('tsc-done-btn')?.addEventListener('click', () => gymOpenPicker())
 
@@ -6726,7 +6770,7 @@ updateSpeakerIcon()
 
 // ── Patient Turtle Animation ─────────────────────────────────
 ;(function initPatientTurtles() {
-  const PATIENCE_MSG = 'be like todd... patient... this will take a minute'
+  const PATIENCE_MSG = 'be like todd... patient... this will take a minute or three or four...'
 
   // ── Draw turtle using explicit canvas shapes (no pixel arrays) ──────
   // This gives clean, recognizable turtle geometry at any scale.

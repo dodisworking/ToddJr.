@@ -1763,6 +1763,26 @@ app.post('/api/target/reset-juice', express.json({ limit: '1kb' }), (req, res) =
   res.json({ ok: true })
 })
 
+// POST /api/target/download-excel — generate session-level Excel for download
+app.post('/api/target/download-excel', express.json({ limit: '10mb' }), async (req, res) => {
+  try {
+    const { tenantResults = [], reviewerName = 'Unknown', juiceRules = [] } = req.body
+    const { generateTargetPracticeSessionExcel } = await import('./lib/reporter.js')
+    const tmpPath = path.join(UPLOADS_DIR, `tp-session-${Date.now()}.xlsx`)
+    await generateTargetPracticeSessionExcel({ tenantResults, reviewerName, juiceRules }, tmpPath)
+    const stat = fs.statSync(tmpPath)
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="Target-Practice-${new Date().toISOString().slice(0, 10)}.xlsx"`)
+    res.setHeader('Content-Length', stat.size)
+    const stream = fs.createReadStream(tmpPath)
+    stream.pipe(res)
+    stream.on('end', () => { try { fs.unlinkSync(tmpPath) } catch {} })
+  } catch (err) {
+    console.error('[target/download-excel]', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ═══════════════════════════════════════════════════════════
 // GYM TEACHER — compile feedback into learnings
 // ═══════════════════════════════════════════════════════════

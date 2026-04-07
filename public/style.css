@@ -6609,6 +6609,19 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   justify-content: center;
   flex-wrap: wrap;
 }
+.btn-tsc-download {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #065f46, #059669);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.btn-tsc-download:hover    { opacity: 0.9; transform: translateY(-1px); }
+.btn-tsc-download:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 .btn-tsc-save {
   padding: 12px 24px;
   background: linear-gradient(135deg, #4c1d95, #7c3aed);
