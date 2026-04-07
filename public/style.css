@@ -6492,3 +6492,273 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
 .btn-gym-target-save:hover    { background: linear-gradient(135deg, #5b21b6, #8b5cf6); }
 .btn-gym-target-save:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn-gym-target-save.hidden   { display: none; }
+
+/* ═══════════════════════════════════════════════════════════
+   TARGET PRACTICE — Active Learning UI
+═══════════════════════════════════════════════════════════ */
+
+/* ── Session Complete panel ─────────────────────────────── */
+.tsc-box {
+  background: #0f172a;
+  border: 2px solid #4c1d95;
+  border-radius: 12px;
+  padding: 32px 36px;
+  max-width: 640px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  box-shadow: 0 0 40px rgba(124,58,237,0.25);
+}
+.tsc-title {
+  font-family: var(--font-pixel);
+  font-size: 14px;
+  color: #e9d5ff;
+  text-align: center;
+  margin: 0;
+  letter-spacing: 0.05em;
+}
+.tsc-stats-row {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+}
+.tsc-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: #1e1b4b;
+  border: 1px solid #4c1d95;
+  border-radius: 8px;
+  padding: 12px 20px;
+  min-width: 80px;
+}
+.tsc-stat-val {
+  font-family: var(--font-pixel);
+  font-size: 20px;
+  color: #c4b5fd;
+}
+.tsc-stat-score { color: #4ade80; }
+.tsc-stat-lbl {
+  font-size: 10px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.tsc-reviewer-line {
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: center;
+  margin: 0;
+}
+.tsc-parent-row {
+  font-size: 11px;
+  color: #7c3aed;
+  text-align: center;
+  margin: 0;
+}
+.tsc-graph-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tsc-graph-label {
+  font-size: 11px;
+  color: #94a3b8;
+  text-align: center;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.tsc-graph {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 80px;
+  background: #1e1b4b;
+  border: 1px solid #312e81;
+  border-radius: 6px;
+  padding: 8px 12px 4px;
+}
+.tsc-bar-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  gap: 3px;
+  height: 100%;
+  justify-content: flex-end;
+  cursor: default;
+}
+.tsc-bar {
+  width: 100%;
+  background: linear-gradient(to top, #7c3aed, #a78bfa);
+  border-radius: 3px 3px 0 0;
+  min-height: 3px;
+  transition: height 0.3s ease;
+}
+.tsc-bar-label {
+  font-size: 9px;
+  color: #94a3b8;
+  font-family: var(--font-pixel);
+}
+.tsc-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.btn-tsc-save {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #4c1d95, #7c3aed);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.btn-tsc-save:hover  { opacity: 0.9; transform: translateY(-1px); }
+.btn-tsc-save:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-tsc-done {
+  padding: 12px 24px;
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-tsc-done:hover { background: #273449; color: #cbd5e1; }
+
+/* ── Juice Model Picker overlay ──────────────────────────── */
+.target-model-picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.target-model-picker-overlay.hidden { display: none; }
+.target-model-picker-box {
+  background: #0f172a;
+  border: 2px solid #4c1d95;
+  border-radius: 12px;
+  padding: 28px 32px;
+  max-width: 560px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.tmp-title {
+  font-family: var(--font-pixel);
+  font-size: 12px;
+  color: #e9d5ff;
+  margin: 0;
+  text-align: center;
+}
+.tmp-subtitle {
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: center;
+  margin: 0;
+}
+.target-model-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.juice-model-pick-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 16px;
+  background: #1e1b4b;
+  border: 1px solid #4c1d95;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+.juice-model-pick-btn:hover { background: #2d2b69; border-color: #7c3aed; }
+.jmp-name {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: #c4b5fd;
+}
+.jmp-meta {
+  font-size: 11px;
+  color: #94a3b8;
+}
+.jmp-comment {
+  font-size: 11px;
+  color: #a78bfa;
+  font-style: italic;
+}
+.jmp-parent {
+  font-size: 10px;
+  color: #6d28d9;
+}
+.tmp-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.btn-tmp-fresh {
+  padding: 10px 22px;
+  background: linear-gradient(135deg, #065F46, #10B981);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-tmp-fresh:hover { opacity: 0.9; }
+.btn-tmp-cancel {
+  padding: 10px 16px;
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  cursor: pointer;
+}
+.btn-tmp-cancel:hover { background: #273449; }
+
+/* ── Learning indicator ──────────────────────────────────── */
+.target-learning-indicator {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #2d1b69, #4c1d95);
+  color: #e9d5ff;
+  border: 1px solid #7c3aed;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  z-index: 8000;
+  box-shadow: 0 4px 20px rgba(124,58,237,0.4);
+  animation: tli-pulse 1.2s ease-in-out infinite;
+}
+.target-learning-indicator.hidden { display: none; }
+@keyframes tli-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.65; }
+}

@@ -4901,12 +4901,17 @@ const gymState = {
 
 // ── Target Practice session state ──────────────────────────
 const targetSession = {
-  active:       false,
-  tenants:      [],
-  currentIdx:   0,
-  sessionId:    null,
-  savedCount:   0,
-  reviewerName: ''
+  active:              false,
+  tenants:             [],
+  currentIdx:          0,
+  sessionId:           null,
+  savedCount:          0,
+  reviewerName:        '',
+  juiceRules:          [],   // accumulated active learning rules
+  correctionsByTenant: [],   // [8, 5, 3, 1, 0] — corrections per tenant for the graph
+  loadedModelId:       null, // which juice model was loaded at session start
+  loadedModelName:     null,
+  synthesizing:        false // true while synthesis call is in flight
 }
 
 // ── Exercise Session state ─────────────────────────────────
@@ -5077,10 +5082,21 @@ async function gymExSaveAndNext() {
 // ═══════════════════════════════════════════════════════════
 
 async function startTargetPractice() {
-  if (state.tenants.length === 0) {
-    toast('Upload files first', 'error')
-    return
-  }
+  if (state.tenants.length === 0) { toast('Upload files first', 'error'); return }
+
+  // ── Step 1: Offer to load a saved juice model ──────────────────────
+  let loadedModel = null
+  try {
+    const modelsRes = await fetch(sameOriginApi('/api/target/models'))
+    const models = modelsRes.ok ? await modelsRes.json() : []
+    if (models.length > 0) {
+      loadedModel = await showJuiceModelPicker(models)
+      // null = start fresh, object = picked model, false = cancelled
+      if (loadedModel === false) return
+    }
+  } catch { /* no models saved yet, skip picker */ }
+
+  // ── Step 2: Reviewer name ─────────────────────────────────────────
   const name = await pixelPrompt(
     'Who is reviewing these findings?\nEnter your name to log the audit.',
     '🎯 START TARGET PRACTICE',
@@ -5088,18 +5104,77 @@ async function startTargetPractice() {
   )
   if (name === null) return
 
-  targetSession.active       = true
-  targetSession.tenants      = [...state.tenants]
-  targetSession.currentIdx   = 0
-  targetSession.sessionId    = 'target-' + Date.now()
-  targetSession.savedCount   = 0
-  targetSession.reviewerName = name || 'Unknown'
+  // ── Step 3: Reset juice in session, optionally load model rules ───
+  await fetch(sameOriginApi('/api/target/reset-juice'), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: state.sessionId })
+  })
+  if (loadedModel) {
+    // Fetch full model (with rules) then load into session
+    try {
+      const fullRes  = await fetch(sameOriginApi(`/api/target/models/${loadedModel.id}`))
+      const fullModel = fullRes.ok ? await fullRes.json() : null
+      if (fullModel?.rules?.length > 0) {
+        await fetch(sameOriginApi('/api/target/load-model'), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: state.sessionId, rules: fullModel.rules, modelId: loadedModel.id, modelName: loadedModel.name })
+        })
+        targetSession.juiceRules    = fullModel.rules
+        targetSession.loadedModelId   = loadedModel.id
+        targetSession.loadedModelName = loadedModel.name
+        toast(`🧠 Loaded: ${loadedModel.name} (${fullModel.rules.length} rules)`, 'info')
+      }
+    } catch { /* fail silently, start fresh */ }
+  } else {
+    targetSession.juiceRules    = []
+    targetSession.loadedModelId   = null
+    targetSession.loadedModelName = null
+  }
+
+  targetSession.active             = true
+  targetSession.tenants            = [...state.tenants]
+  targetSession.currentIdx         = 0
+  targetSession.sessionId          = 'target-' + Date.now()
+  targetSession.savedCount         = 0
+  targetSession.reviewerName       = name || 'Unknown'
+  targetSession.correctionsByTenant = []
 
   gymState.mode = 'target'
   goTo('gym')
   gymReset()
   gymShowPanel('loading')
   await targetStartTenant(0)
+}
+
+// Show a pixel-style modal to pick a juice model or start fresh
+function showJuiceModelPicker(models) {
+  return new Promise(resolve => {
+    const overlay = document.getElementById('target-model-picker-overlay')
+    const list    = document.getElementById('target-model-picker-list')
+    if (!overlay || !list) { resolve(null); return }
+
+    list.innerHTML = models.map(m => {
+      const score = m.errorReduction != null ? `${m.errorReduction}% error reduction` : ''
+      const tenants = m.tenantCount ? `${m.tenantCount} tenants` : ''
+      const parent = m.parentModelName ? `↳ built on ${m.parentModelName}` : ''
+      return `<button class="juice-model-pick-btn" data-id="${m.id}" data-name="${escHtml(m.name)}">
+        <span class="jmp-name">${escHtml(m.name)}</span>
+        <span class="jmp-meta">${[score, tenants, m.reviewerName].filter(Boolean).join(' · ')}</span>
+        ${m.comment ? `<span class="jmp-comment">"${escHtml(m.comment)}"</span>` : ''}
+        ${parent ? `<span class="jmp-parent">${escHtml(parent)}</span>` : ''}
+      </button>`
+    }).join('')
+
+    overlay.classList.remove('hidden')
+
+    const cleanup = () => overlay.classList.add('hidden')
+
+    overlay.querySelectorAll('.juice-model-pick-btn').forEach(btn => {
+      btn.onclick = () => { cleanup(); resolve({ id: btn.dataset.id, name: btn.dataset.name }) }
+    })
+    document.getElementById('target-model-fresh-btn').onclick = () => { cleanup(); resolve(null) }
+    document.getElementById('target-model-cancel-btn').onclick = () => { cleanup(); resolve(false) }
+  })
 }
 
 async function targetStartTenant(idx) {
@@ -5111,11 +5186,13 @@ async function targetStartTenant(idx) {
   gymState.mode = 'target'
   gymShowPanel('loading')
 
-  document.getElementById('gym-subtitle').textContent = `🎯 Target Practice ${idx + 1}/${total}: ${tenant.tenantName}`
+  const rulesNote = targetSession.juiceRules.length > 0
+    ? ` · 🧠 ${targetSession.juiceRules.length} rules active`
+    : ''
+  document.getElementById('gym-subtitle').textContent = `🎯 Target Practice ${idx + 1}/${total}: ${tenant.tenantName}${rulesNote}`
   document.getElementById('gym-progress-fill').style.width = '0%'
   document.getElementById('gym-loading-msg').textContent = 'Starting analysis...'
 
-  // Progress bar across all tenants
   const wrap  = document.getElementById('gym-ex-progress-wrap')
   const fill  = document.getElementById('gym-ex-progress-fill')
   const label = document.getElementById('gym-ex-progress-label')
@@ -5124,7 +5201,6 @@ async function targetStartTenant(idx) {
   if (fill)  fill.style.width = pct + '%'
   if (label) label.textContent = `🎯 Target Practice: ${idx + 1} of ${total} — ${tenant.tenantName}`
 
-  // Register local files so analysis + PDF viewer work
   await gymRegisterLocalFiles(tenant.id)
 
   const url = sameOriginApi(
@@ -5135,7 +5211,7 @@ async function targetStartTenant(idx) {
 
   es.addEventListener('gym-start', e => {
     const d = JSON.parse(e.data)
-    document.getElementById('gym-subtitle').textContent = `🎯 [${idx + 1}/${total}] Analyzing: ${d.tenantName}`
+    document.getElementById('gym-subtitle').textContent = `🎯 [${idx + 1}/${total}] Analyzing: ${d.tenantName}${rulesNote}`
   })
   es.addEventListener('gym-progress', e => {
     const d = JSON.parse(e.data)
@@ -5158,7 +5234,6 @@ async function targetStartTenant(idx) {
     gymState.currentPage   = 1
     gymState.mode          = 'target'
 
-    // Show only the target save button
     document.getElementById('gym-save-isaac-btn')?.classList.add('hidden')
     document.getElementById('gym-ex-save-next-btn')?.classList.add('hidden')
     document.getElementById('gym-submit-btn')?.classList.add('hidden')
@@ -5166,7 +5241,7 @@ async function targetStartTenant(idx) {
     if (targetSaveBtn) {
       targetSaveBtn.classList.remove('hidden')
       targetSaveBtn.disabled = false
-      targetSaveBtn.textContent = idx < total - 1 ? '💾 Save Report & Next →' : '💾 Save Final Report'
+      targetSaveBtn.textContent = idx < total - 1 ? '💾 Save & Learn Next →' : '💾 Save Final Report'
     }
 
     gymShowPanel('workout')
@@ -5188,9 +5263,21 @@ async function targetSaveAndNext() {
   const btn = document.getElementById('gym-target-save-btn')
   if (btn) { btn.disabled = true; btn.textContent = '💾 Saving...' }
 
-  const findings  = gymFindingsForIsaacPayload()
-  const feedbacks = gymFeedbacksArray()
+  const findings    = gymFindingsForIsaacPayload()
+  const feedbacks   = gymFeedbacksArray()
   const annotations = gymAnnotationsForIsaacExcel()
+
+  // Count corrections for this tenant (rejections + annotations added)
+  const rejectedFindings  = findings.filter(f => {
+    const fb = (gymState.feedbacks || {})[f.id]
+    return fb && fb.verdict === 'wrong'
+  })
+  const confirmedFindings = findings.filter(f => {
+    const fb = (gymState.feedbacks || {})[f.id]
+    return !fb || fb.verdict !== 'wrong'
+  })
+  const correctionCount = rejectedFindings.length + annotations.length
+  targetSession.correctionsByTenant.push(correctionCount)
 
   const payload = {
     type:            'target-practice',
@@ -5199,6 +5286,7 @@ async function targetSaveAndNext() {
     findings,
     feedbacks,
     annotations,
+    juiceRules:      targetSession.juiceRules,
     sessionId:       targetSession.sessionId,
     sessionIdx:      targetSession.currentIdx,
     sessionTotal:    targetSession.tenants.length,
@@ -5206,49 +5294,172 @@ async function targetSaveAndNext() {
     uploadSessionId: state.sessionId,
     tenantId:        gymState.tenantId
   }
-
-  // Attach local files if needed (for doc viewer links in Isaac)
   const localFiles = buildIsaacLocalFiles(gymState.tenantId)
   if (localFiles) payload.localFiles = localFiles
 
   try {
+    // 1. Save the report
     const res  = await fetch(sameOriginApi('/api/gym/save-for-isaac'), {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload)
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Save failed')
-
     targetSession.savedCount++
 
     if (btn) { btn.textContent = '✅ Saved!' }
     sfxReady()
 
-    await new Promise(r => setTimeout(r, 900)) // brief flash
+    // 2. Active learning synthesis — run in background while showing "Saved!" flash
+    const isLast = targetSession.currentIdx + 1 >= targetSession.tenants.length
+    if (!isLast && (rejectedFindings.length > 0 || annotations.length > 0)) {
+      targetSession.synthesizing = true
+      targetLearningIndicator(true)
+      try {
+        const synthRes = await fetch(sameOriginApi('/api/target/synthesize'), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: state.sessionId,
+            rejectedFindings: rejectedFindings.map(f => ({
+              ...f,
+              reviewerNote: (gymState.feedbacks[f.id] || {}).comment || ''
+            })),
+            confirmedFindings,
+            annotations: gymAnnotationsForIsaacExcel(),
+            currentRules: targetSession.juiceRules
+          })
+        })
+        if (synthRes.ok) {
+          const synthData = await synthRes.json()
+          targetSession.juiceRules = synthData.rules || targetSession.juiceRules
+          const ruleCount = targetSession.juiceRules.length
+          toast(`🧠 ${synthData.summary || `${ruleCount} rules updated`}`, 'info')
+        }
+      } catch { /* synthesis failure is non-blocking */ }
+      targetSession.synthesizing = false
+      targetLearningIndicator(false)
+    }
+
+    await new Promise(r => setTimeout(r, 600))
 
     const next = targetSession.currentIdx + 1
     if (next < targetSession.tenants.length) {
       targetSession.currentIdx = next
       gymShowPanel('loading')
-      const lbl = document.getElementById('gym-load-label')
-      if (lbl) lbl.textContent = `Loading ${targetSession.tenants[next].tenantName}...`
       await targetStartTenant(next)
     } else {
-      // Session complete
+      // Session complete — show summary
       targetSession.active = false
       gymState.mode = null
       document.getElementById('gym-ex-progress-wrap')?.classList.add('hidden')
-      toast(`🎯 Review complete — ${targetSession.savedCount} report${targetSession.savedCount !== 1 ? 's' : ''} saved.`, 'success')
       sfxHuntComplete()
-      gymOpenPicker()
+      targetShowSessionComplete()
     }
   } catch (err) {
     sfxError()
     toast('Save failed: ' + err.message, 'error')
-    if (btn) { btn.disabled = false; btn.textContent = '💾 Save Report & Next →' }
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Save & Learn Next →' }
   }
 }
+
+function targetLearningIndicator(show) {
+  const el = document.getElementById('target-learning-indicator')
+  if (!el) return
+  if (show) {
+    el.classList.remove('hidden')
+    el.textContent = '🧠 Learning from your corrections...'
+  } else {
+    el.classList.add('hidden')
+  }
+}
+
+function targetShowSessionComplete() {
+  const panel = document.getElementById('target-session-complete')
+  if (!panel) {
+    toast(`🎯 Review complete — ${targetSession.savedCount} reports saved.`, 'success')
+    gymOpenPicker()
+    return
+  }
+
+  // Fill stats
+  const total = targetSession.tenants.length
+  const corrections = targetSession.correctionsByTenant
+  const first = corrections[0] ?? 0
+  const last  = corrections[corrections.length - 1] ?? 0
+  const reduction = first > 0 ? Math.round(((first - last) / first) * 100) : 100
+
+  document.getElementById('tsc-tenants').textContent    = total
+  document.getElementById('tsc-rules').textContent      = targetSession.juiceRules.length
+  document.getElementById('tsc-reduction').textContent  = `${reduction}%`
+  document.getElementById('tsc-reviewer').textContent   = targetSession.reviewerName
+
+  // Build correction curve graph
+  const graph = document.getElementById('tsc-graph')
+  if (graph && corrections.length > 0) {
+    const maxVal = Math.max(...corrections, 1)
+    graph.innerHTML = corrections.map((val, i) => {
+      const heightPct = Math.round((val / maxVal) * 100)
+      return `<div class="tsc-bar-wrap" title="Tenant ${i + 1}: ${val} correction${val !== 1 ? 's' : ''}">
+        <div class="tsc-bar" style="height:${heightPct}%"></div>
+        <div class="tsc-bar-label">${val}</div>
+      </div>`
+    }).join('')
+  }
+
+  // Loaded model info
+  const parentRow = document.getElementById('tsc-parent-row')
+  if (parentRow) {
+    if (targetSession.loadedModelName) {
+      parentRow.textContent = `↳ Built on: ${targetSession.loadedModelName}`
+      parentRow.classList.remove('hidden')
+    } else {
+      parentRow.classList.add('hidden')
+    }
+  }
+
+  goTo('gym')
+  gymShowPanel('target-complete')
+}
+
+async function targetSaveModel() {
+  const comment = await pixelPrompt(
+    'Add a note about this model (optional).\nHow well did it perform?',
+    '💾 SAVE JUICE MODEL',
+    'e.g. Great for retail strip malls'
+  )
+  if (comment === null) return  // cancelled
+
+  const btn = document.getElementById('tsc-save-model-btn')
+  if (btn) { btn.disabled = true; btn.textContent = '💾 Saving...' }
+
+  try {
+    const res = await fetch(sameOriginApi('/api/target/save-model'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rules:               targetSession.juiceRules,
+        reviewerName:        targetSession.reviewerName,
+        comment:             comment || '',
+        correctionsByTenant: targetSession.correctionsByTenant,
+        sessionId:           targetSession.sessionId,
+        tenantCount:         targetSession.tenants.length,
+        parentModelId:       targetSession.loadedModelId,
+        parentModelName:     targetSession.loadedModelName
+      })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Save failed')
+    if (btn) { btn.textContent = '✅ Model Saved!' }
+    sfxReady()
+    toast(`🧠 Juice Model saved — ${data.errorReduction}% error reduction recorded`, 'success')
+  } catch (err) {
+    sfxError()
+    toast('Save failed: ' + err.message, 'error')
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Save as Juice Model' }
+  }
+}
+
+document.getElementById('tsc-save-model-btn')?.addEventListener('click', targetSaveModel)
+document.getElementById('tsc-done-btn')?.addEventListener('click', () => gymOpenPicker())
 
 document.getElementById('gym-target-save-btn')?.addEventListener('click', targetSaveAndNext)
 
@@ -5357,6 +5568,7 @@ function gymShowPanel(name) {
   document.getElementById('gym-panel-loading').classList.toggle('hidden', name !== 'loading')
   document.getElementById('gym-panel-workout').classList.toggle('hidden', name !== 'workout')
   document.getElementById('gym-panel-results').classList.toggle('hidden', name !== 'results')
+  document.getElementById('target-session-complete')?.classList.toggle('hidden', name !== 'target-complete')
 }
 
 // ── Start workout ──────────────────────────────────────────

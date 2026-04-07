@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url'
 import fs from 'fs'
 import unzipper from 'unzipper'
 import { analyzeTenant, gymAnalyzeTenant, beefedUpAnalyzeTenant, doubleCheckTenant } from './lib/analyzer.js'
+import { synthesizeActiveLearning } from './lib/claude.js'
 import { openaiAnalyzeTenant, isOpenAiKeyConfigured, getServerOpenAiKeyHint } from './lib/openai.js'
 import { generateReport } from './lib/reporter.js'
 import { mountIsaacRoutes } from './lib/isaac-routes.js'
@@ -1661,7 +1662,9 @@ app.get('/api/gym/analyze', async (req, res) => {
       if (!aborted) emit('gym-progress', { percent, message })
     }
     // Gym mode uses the extended reasoning schema
-    const result = await gymAnalyzeTenant(tenant, tenant.files, onProgress, { cheapMode: isCheapMode(req) })
+    // If this session has active learning juice rules (Target Practice), inject them
+    const juiceRules = session.targetJuiceRules || []
+    const result = await gymAnalyzeTenant(tenant, tenant.files, onProgress, { cheapMode: isCheapMode(req), juiceRules })
 
     // Attach stable IDs to findings for feedback tracking
     const findingsWithIds = (result.findings || []).map((f, i) => ({ ...f, id: `finding-${i}` }))
@@ -1712,6 +1715,51 @@ app.patch('/api/gym/learnings/:id', (req, res) => {
 app.delete('/api/gym/learnings/:id', (req, res) => {
   const learnings = readLearnings().filter(x => x.id !== req.params.id)
   writeLearnings(learnings)
+  res.json({ ok: true })
+})
+
+// ═══════════════════════════════════════════════════════════
+// TARGET PRACTICE — active learning synthesis + model management
+// ═══════════════════════════════════════════════════════════
+
+// POST /api/target/synthesize — run synthesis after a tenant review, update session juice rules
+app.post('/api/target/synthesize', express.json({ limit: '2mb' }), async (req, res) => {
+  try {
+    const { sessionId, rejectedFindings = [], confirmedFindings = [], annotations = [], currentRules = [] } = req.body
+    const session = sessions.get(sessionId)
+    if (!session) return res.status(404).json({ error: 'Session not found' })
+
+    const result = await synthesizeActiveLearning({ rejectedFindings, confirmedFindings, annotations, currentRules })
+    // Store updated rules in session for the next /api/gym/analyze call
+    session.targetJuiceRules = result.rules || []
+    res.json({ ok: true, rules: session.targetJuiceRules, summary: result.summary || '' })
+  } catch (err) {
+    console.error('[target/synthesize]', err)
+    res.status(500).json({ error: err.message || 'Synthesis failed' })
+  }
+})
+
+// POST /api/target/load-model — load a saved juice model into session as starting rules
+app.post('/api/target/load-model', express.json({ limit: '500kb' }), (req, res) => {
+  try {
+    const { sessionId, rules = [], modelId, modelName } = req.body
+    const session = sessions.get(sessionId)
+    if (!session) return res.status(404).json({ error: 'Session not found' })
+    session.targetJuiceRules   = rules
+    session.targetLoadedModel  = { id: modelId, name: modelName }
+    res.json({ ok: true, ruleCount: rules.length })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// DELETE session juice rules (reset to fresh at start of Target Practice)
+app.post('/api/target/reset-juice', express.json({ limit: '1kb' }), (req, res) => {
+  const { sessionId } = req.body
+  const session = sessions.get(sessionId)
+  if (!session) return res.status(404).json({ error: 'Session not found' })
+  session.targetJuiceRules  = []
+  session.targetLoadedModel = null
   res.json({ ok: true })
 })
 

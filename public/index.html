@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=62" />
+  <link rel="stylesheet" href="style.css?v=63" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
@@ -748,6 +748,44 @@
       </div>
     </div>
 
+    <!-- PANEL: Target Practice Session Complete -->
+    <div id="target-session-complete" class="gym-panel gym-panel-center hidden">
+      <div class="tsc-box">
+        <h2 class="tsc-title">🎯 Target Practice Complete</h2>
+        <div class="tsc-stats-row">
+          <div class="tsc-stat"><span class="tsc-stat-val" id="tsc-tenants">—</span><span class="tsc-stat-lbl">Tenants</span></div>
+          <div class="tsc-stat"><span class="tsc-stat-val" id="tsc-rules">—</span><span class="tsc-stat-lbl">Rules Generated</span></div>
+          <div class="tsc-stat"><span class="tsc-stat-val tsc-stat-score" id="tsc-reduction">—</span><span class="tsc-stat-lbl">Error Reduction</span></div>
+        </div>
+        <p class="tsc-reviewer-line">Reviewed by: <strong id="tsc-reviewer"></strong></p>
+        <p class="tsc-parent-row hidden" id="tsc-parent-row"></p>
+        <div class="tsc-graph-wrap">
+          <p class="tsc-graph-label">Corrections per tenant (should go ↓)</p>
+          <div class="tsc-graph" id="tsc-graph"></div>
+        </div>
+        <div class="tsc-actions">
+          <button id="tsc-save-model-btn" class="btn-tsc-save">💾 Save as Juice Model</button>
+          <button id="tsc-done-btn" class="btn-tsc-done">← Back to Gym</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TARGET PRACTICE: Juice Model Picker overlay -->
+    <div id="target-model-picker-overlay" class="target-model-picker-overlay hidden">
+      <div class="target-model-picker-box">
+        <h3 class="tmp-title">🧠 Load a Juice Model?</h3>
+        <p class="tmp-subtitle">Start smarter by loading learnings from a previous session, or start fresh.</p>
+        <div class="target-model-picker-list" id="target-model-picker-list"></div>
+        <div class="tmp-actions">
+          <button id="target-model-fresh-btn" class="btn-tmp-fresh">⚡ Start Fresh</button>
+          <button id="target-model-cancel-btn" class="btn-tmp-cancel">✕ Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TARGET PRACTICE: Learning indicator (between tenants) -->
+    <div id="target-learning-indicator" class="target-learning-indicator hidden"></div>
+
     <!-- Modals -->
     <div id="gym-feedback-modal" class="gym-modal hidden">
       <div class="gym-modal-box">
@@ -1050,7 +1088,7 @@
 
   <script src="drlab-flasks.js?v=6"></script>
   <script src="sbs-boxing.js?v=3"></script>
-  <script src="app.js?v=82"></script>
+  <script src="app.js?v=83"></script>
   <script src="game-mode.js?v=4"></script>
   <script src="rr-app.js?v=1"></script>
 </body>
