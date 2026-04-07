@@ -771,32 +771,6 @@
       </div>
     </div>
 
-    <!-- TARGET PRACTICE: Setup screen (reviewer name + juice model) -->
-    <div id="target-setup-overlay" class="target-setup-overlay hidden">
-      <div class="target-setup-box">
-        <h2 class="tso-title">🎯 Target Practice Setup</h2>
-
-        <div class="tso-section">
-          <label class="tso-label" for="tso-reviewer-input">Your name</label>
-          <input id="tso-reviewer-input" class="tso-input" type="text" placeholder="e.g. Sarah M." maxlength="60" autocomplete="off" />
-        </div>
-
-        <div class="tso-section">
-          <p class="tso-label">Juice Model</p>
-          <p class="tso-sublabel">Load learnings from a previous session to start smarter, or go fresh.</p>
-          <div class="tso-model-list" id="tso-model-list">
-            <!-- filled dynamically -->
-          </div>
-          <button class="tso-model-btn tso-model-fresh active" id="tso-fresh-btn" data-id="" data-name="">⚡ Start Fresh (no juice)</button>
-        </div>
-
-        <div class="tso-actions">
-          <button id="tso-start-btn" class="btn-tso-start">🎯 Start Target Practice</button>
-          <button id="tso-cancel-btn" class="btn-tso-cancel">✕ Cancel</button>
-        </div>
-      </div>
-    </div>
-
     <!-- TARGET PRACTICE: Juice Model Picker overlay (kept for legacy, hidden) -->
     <div id="target-model-picker-overlay" class="target-model-picker-overlay hidden">
       <div class="target-model-picker-box">
@@ -1111,6 +1085,27 @@
       </div>
     </div>
 
+  </div>
+
+  <!-- TARGET PRACTICE: Setup screen — must be outside all screen containers -->
+  <div id="target-setup-overlay" class="target-setup-overlay hidden">
+    <div class="target-setup-box">
+      <h2 class="tso-title">🎯 Target Practice Setup</h2>
+      <div class="tso-section">
+        <label class="tso-label" for="tso-reviewer-input">Your name</label>
+        <input id="tso-reviewer-input" class="tso-input" type="text" placeholder="e.g. Sarah M." maxlength="60" autocomplete="off" />
+      </div>
+      <div class="tso-section">
+        <p class="tso-label">Juice Model</p>
+        <p class="tso-sublabel">Load learnings from a previous session to start smarter, or go fresh.</p>
+        <div class="tso-model-list" id="tso-model-list"></div>
+        <button class="tso-model-btn tso-model-fresh active" id="tso-fresh-btn" data-id="" data-name="">⚡ Start Fresh (no juice)</button>
+      </div>
+      <div class="tso-actions">
+        <button id="tso-start-btn" class="btn-tso-start">🎯 Start Target Practice</button>
+        <button id="tso-cancel-btn" class="btn-tso-cancel">✕ Cancel</button>
+      </div>
+    </div>
   </div>
 
   <script src="drlab-flasks.js?v=6"></script>
