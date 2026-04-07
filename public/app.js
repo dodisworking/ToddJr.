@@ -5077,20 +5077,19 @@ async function gymExSaveAndNext() {
 // ═══════════════════════════════════════════════════════════
 
 async function startTargetPractice() {
-  const tenantsWithFindings = state.tenants.filter(t => state.findings.has(t.id))
-  if (tenantsWithFindings.length === 0) {
-    toast('Run the hunt first — no findings to review yet.', 'info')
+  if (state.tenants.length === 0) {
+    toast('Upload files first', 'error')
     return
   }
   const name = await pixelPrompt(
     'Who is reviewing these findings?\nEnter your name to log the audit.',
-    '🎯 START REVIEW',
+    '🎯 START TARGET PRACTICE',
     'e.g. Sarah M.'
   )
   if (name === null) return
 
   targetSession.active       = true
-  targetSession.tenants      = tenantsWithFindings
+  targetSession.tenants      = [...state.tenants]
   targetSession.currentIdx   = 0
   targetSession.sessionId    = 'target-' + Date.now()
   targetSession.savedCount   = 0
@@ -5098,70 +5097,91 @@ async function startTargetPractice() {
 
   gymState.mode = 'target'
   goTo('gym')
+  gymReset()
   gymShowPanel('loading')
-  const lbl = document.getElementById('gym-load-label')
-  if (lbl) lbl.textContent = 'Loading findings...'
   await targetStartTenant(0)
 }
 
 async function targetStartTenant(idx) {
   const tenant = targetSession.tenants[idx]
   if (!tenant) return
+  const total = targetSession.tenants.length
 
-  // Register local files so PDF viewer works
-  if (state.localFiles?.size > 0) {
-    await gymRegisterLocalFiles(tenant.id)
-  }
+  gymReset()
+  gymState.mode = 'target'
+  gymShowPanel('loading')
 
-  // Pull findings from already-completed hunt results
-  const huntData = state.findings.get(tenant.id)
-  const rawFindings = huntData?.findings || []
+  document.getElementById('gym-subtitle').textContent = `🎯 Target Practice ${idx + 1}/${total}: ${tenant.tenantName}`
+  document.getElementById('gym-progress-fill').style.width = '0%'
+  document.getElementById('gym-loading-msg').textContent = 'Starting analysis...'
 
-  // Reset gym state for this tenant
-  gymState.tenantId    = tenant.id
-  gymState.tenantName  = tenant.tenantName
-  gymState.folderName  = tenant.folderName
-  gymState.findings    = rawFindings.map((f, i) => ({
-    ...f,
-    id: f.id || ('tp-' + idx + '-' + i)
-  }))
-  gymState.feedbacks   = {}
-  gymState.annotations = []
-  gymState.files       = (tenant.files || []).map(f => ({ name: f.name, sizeBytes: f.sizeBytes, relativePath: f.relativePath }))
-  gymState.currentDocIdx = 0
-  gymState.currentPage   = 1
-
-  // Update progress UI (reuse exercise session progress bar)
-  const wrap = document.getElementById('gym-ex-progress-wrap')
-  if (wrap) wrap.classList.remove('hidden')
+  // Progress bar across all tenants
+  const wrap  = document.getElementById('gym-ex-progress-wrap')
   const fill  = document.getElementById('gym-ex-progress-fill')
   const label = document.getElementById('gym-ex-progress-label')
-  const pct = targetSession.tenants.length > 1
-    ? Math.round((idx / targetSession.tenants.length) * 100) : 0
+  if (wrap) wrap.classList.remove('hidden')
+  const pct = total > 1 ? Math.round((idx / total) * 100) : 0
   if (fill)  fill.style.width = pct + '%'
-  if (label) label.textContent = `🎯 Review: ${idx + 1} of ${targetSession.tenants.length} — ${tenant.tenantName}`
+  if (label) label.textContent = `🎯 Target Practice: ${idx + 1} of ${total} — ${tenant.tenantName}`
 
-  // Show target save button, hide gym/exercise save buttons
-  document.getElementById('gym-save-isaac-btn')?.classList.add('hidden')
-  document.getElementById('gym-ex-save-next-btn')?.classList.add('hidden')
-  document.getElementById('gym-submit-btn')?.classList.add('hidden')
-  const targetSaveBtn = document.getElementById('gym-target-save-btn')
-  if (targetSaveBtn) {
-    targetSaveBtn.classList.remove('hidden')
-    targetSaveBtn.disabled = false
-    targetSaveBtn.textContent = idx < targetSession.tenants.length - 1
-      ? '💾 Save Report & Next →'
-      : '💾 Save Final Report'
-  }
+  // Register local files so analysis + PDF viewer work
+  await gymRegisterLocalFiles(tenant.id)
 
-  gymShowPanel('workout')
-  gymRenderFindings()
+  const url = sameOriginApi(
+    `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenant.id)}${cheapQs()}`
+  )
+  const es = new EventSource(url)
+  state.eventSource = es
 
-  // Load first PDF if files available
-  if (gymState.files.length > 0) {
+  es.addEventListener('gym-start', e => {
+    const d = JSON.parse(e.data)
+    document.getElementById('gym-subtitle').textContent = `🎯 [${idx + 1}/${total}] Analyzing: ${d.tenantName}`
+  })
+  es.addEventListener('gym-progress', e => {
+    const d = JSON.parse(e.data)
+    document.getElementById('gym-progress-fill').style.width = (d.percent || 0) + '%'
+    document.getElementById('gym-loading-msg').textContent = d.message || ''
+  })
+  es.addEventListener('gym-complete', e => {
+    es.close(); state.eventSource = null
+    const d = JSON.parse(e.data)
+    document.getElementById('gym-progress-fill').style.width = '100%'
+
+    gymState.tenantId      = tenant.id
+    gymState.tenantName    = tenant.tenantName
+    gymState.folderName    = tenant.folderName
+    gymState.findings      = (d.findings || []).map((f, i) => ({ ...f, id: f.id || ('tp-' + idx + '-' + i) }))
+    gymState.feedbacks     = {}
+    gymState.annotations   = []
+    gymState.files         = d.files || []
     gymState.currentDocIdx = 0
-    await gymGoToDoc(0)
-  }
+    gymState.currentPage   = 1
+    gymState.mode          = 'target'
+
+    // Show only the target save button
+    document.getElementById('gym-save-isaac-btn')?.classList.add('hidden')
+    document.getElementById('gym-ex-save-next-btn')?.classList.add('hidden')
+    document.getElementById('gym-submit-btn')?.classList.add('hidden')
+    const targetSaveBtn = document.getElementById('gym-target-save-btn')
+    if (targetSaveBtn) {
+      targetSaveBtn.classList.remove('hidden')
+      targetSaveBtn.disabled = false
+      targetSaveBtn.textContent = idx < total - 1 ? '💾 Save Report & Next →' : '💾 Save Final Report'
+    }
+
+    gymShowPanel('workout')
+    gymRenderFindings()
+    if (gymState.files.length > 0) gymGoToDoc(0)
+  })
+  es.addEventListener('gym-error', e => {
+    es.close(); state.eventSource = null
+    const d = JSON.parse(e.data)
+    toast('Analysis error: ' + (d.error || 'unknown'), 'error')
+    targetSession.active = false
+    gymState.mode = null
+    gymShowPanel('picker')
+  })
+  es.onerror = () => {}
 }
 
 async function targetSaveAndNext() {
@@ -5268,7 +5288,6 @@ document.getElementById('btn-workout').addEventListener('click', () => {
 
 document.getElementById('btn-target-launch')?.addEventListener('click', () => {
   if (state.tenants.length === 0) { toast('Upload files first', 'error'); return }
-  if (state.findings.size === 0) { toast('Run a hunt first — no findings to review yet', 'error'); return }
   startTargetPractice()
 })
 
