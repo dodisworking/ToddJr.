@@ -5658,31 +5658,36 @@ async function targetSaveAndNext() {
     if (btn) { btn.textContent = '✅ Saved!' }
     sfxReady()
 
-    // 2. Active learning synthesis — run in background while showing "Saved!" flash
+    // 2. Active learning synthesis — truly non-blocking background task.
+    // Fire immediately; DO NOT await. Navigation proceeds after the short "Saved!" flash.
+    // gymRegisterLocalFiles + SSE startup for the next tenant buys enough time that
+    // synthesis often finishes before the actual gym analysis Claude call fires.
     const isLast = targetSession.currentIdx + 1 >= targetSession.tenants.length
     if (!isLast && (rejectedFindings.length > 0 || annotations.length > 0)) {
       targetSession.synthesizing = true
       targetLearningIndicator(true)
-      try {
-        const synthRes = await fetch(sameOriginApi('/api/target/synthesize'), {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId: state.sessionId,
-            rejectedFindings,   // already have reviewerNote (+ partial prefix) attached above
-            confirmedFindings,
-            annotations: gymAnnotationsForIsaacExcel(),
-            currentRules: targetSession.juiceRules
-          })
+      fetch(sameOriginApi('/api/target/synthesize'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: state.sessionId,
+          rejectedFindings,
+          confirmedFindings,
+          annotations: gymAnnotationsForIsaacExcel(),
+          currentRules: targetSession.juiceRules
         })
-        if (synthRes.ok) {
-          const synthData = await synthRes.json()
-          targetSession.juiceRules = synthData.rules || targetSession.juiceRules
-          const ruleCount = targetSession.juiceRules.length
-          toast(`🧠 ${synthData.summary || `${ruleCount} rules updated`}`, 'info')
-        }
-      } catch { /* synthesis failure is non-blocking */ }
-      targetSession.synthesizing = false
-      targetLearningIndicator(false)
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data) {
+            targetSession.juiceRules = data.rules || targetSession.juiceRules
+            toast(`\uD83E\uDDE0 ${data.summary || `${targetSession.juiceRules.length} rules updated`}`, 'info')
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          targetSession.synthesizing = false
+          targetLearningIndicator(false)
+        })
     }
 
     await new Promise(r => setTimeout(r, 600))
