@@ -6876,6 +6876,202 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   font-style: italic;
 }
 
+/* ── Model Detail overlay ────────────────────────────────── */
+.model-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.88);
+  z-index: 10100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.model-detail-overlay.hidden { display: none; }
+.model-detail-box {
+  background: #0f172a;
+  border: 2px solid #4c1d95;
+  box-shadow: 0 0 0 4px #0f172a, 0 0 0 6px #4c1d95, 4px 4px 0 6px #000;
+  width: 100%;
+  max-width: 560px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 2px;
+}
+.mdl-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid #1e293b;
+  flex-shrink: 0;
+}
+.mdl-back {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  background: none;
+  border: 1px solid #334155;
+  color: #64748b;
+  padding: 6px 10px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+.mdl-back:hover { border-color: #a78bfa; color: #a78bfa; }
+.mdl-title {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: #a78bfa;
+  letter-spacing: 1px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mdl-select-btn {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  background: #4c1d95;
+  border: 1px solid #7c3aed;
+  color: #c4b5fd;
+  padding: 7px 12px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+.mdl-select-btn:hover { background: #5b21b6; color: #ede9fe; }
+.mdl-body {
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.mdl-meta-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.mdl-meta-chip {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  padding: 4px 8px;
+  letter-spacing: 0.4px;
+}
+.mdl-comment {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: #a78bfa;
+  font-style: italic;
+  padding: 8px 10px;
+  border-left: 3px solid #4c1d95;
+  background: #0d0b1a;
+}
+.mdl-section-title {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: #475569;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #1e293b;
+}
+.mdl-perf-bar-wrap {
+  background: #020617;
+  border: 1px solid #1e293b;
+  height: 14px;
+  position: relative;
+  margin-bottom: 6px;
+}
+.mdl-perf-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4ade80, #22c55e);
+  transition: width 0.6s ease;
+}
+.mdl-perf-label {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: #4ade80;
+  letter-spacing: 0.5px;
+}
+.mdl-perf-sub {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #475569;
+  letter-spacing: 0.3px;
+  margin-top: 3px;
+}
+.mdl-sparkline-wrap {
+  background: #020617;
+  border: 1px solid #1e293b;
+  padding: 8px;
+}
+.mdl-rule {
+  background: #020617;
+  border: 1px solid #1e293b;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.mdl-rule + .mdl-rule { border-top: none; }
+.mdl-rule-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.mdl-rule-type {
+  font-family: var(--font-pixel);
+  font-size: 6px;
+  padding: 2px 5px;
+  letter-spacing: 0.3px;
+}
+.mdl-rule-type.avoid { background: #7f1d1d; color: #fca5a5; }
+.mdl-rule-type.improve { background: #14532d; color: #86efac; }
+.mdl-rule-checktype {
+  font-family: var(--font-pixel);
+  font-size: 6px;
+  color: #7c3aed;
+  background: #1e1035;
+  padding: 2px 5px;
+}
+.mdl-rule-conf {
+  font-family: var(--font-pixel);
+  font-size: 6px;
+  color: #475569;
+  margin-left: auto;
+}
+.mdl-rule-text {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: #e2e8f0;
+  line-height: 1.6;
+  letter-spacing: 0.3px;
+}
+.mdl-rule-trigger {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #64748b;
+  font-style: italic;
+  padding-top: 2px;
+}
+.mdl-parent {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #64748b;
+  padding: 6px 10px;
+  background: #020617;
+  border: 1px solid #1e293b;
+  letter-spacing: 0.4px;
+}
+
+/* ── (old model picker, kept for compat) ─────────────────── */
 .target-model-picker-overlay {
   position: fixed;
   inset: 0;

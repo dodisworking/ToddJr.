@@ -5196,13 +5196,30 @@ function showTargetSetupScreen() {
             </div>
             ${(reviewer || tenants) ? `<div class="jlib-card-meta">${[reviewer, tenants].filter(Boolean).map(escHtml).join(' · ')}</div>` : ''}
             ${m.comment ? `<div class="jlib-card-comment">"${escHtml(m.comment)}"</div>` : ''}
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:8px">
+              <button class="jlib-view-btn" data-id="${m.id}" data-name="${escHtml(m.name)}" style="font-family:var(--font-pixel);font-size:7px;background:none;border:1px solid #334155;color:#64748b;padding:4px 8px;cursor:pointer;letter-spacing:0.4px">👁 VIEW DETAILS</button>
+              <button class="jlib-use-btn" data-id="${m.id}" data-name="${escHtml(m.name)}" style="font-family:var(--font-pixel);font-size:7px;background:#14532d;border:1px solid #16a34a;color:#86efac;padding:4px 8px;cursor:pointer;letter-spacing:0.4px">USE ▶</button>
+            </div>
           </div>`
         }).join('')
-        jlibList.querySelectorAll('.jlib-card').forEach(card => {
-          card.addEventListener('click', () => {
-            selectedModel = { id: card.dataset.id, name: card.dataset.name }
-            if (juiceStatus) juiceStatus.innerHTML = `<span class="tso-juice-selected">🧠 ${escHtml(card.dataset.name)}</span>`
+        jlibList.querySelectorAll('.jlib-use-btn').forEach(btn => {
+          btn.addEventListener('click', e => {
+            e.stopPropagation()
+            selectedModel = { id: btn.dataset.id, name: btn.dataset.name }
+            if (juiceStatus) juiceStatus.innerHTML = `<span class="tso-juice-selected">🧠 ${escHtml(btn.dataset.name)}</span>`
             jlibOverlay.classList.add('hidden')
+          })
+        })
+        jlibList.querySelectorAll('.jlib-view-btn').forEach(btn => {
+          btn.addEventListener('click', e => {
+            e.stopPropagation()
+            openModelDetail(btn.dataset.id, btn.dataset.name, (chosen) => {
+              if (chosen) {
+                selectedModel = chosen
+                if (juiceStatus) juiceStatus.innerHTML = `<span class="tso-juice-selected">🧠 ${escHtml(chosen.name)}</span>`
+                jlibOverlay.classList.add('hidden')
+              }
+            })
           })
         })
       }
@@ -5313,6 +5330,143 @@ function showJuiceModelPicker(models) {
     document.getElementById('target-model-fresh-btn').onclick = () => { cleanup(); resolve(null) }
     document.getElementById('target-model-cancel-btn').onclick = () => { cleanup(); resolve(false) }
   })
+}
+
+/**
+ * Open the model detail overlay for a given juice model id.
+ * onSelect(chosen) is called with { id, name } if the user clicks "USE THIS JUICE".
+ */
+function openModelDetail(modelId, modelName, onSelect) {
+  const overlay   = document.getElementById('model-detail-overlay')
+  const titleEl   = document.getElementById('mdl-title')
+  const bodyEl    = document.getElementById('mdl-body')
+  const backBtn   = document.getElementById('mdl-back-btn')
+  const selectBtn = document.getElementById('mdl-select-this-btn')
+  if (!overlay || !bodyEl) return
+
+  titleEl.textContent = modelName || 'MODEL DETAILS'
+  bodyEl.innerHTML = '<div style="font-family:var(--font-pixel);font-size:8px;color:#475569;padding:20px 0;text-align:center">LOADING...</div>'
+  overlay.classList.remove('hidden')
+
+  function close() {
+    overlay.classList.add('hidden')
+    backBtn.removeEventListener('click', close)
+    selectBtn.removeEventListener('click', onUse)
+  }
+  function onUse() {
+    close()
+    onSelect && onSelect({ id: modelId, name: modelName })
+  }
+
+  backBtn.addEventListener('click', close)
+  selectBtn.addEventListener('click', onUse)
+
+  // Fetch full model
+  fetch(sameOriginApi(`/api/target/models/${modelId}`))
+    .then(r => r.ok ? r.json() : null)
+    .catch(() => null)
+    .then(m => {
+      if (!m) {
+        bodyEl.innerHTML = '<div style="font-family:var(--font-pixel);font-size:8px;color:#ef4444;padding:20px;text-align:center">Failed to load model data.</div>'
+        return
+      }
+
+      const savedDate  = m.savedAt ? new Date(m.savedAt).toLocaleDateString() : '—'
+      const reduction  = m.errorReduction ?? 0
+      const barWidth   = Math.max(2, Math.min(100, reduction))
+      const rules      = m.rules || []
+      const avoidFP    = rules.filter(r => r.type === 'AVOID_FALSE_POSITIVE').length
+      const improve    = rules.filter(r => r.type !== 'AVOID_FALSE_POSITIVE').length
+
+      // Correction curve sparkline
+      const curve = m.correctionsByTenant || []
+
+      let html = `
+        <div class="mdl-meta-row">
+          <span class="mdl-meta-chip">👤 ${escHtml(m.reviewerName || '—')}</span>
+          <span class="mdl-meta-chip">📅 ${escHtml(savedDate)}</span>
+          <span class="mdl-meta-chip">🏢 ${m.tenantCount || 0} tenants</span>
+          <span class="mdl-meta-chip">🧠 ${rules.length} rules</span>
+          ${m.parentModelName ? `<span class="mdl-meta-chip">↳ built on ${escHtml(m.parentModelName)}</span>` : ''}
+        </div>
+        ${m.comment ? `<div class="mdl-comment">"${escHtml(m.comment)}"</div>` : ''}
+
+        <div>
+          <div class="mdl-section-title">PERFORMANCE</div>
+          <div class="mdl-perf-bar-wrap">
+            <div class="mdl-perf-bar-fill" style="width:${barWidth}%"></div>
+          </div>
+          <div class="mdl-perf-label">${reduction}% error reduction</div>
+          <div class="mdl-perf-sub">${avoidFP} false-positive blocks · ${improve} detection improvements</div>
+        </div>`
+
+      if (curve.length > 1) {
+        html += `
+        <div>
+          <div class="mdl-section-title">CORRECTION CURVE — errors flagged per tenant</div>
+          <div class="mdl-sparkline-wrap">
+            <canvas id="mdl-spark-canvas" width="504" height="48" style="width:100%;height:48px;image-rendering:pixelated;display:block"></canvas>
+          </div>
+          <div style="font-family:var(--font-pixel);font-size:7px;color:#475569;margin-top:4px">Tenant 1 → Tenant ${curve.length} — lower is better</div>
+        </div>`
+      }
+
+      if (rules.length === 0) {
+        html += `<div style="font-family:var(--font-pixel);font-size:8px;color:#475569;padding:10px 0">No rules stored in this model.</div>`
+      } else {
+        html += `<div><div class="mdl-section-title">RULES (${rules.length})</div>`
+        rules.forEach(r => {
+          const isAvoid = r.type === 'AVOID_FALSE_POSITIVE'
+          const typeLabel = isAvoid ? 'AVOID FALSE POS' : 'IMPROVE DETECT'
+          const typeClass = isAvoid ? 'avoid' : 'improve'
+          const conf = r.confidence ? `⬆ ${r.confidence}x` : ''
+          html += `
+          <div class="mdl-rule">
+            <div class="mdl-rule-badges">
+              <span class="mdl-rule-type ${typeClass}">${typeLabel}</span>
+              <span class="mdl-rule-checktype">${escHtml(r.checkType || '—')}</span>
+              ${conf ? `<span class="mdl-rule-conf">${conf}</span>` : ''}
+            </div>
+            <div class="mdl-rule-text">${escHtml(r.rule || '')}</div>
+            ${r.triggeredBy ? `<div class="mdl-rule-trigger">↳ ${escHtml(r.triggeredBy)}</div>` : ''}
+          </div>`
+        })
+        html += `</div>`
+      }
+
+      bodyEl.innerHTML = html
+
+      // Draw sparkline if curve exists
+      if (curve.length > 1) {
+        const spark = document.getElementById('mdl-spark-canvas')
+        if (spark) {
+          const ctx = spark.getContext('2d')
+          const W = spark.width, H = spark.height
+          const max = Math.max(...curve, 1)
+          const barW = Math.floor(W / curve.length)
+          ctx.clearRect(0, 0, W, H)
+          curve.forEach((val, i) => {
+            const barH = Math.max(2, Math.round((val / max) * (H - 8)))
+            const x = i * barW
+            const y = H - barH
+            // Color: starts red, trends green as corrections drop
+            const ratio = curve.length > 1 ? i / (curve.length - 1) : 1
+            const r2 = Math.round(239 - ratio * (239 - 74))
+            const g2 = Math.round(68  + ratio * (222 - 68))
+            const b2 = Math.round(68  + ratio * (128 - 68))
+            ctx.fillStyle = `rgb(${r2},${g2},${b2})`
+            ctx.fillRect(x, y, Math.max(1, barW - 1), barH)
+            // Value label
+            if (val > 0) {
+              ctx.fillStyle = '#94a3b8'
+              ctx.font = '8px monospace'
+              ctx.textAlign = 'center'
+              ctx.fillText(val, x + barW / 2, y - 2)
+            }
+          })
+        }
+      }
+    })
 }
 
 async function targetStartTenant(idx) {
