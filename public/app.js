@@ -5260,35 +5260,34 @@ function showTargetSetupScreen() {
   })
 }
 
-/** Draw 8-bit juice box on a 40×52 canvas */
+/** Draw 8-bit bullseye target on a 40×52 canvas */
 function drawJuiceBox(canvas) {
   if (!canvas) return
   const ctx = canvas.getContext('2d')
   const S = 4  // px per pixel-art pixel
-  // 10 cols × 13 rows
+  // 10 cols × 13 rows — bullseye centered in rows 1–11
   const T = null
   const g = [
     //  0    1    2    3    4    5    6    7    8    9
-    [  T,   T,   T,  'S', 'S',  T,   T,   T,   T,   T],  // 0 straw
-    [  T,   T,   T,  'S', 'S',  T,   T,   T,   T,   T],  // 1 straw
-    [  T,   T,   T,  'S', 'S',  T,   T,   T,   T,   T],  // 2 straw
-    [ 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D'], // 3 top edge
-    [ 'D', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'D'], // 4 top strip
-    [ 'D', 'B', 'J', 'J', 'J', 'J', 'J', 'J', 'B', 'D'], // 5 label
-    [ 'D', 'B', 'J', 'J', 'J', 'J', 'J', 'J', 'B', 'D'], // 6
-    [ 'D', 'B', 'J', 'J', 'J', 'J', 'J', 'J', 'B', 'D'], // 7 center
-    [ 'D', 'B', 'J', 'J', 'J', 'J', 'J', 'J', 'B', 'D'], // 8
-    [ 'D', 'B', 'J', 'J', 'J', 'J', 'J', 'J', 'B', 'D'], // 9 label
-    [ 'D', 'B', 'B', 'B', 'B', 'B', 'B', 'B', 'B', 'D'], // 10 body
-    [ 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D'], // 11 bottom
-    [ 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D'], // 12 bottom
+    [  T,   T,   T,   T,   T,   T,   T,   T,   T,   T],  // 0 pad
+    [  T,   T,  'D', 'D', 'D', 'D', 'D', 'D',  T,   T],  // 1 top arc
+    [  T,  'D', 'R', 'R', 'R', 'R', 'R', 'R', 'D',  T],  // 2 red ring
+    [ 'D', 'R', 'R', 'W', 'W', 'W', 'W', 'R', 'R', 'D'], // 3 white ring
+    [ 'D', 'R', 'W', 'W', 'W', 'W', 'W', 'W', 'R', 'D'], // 4 white
+    [ 'D', 'R', 'W', 'W', 'C', 'C', 'W', 'W', 'R', 'D'], // 5 center
+    [ 'D', 'R', 'W', 'W', 'C', 'C', 'W', 'W', 'R', 'D'], // 6 center
+    [ 'D', 'R', 'W', 'W', 'W', 'W', 'W', 'W', 'R', 'D'], // 7 white
+    [ 'D', 'R', 'R', 'W', 'W', 'W', 'W', 'R', 'R', 'D'], // 8 white ring
+    [  T,  'D', 'R', 'R', 'R', 'R', 'R', 'R', 'D',  T],  // 9 red ring
+    [  T,   T,  'D', 'D', 'D', 'D', 'D', 'D',  T,   T],  // 10 bottom arc
+    [  T,   T,   T,   T,   T,   T,   T,   T,   T,   T],  // 11 pad
+    [  T,   T,   T,   T,   T,   T,   T,   T,   T,   T],  // 12 pad
   ]
   const colorMap = {
-    S: '#fbbf24',  // straw (amber)
     D: '#1e293b',  // dark outline
-    H: '#e2e8f0',  // box highlight strip
-    B: '#94a3b8',  // box body (silver)
-    J: '#f97316',  // juice label (orange)
+    R: '#dc2626',  // red ring
+    W: '#f8fafc',  // white ring
+    C: '#991b1b',  // dark red bullseye center
   }
   ctx.clearRect(0, 0, canvas.width, canvas.height)
   for (let row = 0; row < g.length; row++) {
