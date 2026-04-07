@@ -5266,6 +5266,12 @@ document.getElementById('btn-workout').addEventListener('click', () => {
   gymOpenPicker()
 })
 
+document.getElementById('btn-target-launch')?.addEventListener('click', () => {
+  if (state.tenants.length === 0) { toast('Upload files first', 'error'); return }
+  if (state.findings.size === 0) { toast('Run a hunt first — no findings to review yet', 'error'); return }
+  startTargetPractice()
+})
+
 document.getElementById('gym-back').addEventListener('click', () => {
   if (state.eventSource) { state.eventSource.close(); state.eventSource = null }
   gymReset()

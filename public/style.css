@@ -742,7 +742,8 @@ html, body {
   box-sizing: border-box;
 }
 .hunt-cta-actions .btn-drtoddhunt,
-.hunt-cta-actions .btn-workout {
+.hunt-cta-actions .btn-workout,
+.hunt-cta-actions .btn-target-launch {
   width: 100%;
   box-sizing: border-box;
 }
@@ -1541,7 +1542,7 @@ input:checked + .toggle-slider:before { transform:translateX(22px); background:#
   .hunt-jar-glass { width: 64px; height: 88px; }
   .hunt-jar-canvas { transform: scale(0.92); transform-origin: center top; }
   .btn-hunt, .btn-cook { font-size: 10px; padding: 14px 20px; }
-  .btn-drtoddhunt, .btn-workout { font-size: 7px; padding: 10px 14px; }
+  .btn-drtoddhunt, .btn-workout, .btn-target-launch { font-size: 7px; padding: 10px 14px; }
   .tenant-grid { grid-template-columns: 1fr 1fr; }
   .stats-row { gap: 10px; }
   .stat-value { font-size: 24px; }
@@ -3273,6 +3274,31 @@ input:checked + .toggle-slider:before { transform:translateX(22px); background:#
   box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45), 0 0 0 2px rgba(16, 185, 129, 0.2);
 }
 .btn-workout:active { transform: translateY(0); }
+
+/* ── Target Practice launch button (loading screen) ────────── */
+.btn-target-launch {
+  margin-top: 0;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #4c1d95, #7c3aed);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  font-weight: 400;
+  cursor: pointer;
+  transition: transform 0.15s, opacity 0.2s, box-shadow 0.15s;
+  letter-spacing: 0.5px;
+  line-height: 1.5;
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.35), 0 0 0 2px rgba(124, 58, 237, 0.12);
+  image-rendering: pixelated;
+}
+.btn-target-launch:hover {
+  opacity: 0.95;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.5), 0 0 0 2px rgba(124, 58, 237, 0.22);
+}
+.btn-target-launch:active { transform: translateY(0); }
 
 /* ═══════════════════════════════════════════════════════════
    GYM TEACHER SCREEN
