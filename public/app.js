@@ -5140,66 +5140,84 @@ async function startTargetPractice() {
  */
 function showTargetSetupScreen() {
   return new Promise(resolve => {
-    const overlay    = document.getElementById('target-setup-overlay')
-    const modelList  = document.getElementById('tso-model-list')
-    const freshBtn   = document.getElementById('tso-fresh-btn')
-    const reviewerIn = document.getElementById('tso-reviewer-input')
-    const startBtn   = document.getElementById('tso-start-btn')
-    const cancelBtn  = document.getElementById('tso-cancel-btn')
-    if (!overlay || !modelList || !reviewerIn || !startBtn || !cancelBtn) {
-      // Fallback: use basic prompt if overlay elements aren't in DOM
+    const overlay     = document.getElementById('target-setup-overlay')
+    const reviewerIn  = document.getElementById('tso-reviewer-input')
+    const startBtn    = document.getElementById('tso-start-btn')
+    const cancelBtn   = document.getElementById('tso-cancel-btn')
+    const juiceBtn    = document.getElementById('tso-juice-btn')
+    const juiceStatus = document.getElementById('tso-juice-status')
+    const jlibOverlay = document.getElementById('juice-library-overlay')
+    const jlibList    = document.getElementById('jlib-list')
+    const jlibClose   = document.getElementById('jlib-close-btn')
+    const juiceCanvas = document.getElementById('tso-juicebox-canvas')
+
+    if (!overlay || !reviewerIn || !startBtn || !cancelBtn) {
       pixelPrompt('Who is reviewing these findings?', '🎯 START TARGET PRACTICE', 'e.g. Sarah M.')
         .then(name => resolve(name ? { reviewerName: name, loadedModel: null } : null))
       return
     }
 
-    // Show screen immediately
+    // Draw 8-bit juice box
+    drawJuiceBox(juiceCanvas)
+
     let selectedModel = null
-    modelList.innerHTML = '<span class="tso-model-meta" style="padding:4px 0;display:block">Loading saved models...</span>'
-    freshBtn.classList.add('active')
+    let savedModels   = []
+
+    // Reset state
     reviewerIn.value = ''
+    reviewerIn.style.borderColor = ''
+    if (juiceStatus) juiceStatus.innerHTML = '<span class="tso-juice-none">⚡ NONE — FRESH START</span>'
+
+    // Show immediately
     overlay.classList.remove('hidden')
     setTimeout(() => reviewerIn.focus(), 80)
 
-    // Fetch models in background — populate list when ready
+    // Fetch saved models in background
     fetch(sameOriginApi('/api/target/models'))
       .then(r => r.ok ? r.json() : [])
       .catch(() => [])
-      .then(savedModels => {
-        if (!savedModels.length) {
-          modelList.innerHTML = '<span class="tso-model-meta" style="padding:4px 0;display:block;color:#475569">No saved models yet — starting fresh.</span>'
-          return
-        }
-        modelList.innerHTML = savedModels.map(m => {
-          const score   = m.errorReduction != null ? `${m.errorReduction}% error reduction` : ''
-          const tenants = m.tenantCount ? `${m.tenantCount} tenants` : ''
-          const meta    = [score, tenants, m.reviewerName].filter(Boolean).join(' · ')
-          return `<button class="tso-model-btn" data-id="${m.id}" data-name="${escHtml(m.name)}">
-            <span class="tso-model-name">🧠 ${escHtml(m.name)}</span>
-            ${meta ? `<span class="tso-model-meta">${escHtml(meta)}</span>` : ''}
-            ${m.comment ? `<span class="tso-model-comment">"${escHtml(m.comment)}"</span>` : ''}
-          </button>`
+      .then(models => { savedModels = models })
+
+    // Open juice library
+    function openLibrary() {
+      if (!jlibOverlay || !jlibList) return
+      if (!savedModels.length) {
+        jlibList.innerHTML = '<div class="jlib-empty">No juice models saved yet.<br>Complete a session and save juice<br>to build your library.</div>'
+      } else {
+        jlibList.innerHTML = savedModels.map(m => {
+          const score    = m.errorReduction != null ? `${m.errorReduction}% better` : ''
+          const tenants  = m.tenantCount ? `${m.tenantCount} tenants` : ''
+          const reviewer = m.reviewerName || ''
+          const isActive = selectedModel && selectedModel.id === m.id
+          return `<div class="jlib-card${isActive ? ' selected' : ''}" data-id="${m.id}" data-name="${escHtml(m.name)}">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+              <span class="jlib-card-name">🧠 ${escHtml(m.name)}</span>
+              ${score ? `<span class="jlib-card-score">${escHtml(score)}</span>` : ''}
+            </div>
+            ${(reviewer || tenants) ? `<div class="jlib-card-meta">${[reviewer, tenants].filter(Boolean).map(escHtml).join(' · ')}</div>` : ''}
+            ${m.comment ? `<div class="jlib-card-comment">"${escHtml(m.comment)}"</div>` : ''}
+          </div>`
         }).join('')
-        modelList.querySelectorAll('.tso-model-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
-            modelList.querySelectorAll('.tso-model-btn').forEach(b => b.classList.remove('active'))
-            freshBtn.classList.remove('active')
-            btn.classList.add('active')
-            selectedModel = { id: btn.dataset.id, name: btn.dataset.name }
+        jlibList.querySelectorAll('.jlib-card').forEach(card => {
+          card.addEventListener('click', () => {
+            selectedModel = { id: card.dataset.id, name: card.dataset.name }
+            if (juiceStatus) juiceStatus.innerHTML = `<span class="tso-juice-selected">🧠 ${escHtml(card.dataset.name)}</span>`
+            jlibOverlay.classList.add('hidden')
           })
         })
-      })
+      }
+      jlibOverlay.classList.remove('hidden')
+    }
 
-    freshBtn.addEventListener('click', () => {
-      modelList.querySelectorAll('.tso-model-btn').forEach(b => b.classList.remove('active'))
-      freshBtn.classList.add('active')
-      selectedModel = null
-    })
+    juiceBtn   && juiceBtn.addEventListener('click', openLibrary)
+    jlibClose  && jlibClose.addEventListener('click', () => jlibOverlay && jlibOverlay.classList.add('hidden'))
 
     function cleanup(result) {
       overlay.classList.add('hidden')
+      jlibOverlay && jlibOverlay.classList.add('hidden')
       startBtn.removeEventListener('click', onStart)
       cancelBtn.removeEventListener('click', onCancel)
+      juiceBtn  && juiceBtn.removeEventListener('click', openLibrary)
       document.removeEventListener('keydown', onKey)
       resolve(result)
     }
@@ -5212,12 +5230,58 @@ function showTargetSetupScreen() {
     function onCancel() { cleanup(null) }
     function onKey(e) {
       if (e.key === 'Enter' && document.activeElement !== startBtn) { onStart(); e.preventDefault() }
-      if (e.key === 'Escape') { onCancel(); e.preventDefault() }
+      if (e.key === 'Escape') {
+        if (jlibOverlay && !jlibOverlay.classList.contains('hidden')) {
+          jlibOverlay.classList.add('hidden'); e.preventDefault(); return
+        }
+        onCancel(); e.preventDefault()
+      }
     }
     startBtn.addEventListener('click', onStart)
     cancelBtn.addEventListener('click', onCancel)
     document.addEventListener('keydown', onKey)
   })
+}
+
+/** Draw 8-bit juice box on a 40×52 canvas */
+function drawJuiceBox(canvas) {
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  const S = 4  // px per pixel-art pixel
+  // 10 cols × 13 rows
+  const T = null
+  const g = [
+    //  0    1    2    3    4    5    6    7    8    9
+    [  T,   T,   T,  'S', 'S',  T,   T,   T,   T,   T],  // 0 straw
+    [  T,   T,   T,  'S', 'S',  T,   T,   T,   T,   T],  // 1 straw
+    [  T,   T,   T,  'S', 'S',  T,   T,   T,   T,   T],  // 2 straw
+    [ 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D'], // 3 top edge
+    [ 'D', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'H', 'D'], // 4 top strip
+    [ 'D', 'B', 'J', 'J', 'J', 'J', 'J', 'J', 'B', 'D'], // 5 label
+    [ 'D', 'B', 'J', 'J', 'J', 'J', 'J', 'J', 'B', 'D'], // 6
+    [ 'D', 'B', 'J', 'J', 'J', 'J', 'J', 'J', 'B', 'D'], // 7 center
+    [ 'D', 'B', 'J', 'J', 'J', 'J', 'J', 'J', 'B', 'D'], // 8
+    [ 'D', 'B', 'J', 'J', 'J', 'J', 'J', 'J', 'B', 'D'], // 9 label
+    [ 'D', 'B', 'B', 'B', 'B', 'B', 'B', 'B', 'B', 'D'], // 10 body
+    [ 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D'], // 11 bottom
+    [ 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D'], // 12 bottom
+  ]
+  const colorMap = {
+    S: '#fbbf24',  // straw (amber)
+    D: '#1e293b',  // dark outline
+    H: '#e2e8f0',  // box highlight strip
+    B: '#94a3b8',  // box body (silver)
+    J: '#f97316',  // juice label (orange)
+  }
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  for (let row = 0; row < g.length; row++) {
+    for (let col = 0; col < g[row].length; col++) {
+      const c = g[row][col]
+      if (!c || !colorMap[c]) continue
+      ctx.fillStyle = colorMap[c]
+      ctx.fillRect(col * S, row * S, S, S)
+    }
+  }
 }
 
 // Show a pixel-style modal to pick a juice model or start fresh
