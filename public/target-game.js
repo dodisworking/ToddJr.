@@ -79,6 +79,7 @@
 
   // ── Background scene ─────────────────────────────────────────
   function drawBG() {
+    if (!_ctx) return
     // Sky gradient via two rects
     cls(BG);     rec(0, 0, W, H * 0.7)
     cls('#0d1b2e'); rec(0, H * 0.7, W, H * 0.3)
@@ -87,22 +88,23 @@
     _ctx.beginPath(); _ctx.arc(W - 40, 22, 10, 0, Math.PI * 2); _ctx.fill()
     cls('#0d1b2e')
     _ctx.beginPath(); _ctx.arc(W - 36, 20, 9, 0, Math.PI * 2); _ctx.fill()
-    // Stars
+    // Stars — avoid destructuring forEach to prevent TDZ/engine issues
     cls('#e2e8f0')
-    [[15,10],[35,8],[60,15],[90,6],[120,12],[160,5],[W-80,8],[W-120,14]].forEach(([sx,sy]) => {
-      rec(sx, sy, 2, 2)
-    })
+    var starPts = [15,10, 35,8, 60,15, 90,6, 120,12, 160,5, W-80,8, W-120,14]
+    for (var si = 0; si < starPts.length; si += 2) { rec(starPts[si], starPts[si+1], 2, 2) }
     // Ground
     cls(GROUND); rec(0, H - 18, W, 18)
     cls(GRASS)
-    for (let gx = 0; gx < W; gx += 8) { rec(gx, H - 18, 4, 3) }
-    // Trees
-    [[20, H - 18], [W - 24, H - 18]].forEach(([tx, ty]) => {
+    for (var gx = 0; gx < W; gx += 8) { rec(gx, H - 18, 4, 3) }
+    // Trees — left and right
+    var treePairs = [20, H - 18, W - 24, H - 18]
+    for (var ti = 0; ti < 4; ti += 2) {
+      var tx = treePairs[ti], ty = treePairs[ti+1]
       cls(TRUNK); rec(tx - 3, ty - 22, 6, 22)
       cls(TREE_D); rec(tx - 10, ty - 40, 20, 18)
       cls(TREE_L); rec(tx - 7,  ty - 52, 14, 16)
       cls(TREE_D); rec(tx - 4,  ty - 62, 8,  14)
-    })
+    }
   }
 
   // ── Todd Robin Hood sprite ────────────────────────────────────
@@ -217,14 +219,16 @@
   const TGT_R = [20, 13, 6]
 
   function drawTarget(tx, ty) {
+    if (!_ctx) return
     // Stand
     cls(TRUNK); rec(tx - 3, ty + TGT_R[0], 6, 20)
     cls(TRUNK); rec(tx - 14, ty + TGT_R[0] + 20, 28, 4)
-    // Rings
-    [TGT_RED, TGT_WHT, TGT_RED].forEach((c, i) => {
-      cls(c)
-      _ctx.beginPath(); _ctx.arc(tx, ty, TGT_R[i], 0, Math.PI * 2); _ctx.fill()
-    })
+    // Rings — use loop to avoid ASI trap (line starting with [ after rec())
+    var ringColors = [TGT_RED, TGT_WHT, TGT_RED]
+    for (var ri = 0; ri < 3; ri++) {
+      cls(ringColors[ri])
+      _ctx.beginPath(); _ctx.arc(tx, ty, TGT_R[ri], 0, Math.PI * 2); _ctx.fill()
+    }
     // Outline
     _ctx.strokeStyle = DARK; _ctx.lineWidth = 1.5
     _ctx.beginPath(); _ctx.arc(tx, ty, TGT_R[0], 0, Math.PI * 2); _ctx.stroke()
