@@ -6649,6 +6649,123 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
 .btn-tsc-done:hover { background: #273449; color: #cbd5e1; }
 
 /* ── Juice Model Picker overlay ──────────────────────────── */
+/* ── Target Practice Setup overlay ──────────────────────── */
+.target-setup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.82);
+  z-index: 9100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.target-setup-overlay.hidden { display: none; }
+.target-setup-box {
+  background: #0f172a;
+  border: 1px solid #7c3aed;
+  border-radius: 10px;
+  padding: 28px 32px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.tso-title {
+  font-family: var(--font-pixel);
+  font-size: 11px;
+  color: #e2e8f0;
+  margin: 0 0 4px;
+  letter-spacing: 0.5px;
+}
+.tso-section { display: flex; flex-direction: column; gap: 8px; }
+.tso-label {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: #94a3b8;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+.tso-sublabel {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+}
+.tso-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  color: #e2e8f0;
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  box-sizing: border-box;
+  outline: none;
+}
+.tso-input:focus { border-color: #7c3aed; }
+.tso-model-list { display: flex; flex-direction: column; gap: 6px; }
+.tso-model-btn {
+  width: 100%;
+  padding: 10px 14px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  color: #94a3b8;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.tso-model-btn:hover { border-color: #7c3aed; background: #1a1040; color: #e2e8f0; }
+.tso-model-btn.active { border-color: #7c3aed; background: #2d1b69; color: #e2e8f0; }
+.tso-model-fresh { color: #4ade80; border-color: #166534; }
+.tso-model-fresh.active { border-color: #4ade80; background: #052e16; }
+.tso-model-fresh:hover { border-color: #4ade80; background: #052e16; color: #4ade80; }
+.tso-model-name { font-size: 8px; font-weight: bold; }
+.tso-model-meta { font-size: 7px; color: #64748b; }
+.tso-model-comment { font-size: 7px; color: #a78bfa; font-style: italic; }
+.tso-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.btn-tso-start {
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #4c1d95, #7c3aed);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.btn-tso-start:hover { opacity: 0.9; transform: translateY(-1px); }
+.btn-tso-start:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+.btn-tso-cancel {
+  padding: 10px 20px;
+  background: transparent;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  color: #64748b;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  cursor: pointer;
+}
+.btn-tso-cancel:hover { border-color: #475569; color: #94a3b8; }
+
 .target-model-picker-overlay {
   position: fixed;
   inset: 0;

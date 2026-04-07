@@ -5085,64 +5085,58 @@ async function gymExSaveAndNext() {
 async function startTargetPractice() {
   if (state.tenants.length === 0) { toast('Upload files first', 'error'); return }
 
-  // Give immediate feedback — disable button while async steps run
+  // Give immediate feedback while we fetch models
   const launchBtn = document.getElementById('btn-target-launch')
-  if (launchBtn) { launchBtn.disabled = true; launchBtn.textContent = '🎯 Starting...' }
-  const restoreBtn = () => { if (launchBtn) { launchBtn.disabled = false; launchBtn.textContent = '🎯 Todd Target Practice' } }
+  if (launchBtn) { launchBtn.disabled = true; launchBtn.textContent = '🎯 Loading...' }
 
-  // ── Step 1: Offer to load a saved juice model ──────────────────────
-  let loadedModel = null
+  // Fetch saved juice models
+  let savedModels = []
   try {
     const modelsRes = await fetch(sameOriginApi('/api/target/models'))
-    const models = modelsRes.ok ? await modelsRes.json() : []
-    if (models.length > 0) {
-      loadedModel = await showJuiceModelPicker(models)
-      // null = start fresh, object = picked model, false = cancelled
-      if (loadedModel === false) { restoreBtn(); return }
-    }
-  } catch { /* no models saved yet, skip picker */ }
+    if (modelsRes.ok) savedModels = await modelsRes.json()
+  } catch { /* none saved */ }
 
-  // ── Step 2: Reviewer name ─────────────────────────────────────────
-  const name = await pixelPrompt(
-    'Who is reviewing these findings?\nEnter your name to log the audit.',
-    '🎯 START TARGET PRACTICE',
-    'e.g. Sarah M.'
-  )
-  if (name === null) { restoreBtn(); return }
+  // Restore button — setup screen is now open
+  if (launchBtn) { launchBtn.disabled = false; launchBtn.textContent = '🎯 Todd Target Practice' }
 
-  // ── Step 3: Reset juice in session, optionally load model rules ───
+  // Show the combined setup screen and wait for user to start or cancel
+  const setup = await showTargetSetupScreen(savedModels)
+  if (!setup) return   // user cancelled
+
+  const { reviewerName, loadedModel } = setup
+
+  // Reset juice in session, optionally load model rules
   await fetch(sameOriginApi('/api/target/reset-juice'), {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId: state.sessionId })
   })
-  if (loadedModel) {
-    // Fetch full model (with rules) then load into session
+  if (loadedModel?.id) {
     try {
-      const fullRes  = await fetch(sameOriginApi(`/api/target/models/${loadedModel.id}`))
+      const fullRes   = await fetch(sameOriginApi(`/api/target/models/${loadedModel.id}`))
       const fullModel = fullRes.ok ? await fullRes.json() : null
       if (fullModel?.rules?.length > 0) {
         await fetch(sameOriginApi('/api/target/load-model'), {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sessionId: state.sessionId, rules: fullModel.rules, modelId: loadedModel.id, modelName: loadedModel.name })
         })
-        targetSession.juiceRules    = fullModel.rules
+        targetSession.juiceRules      = fullModel.rules
         targetSession.loadedModelId   = loadedModel.id
         targetSession.loadedModelName = loadedModel.name
         toast(`🧠 Loaded: ${loadedModel.name} (${fullModel.rules.length} rules)`, 'info')
       }
-    } catch { /* fail silently, start fresh */ }
+    } catch { /* fail silently */ }
   } else {
-    targetSession.juiceRules    = []
+    targetSession.juiceRules      = []
     targetSession.loadedModelId   = null
     targetSession.loadedModelName = null
   }
 
-  targetSession.active             = true
-  targetSession.tenants            = [...state.tenants]
-  targetSession.currentIdx         = 0
-  targetSession.sessionId          = 'target-' + Date.now()
-  targetSession.savedCount         = 0
-  targetSession.reviewerName       = name || 'Unknown'
+  targetSession.active              = true
+  targetSession.tenants             = [...state.tenants]
+  targetSession.currentIdx          = 0
+  targetSession.sessionId           = 'target-' + Date.now()
+  targetSession.savedCount          = 0
+  targetSession.reviewerName        = reviewerName || 'Unknown'
   targetSession.correctionsByTenant = []
   targetSession.allTenantResults    = []
 
@@ -5151,6 +5145,79 @@ async function startTargetPractice() {
   gymReset()
   gymShowPanel('loading')
   await targetStartTenant(0)
+}
+
+/**
+ * Show the Target Practice setup screen.
+ * Returns { reviewerName, loadedModel } or null if cancelled.
+ */
+function showTargetSetupScreen(savedModels) {
+  return new Promise(resolve => {
+    const overlay    = document.getElementById('target-setup-overlay')
+    const modelList  = document.getElementById('tso-model-list')
+    const freshBtn   = document.getElementById('tso-fresh-btn')
+    const reviewerIn = document.getElementById('tso-reviewer-input')
+    const startBtn   = document.getElementById('tso-start-btn')
+    const cancelBtn  = document.getElementById('tso-cancel-btn')
+    if (!overlay) { resolve(null); return }
+
+    // Build model buttons
+    modelList.innerHTML = savedModels.map(m => {
+      const score   = m.errorReduction != null ? `${m.errorReduction}% error reduction` : ''
+      const tenants = m.tenantCount ? `${m.tenantCount} tenants` : ''
+      const meta    = [score, tenants, m.reviewerName].filter(Boolean).join(' · ')
+      return `<button class="tso-model-btn" data-id="${m.id}" data-name="${escHtml(m.name)}">
+        <span class="tso-model-name">🧠 ${escHtml(m.name)}</span>
+        ${meta ? `<span class="tso-model-meta">${escHtml(meta)}</span>` : ''}
+        ${m.comment ? `<span class="tso-model-comment">"${escHtml(m.comment)}"</span>` : ''}
+      </button>`
+    }).join('')
+
+    // Track selected model (null = fresh start)
+    let selectedModel = null
+    freshBtn.classList.add('active')
+
+    // Model button click — select/deselect
+    modelList.querySelectorAll('.tso-model-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        modelList.querySelectorAll('.tso-model-btn').forEach(b => b.classList.remove('active'))
+        freshBtn.classList.remove('active')
+        btn.classList.add('active')
+        selectedModel = { id: btn.dataset.id, name: btn.dataset.name }
+      })
+    })
+    freshBtn.addEventListener('click', () => {
+      modelList.querySelectorAll('.tso-model-btn').forEach(b => b.classList.remove('active'))
+      freshBtn.classList.add('active')
+      selectedModel = null
+    })
+
+    reviewerIn.value = ''
+    overlay.classList.remove('hidden')
+    setTimeout(() => reviewerIn.focus(), 80)
+
+    function cleanup(result) {
+      overlay.classList.add('hidden')
+      startBtn.removeEventListener('click', onStart)
+      cancelBtn.removeEventListener('click', onCancel)
+      document.removeEventListener('keydown', onKey)
+      resolve(result)
+    }
+    function onStart() {
+      const name = reviewerIn.value.trim()
+      if (!name) { reviewerIn.focus(); reviewerIn.style.borderColor = '#ef4444'; return }
+      reviewerIn.style.borderColor = ''
+      cleanup({ reviewerName: name, loadedModel: selectedModel })
+    }
+    function onCancel() { cleanup(null) }
+    function onKey(e) {
+      if (e.key === 'Enter' && document.activeElement !== startBtn) { onStart(); e.preventDefault() }
+      if (e.key === 'Escape') { onCancel(); e.preventDefault() }
+    }
+    startBtn.addEventListener('click', onStart)
+    cancelBtn.addEventListener('click', onCancel)
+    document.addEventListener('keydown', onKey)
+  })
 }
 
 // Show a pixel-style modal to pick a juice model or start fresh
