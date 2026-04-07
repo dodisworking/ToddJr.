@@ -1087,23 +1087,45 @@
 
   </div>
 
-  <!-- TARGET PRACTICE: Setup screen — must be outside all screen containers -->
+  <!-- TARGET PRACTICE: Setup screen — outside all screen containers so it always renders -->
   <div id="target-setup-overlay" class="target-setup-overlay hidden">
     <div class="target-setup-box">
-      <h2 class="tso-title">🎯 Target Practice Setup</h2>
-      <div class="tso-section">
-        <label class="tso-label" for="tso-reviewer-input">Your name</label>
-        <input id="tso-reviewer-input" class="tso-input" type="text" placeholder="e.g. Sarah M." maxlength="60" autocomplete="off" />
+      <div class="tso-header">
+        <canvas id="tso-juicebox-canvas" width="40" height="52" style="image-rendering:pixelated"></canvas>
+        <h2 class="tso-title">TARGET PRACTICE</h2>
       </div>
-      <div class="tso-section">
-        <p class="tso-label">Juice Model</p>
-        <p class="tso-sublabel">Load learnings from a previous session to start smarter, or go fresh.</p>
-        <div class="tso-model-list" id="tso-model-list"></div>
-        <button class="tso-model-btn tso-model-fresh active" id="tso-fresh-btn" data-id="" data-name="">⚡ Start Fresh (no juice)</button>
+
+      <div class="tso-field">
+        <label class="tso-label" for="tso-reviewer-input">REVIEWER</label>
+        <input id="tso-reviewer-input" class="tso-input" type="text" placeholder="Enter your name..." maxlength="60" autocomplete="off" />
       </div>
+
+      <div class="tso-field">
+        <label class="tso-label">JUICE</label>
+        <div class="tso-juice-row">
+          <div class="tso-juice-status" id="tso-juice-status">
+            <span class="tso-juice-none">⚡ NONE — FRESH START</span>
+          </div>
+          <button class="btn-tso-juice" id="tso-juice-btn">📚 ADD JUICE</button>
+        </div>
+      </div>
+
       <div class="tso-actions">
-        <button id="tso-start-btn" class="btn-tso-start">🎯 Start Target Practice</button>
-        <button id="tso-cancel-btn" class="btn-tso-cancel">✕ Cancel</button>
+        <button id="tso-start-btn" class="btn-tso-start">▶ START</button>
+        <button id="tso-cancel-btn" class="btn-tso-cancel">✕ CANCEL</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TARGET PRACTICE: Juice Library overlay -->
+  <div id="juice-library-overlay" class="juice-library-overlay hidden">
+    <div class="juice-library-box">
+      <div class="jlib-header">
+        <span class="jlib-title">🧠 JUICE LIBRARY</span>
+        <button class="jlib-close" id="jlib-close-btn">✕</button>
+      </div>
+      <div class="jlib-list" id="jlib-list">
+        <!-- filled dynamically -->
       </div>
     </div>
   </div>
