@@ -5146,7 +5146,12 @@ function showTargetSetupScreen() {
     const reviewerIn = document.getElementById('tso-reviewer-input')
     const startBtn   = document.getElementById('tso-start-btn')
     const cancelBtn  = document.getElementById('tso-cancel-btn')
-    if (!overlay) { resolve(null); return }
+    if (!overlay || !modelList || !reviewerIn || !startBtn || !cancelBtn) {
+      // Fallback: use basic prompt if overlay elements aren't in DOM
+      pixelPrompt('Who is reviewing these findings?', '🎯 START TARGET PRACTICE', 'e.g. Sarah M.')
+        .then(name => resolve(name ? { reviewerName: name, loadedModel: null } : null))
+      return
+    }
 
     // Show screen immediately
     let selectedModel = null
