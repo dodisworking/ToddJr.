@@ -5171,10 +5171,11 @@ async function startTP2() {
   tp2Session.tenants.forEach((t, i) => {
     tp2Session.analysisCache[t.id] = { status: i < WAVE_SIZE ? 'pending' : 'queued', data: null }
   })
-  // Fire first wave immediately — they load during the 7-min countdown
+  // Fire first wave — all file registrations in parallel, then all SSEs simultaneously
   tp2Session.batchLoadingActive = true
   const waveSize = Math.min(WAVE_SIZE, tp2Session.tenants.length)
-  for (let i = 0; i < waveSize; i++) tp2AnalyzeTenant(i)
+  const firstWaveIndices = Array.from({ length: waveSize }, (_, i) => i)
+  tp2AnalyzeBatch(firstWaveIndices)  // non-blocking
   tp2ShowBatchLoadingScreen()
 }
 
@@ -5190,46 +5191,63 @@ function tp2StartBatch(startIdx) {
   }
 }
 
-/** Background analysis for a single tenant — stores result in cache */
-async function tp2AnalyzeTenant(idx) {
+/** Register files for a batch of tenants in parallel, then open ALL SSEs simultaneously */
+async function tp2AnalyzeBatch(indices) {
+  if (!indices.length) return
+  // Set all to 'loading' immediately so dots update
+  indices.forEach(idx => {
+    const tenantId = tp2Session.tenants[idx]?.id
+    if (tenantId) tp2Session.analysisCache[tenantId] = { status: 'loading', data: null }
+  })
+  tp2UpdateBatchProgress()
+
+  // Register all files in parallel — no stagger
+  await Promise.all(indices.map(idx => {
+    const tenantId = tp2Session.tenants[idx]?.id
+    return tenantId ? gymRegisterLocalFiles(tenantId) : Promise.resolve()
+  }))
+
+  // Open ALL SSE connections in the same synchronous loop — truly simultaneous
+  indices.forEach(idx => tp2OpenSSE(idx))
+}
+
+/** Open a single SSE connection for one tenant (called after file registration) */
+function tp2OpenSSE(idx) {
   const tenant = tp2Session.tenants[idx]
   if (!tenant) return
   const tenantId = tenant.id
-  tp2Session.analysisCache[tenantId] = { status: 'loading', data: null }
-  try {
-    await gymRegisterLocalFiles(tenantId)
-    const url = sameOriginApi(
-      `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenantId)}${cheapQs()}`
-    )
-    const es = new EventSource(url)
-    es.addEventListener('gym-complete', e => {
-      es.close()
-      const d = JSON.parse(e.data)
-      tp2Session.analysisCache[tenantId] = { status: 'ready', data: d }
-      tp2Session.readyQueue.push(idx)       // arrival order
-      tp2UpdateBatchProgress()              // update dots / maybe enter review
-      tp2CheckWaitingNext()                 // serve reviewer if waiting
-    })
-    es.addEventListener('gym-error', e => {
-      es.close()
-      const d = JSON.parse(e.data)
+  const url = sameOriginApi(
+    `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenantId)}${cheapQs()}`
+  )
+  const es = new EventSource(url)
+  es.addEventListener('gym-complete', e => {
+    es.close()
+    const d = JSON.parse(e.data)
+    tp2Session.analysisCache[tenantId] = { status: 'ready', data: d }
+    tp2Session.readyQueue.push(idx)
+    tp2UpdateBatchProgress()
+    tp2CheckWaitingNext()
+  })
+  es.addEventListener('gym-error', e => {
+    es.close()
+    tp2Session.analysisCache[tenantId] = { status: 'error', data: null }
+    console.warn(`[tp2] tenant ${idx + 1} error:`, JSON.parse(e.data).error)
+    tp2UpdateBatchProgress()
+    tp2CheckWaitingNext()
+  })
+  es.onerror = () => {
+    es.close()
+    if (tp2Session.analysisCache[tenantId]?.status === 'loading') {
       tp2Session.analysisCache[tenantId] = { status: 'error', data: null }
-      console.warn(`[tp2] tenant ${idx + 1} error:`, d.error)
       tp2UpdateBatchProgress()
       tp2CheckWaitingNext()
-    })
-    es.onerror = () => {
-      es.close()
-      if (tp2Session.analysisCache[tenantId]?.status === 'loading') {
-        tp2Session.analysisCache[tenantId] = { status: 'error', data: null }
-        tp2UpdateBatchProgress()
-        tp2CheckWaitingNext()
-      }
     }
-  } catch (err) {
-    tp2Session.analysisCache[tenantId] = { status: 'error', data: null }
-    tp2CheckWaitingNext()
   }
+}
+
+/** Legacy single-tenant wrapper — kept for backward compat */
+async function tp2AnalyzeTenant(idx) {
+  await tp2AnalyzeBatch([idx])
 }
 
 /** Called when a background analysis finishes — serves reviewer if they're waiting */
@@ -5336,8 +5354,10 @@ function tp2UpdateBatchProgress() {
     const status   = cache?.status || 'pending'
     if (status === 'ready')       { readyCount++; doneCount++ }
     else if (status === 'error')  { doneCount++ }
-    const icon = status === 'ready' ? '✅' : status === 'error' ? '❌' : '⏳'
-    items.push(`<div class="tp2-dot-row"><span class="tp2-dot-icon">${icon}</span><span class="tp2-dot-name">${escHtml(tp2Session.tenants[i].tenantName)}</span></div>`)
+    const icon   = status === 'ready' ? '✅' : status === 'error' ? '❌' : '⏳'
+    const keyNum = (i % 3) + 1  // which API key handles this tenant (1, 2, or 3)
+    const keyTag = `<span class="tp2-dot-key">API ${keyNum}</span>`
+    items.push(`<div class="tp2-dot-row"><span class="tp2-dot-icon">${icon}</span><span class="tp2-dot-name">${escHtml(tp2Session.tenants[i].tenantName)}</span>${keyTag}</div>`)
   }
 
   if (dots) dots.innerHTML = items.join('')
@@ -5381,17 +5401,19 @@ function tp2EnterReview() {
 /** Fire up to WAVE_SIZE tenants starting at startIdx — 2 per API key in round-robin */
 function tp2FireWaveAt(startIdx) {
   if (!tp2Session.active) return
-  const end   = Math.min(startIdx + WAVE_SIZE, tp2Session.tenants.length)
-  let   fired = 0
+  const end     = Math.min(startIdx + WAVE_SIZE, tp2Session.tenants.length)
+  const indices = []
   for (let i = startIdx; i < end; i++) {
     const t = tp2Session.tenants[i]
     if (t && tp2Session.analysisCache[t.id]?.status === 'queued') {
       tp2Session.analysisCache[t.id] = { status: 'pending', data: null }
-      tp2AnalyzeTenant(i)
-      fired++
+      indices.push(i)
     }
   }
-  if (fired > 0) console.log(`[tp2] wave fired: tenants ${startIdx + 1}–${end} (${fired} new)`)
+  if (indices.length > 0) {
+    console.log(`[tp2] wave fired: tenants ${startIdx + 1}–${end} (${indices.length} new, all simultaneous)`)
+    tp2AnalyzeBatch(indices)  // all register in parallel → all SSEs open together
+  }
 }
 
 /** Backward-compat alias — fires wave starting at WAVE_SIZE (wave 2) */

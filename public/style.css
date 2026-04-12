@@ -7734,3 +7734,12 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   flex: 1;
   text-transform: uppercase;
 }
+.tp2-dot-key {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: var(--color-accent);
+  opacity: 0.6;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+  margin-left: 6px;
+}
