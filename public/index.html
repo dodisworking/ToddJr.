@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=64" />
+  <link rel="stylesheet" href="style.css?v=65" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
@@ -736,6 +736,7 @@
           <button type="button" id="gym-save-isaac-btn" class="btn-gym-isaac">💾 Save for Isaac</button>
           <button type="button" id="gym-ex-save-next-btn" class="btn-gym-ex-save hidden">💾 Save & Next Tenant ›</button>
           <button type="button" id="gym-target-save-btn" class="btn-gym-target-save hidden">💾 Save Report &amp; Next →</button>
+          <button type="button" id="gym-tp2-save-btn" class="btn-gym-tp2-save hidden">✅ Save &amp; Next →</button>
           <button id="gym-submit-btn" class="btn-gym-submit">💪 Analysis Workout</button>
         </div>
       </div>
@@ -790,6 +791,50 @@
           <button id="tsc-save-model-btn" class="btn-tsc-save">💾 Save as Juice Model</button>
           <button id="tsc-done-btn" class="btn-tsc-done">← Back to Gym</button>
         </div>
+      </div>
+    </div>
+
+    <!-- PANEL: TP 2.0 Session Complete -->
+    <div id="tp2-session-complete" class="gym-panel gym-panel-center hidden">
+      <div class="tsc-box tp2sc-box">
+        <h2 class="tsc-title">⚡ Rapid Batch Complete</h2>
+        <div class="tsc-stats-row">
+          <div class="tsc-stat"><span class="tsc-stat-val" id="tp2sc-tenants">—</span><span class="tsc-stat-lbl">Tenants</span></div>
+          <div class="tsc-stat"><span class="tsc-stat-val tp2sc-rules-val" id="tp2sc-rules">—</span><span class="tsc-stat-lbl">Rules Extracted</span></div>
+        </div>
+        <p class="tsc-reviewer-line">Reviewed by: <strong id="tp2sc-reviewer"></strong></p>
+        <p class="tsc-parent-row hidden" id="tp2sc-parent-row"></p>
+        <div class="tp2sc-juice-section">
+          <p class="tp2sc-juice-hint">Synthesize ALL session feedback into one powerful juice model:</p>
+          <button id="tp2sc-juice-btn" class="btn-tp2sc-juice">⚡ Deep Juice Extract</button>
+        </div>
+        <div class="tsc-actions">
+          <button id="tp2sc-download-btn" class="btn-tsc-download">📥 Download Findings</button>
+          <button id="tp2sc-save-model-btn" class="btn-tsc-save" disabled>💾 Save as Juice Model</button>
+          <button id="tp2sc-done-btn" class="btn-tsc-done">← Back to Gym</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODE PICKER: Classic vs Rapid Batch -->
+    <div id="tp-mode-picker-overlay" class="tp-mode-overlay hidden">
+      <div class="tp-mode-box">
+        <h2 class="tp-mode-title">🎯 TARGET PRACTICE</h2>
+        <div class="tp-mode-cards">
+          <button id="tp-mode-classic-btn" class="tp-mode-card">
+            <div class="tp-mode-card-icon">🏹</div>
+            <div class="tp-mode-card-label">CLASSIC</div>
+            <div class="tp-mode-card-sub">TP 1.0</div>
+            <div class="tp-mode-card-desc">One tenant at a time · Active learning per tenant</div>
+          </button>
+          <button id="tp-mode-rapid-btn" class="tp-mode-card tp-mode-card-rapid">
+            <div class="tp-mode-card-icon">⚡</div>
+            <div class="tp-mode-card-label">RAPID BATCH</div>
+            <div class="tp-mode-card-sub">TP 2.0</div>
+            <div class="tp-mode-card-desc">5 at once · Deep Juice Extract at the end</div>
+          </button>
+        </div>
+        <button id="tp-mode-cancel-btn" class="tp-mode-cancel">✕ Cancel</button>
       </div>
     </div>
 
@@ -1172,7 +1217,7 @@
   <script src="drlab-flasks.js?v=6"></script>
   <script src="sbs-boxing.js?v=3"></script>
   <script src="target-game.js?v=4"></script>
-  <script src="app.js?v=90"></script>
+  <script src="app.js?v=91"></script>
   <script src="game-mode.js?v=4"></script>
   <script src="rr-app.js?v=1"></script>
 </body>

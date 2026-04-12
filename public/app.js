@@ -4127,7 +4127,7 @@ function showCookCta() {
 // ═══════════════════════════════════════════════════════════
 
 document.getElementById('btn-cook').addEventListener('click', startCook)
-document.getElementById('btn-target-practice')?.addEventListener('click', startTargetPractice)
+document.getElementById('btn-target-practice')?.addEventListener('click', () => startTargetPracticeWithPicker())
 
 async function startCook() {
   stopArena()
@@ -4965,6 +4965,424 @@ const targetSession = {
   loadedModelName:     null,
   synthesizing:        false, // true while synthesis call is in flight
   allTenantResults:    []    // accumulated per-tenant findings for session download
+}
+
+// ── Target Practice 2.0 session state ─────────────────────
+const tp2Session = {
+  active:            false,
+  tenants:           [],
+  reviewerName:      '',
+  sessionId:         null,
+  batchSize:         5,
+  currentIdx:        0,
+  analysisCache:     {},   // tenantId → { status:'pending'|'loading'|'ready'|'error', data }
+  allFeedbacks:      [],   // [{tenantName,tenantIdx,confirmedFindings,rejectedFindings,annotations}]
+  allTenantResults:  [],   // for Excel download
+  waitingForIdx:     -1,   // >-1 means UI is waiting for this idx to become ready
+  loadedModelId:     null,
+  loadedModelName:   null,
+  deepJuiceRules:    [],
+  deepJuiceSummary:  ''
+}
+
+/** Show mode picker overlay; returns 'classic'|'rapid'|null (cancelled) */
+function showTargetModePicker() {
+  return new Promise(resolve => {
+    const overlay    = document.getElementById('tp-mode-picker-overlay')
+    const classicBtn = document.getElementById('tp-mode-classic-btn')
+    const rapidBtn   = document.getElementById('tp-mode-rapid-btn')
+    const cancelBtn  = document.getElementById('tp-mode-cancel-btn')
+    if (!overlay) { resolve('classic'); return }
+    overlay.classList.remove('hidden')
+    function cleanup(mode) {
+      overlay.classList.add('hidden')
+      classicBtn?.removeEventListener('click', onClassic)
+      rapidBtn?.removeEventListener('click', onRapid)
+      cancelBtn?.removeEventListener('click', onCancel)
+      document.removeEventListener('keydown', onKey)
+      resolve(mode)
+    }
+    function onClassic() { cleanup('classic') }
+    function onRapid()   { cleanup('rapid') }
+    function onCancel()  { cleanup(null) }
+    function onKey(e)    { if (e.key === 'Escape') { onCancel(); e.preventDefault() } }
+    classicBtn?.addEventListener('click', onClassic)
+    rapidBtn?.addEventListener('click', onRapid)
+    cancelBtn?.addEventListener('click', onCancel)
+    document.addEventListener('keydown', onKey)
+  })
+}
+
+/** Entry point — shows mode picker, then routes to classic or rapid */
+async function startTargetPracticeWithPicker() {
+  if (state.tenants.length === 0) { toast('Upload files first', 'error'); return }
+  const mode = await showTargetModePicker()
+  if (!mode) return
+  if (mode === 'classic') startTargetPractice()
+  else startTP2()
+}
+
+// ─── TP 2.0 ───────────────────────────────────────────────
+
+async function startTP2() {
+  if (state.tenants.length === 0) { toast('Upload files first', 'error'); return }
+
+  const setup = await showTargetSetupScreen()
+  if (!setup) return
+  const { reviewerName, loadedModel } = setup
+
+  await fetch(sameOriginApi('/api/target/reset-juice'), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: state.sessionId })
+  })
+
+  // Initialise state
+  tp2Session.active           = true
+  tp2Session.tenants          = [...state.tenants]
+  tp2Session.reviewerName     = reviewerName || 'Unknown'
+  tp2Session.sessionId        = 'tp2-' + Date.now()
+  tp2Session.currentIdx       = 0
+  tp2Session.analysisCache    = {}
+  tp2Session.allFeedbacks     = []
+  tp2Session.allTenantResults = []
+  tp2Session.waitingForIdx    = -1
+  tp2Session.loadedModelId    = null
+  tp2Session.loadedModelName  = null
+  tp2Session.deepJuiceRules   = []
+  tp2Session.deepJuiceSummary = ''
+
+  if (loadedModel?.id) {
+    try {
+      const fullRes   = await fetch(sameOriginApi(`/api/target/models/${loadedModel.id}`))
+      const fullModel = fullRes.ok ? await fullRes.json() : null
+      if (fullModel?.rules?.length > 0) {
+        await fetch(sameOriginApi('/api/target/load-model'), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: state.sessionId, rules: fullModel.rules, modelId: loadedModel.id, modelName: loadedModel.name })
+        })
+        tp2Session.loadedModelId   = loadedModel.id
+        tp2Session.loadedModelName = loadedModel.name
+        toast(`🧠 Loaded: ${loadedModel.name} (${fullModel.rules.length} rules)`, 'info')
+      }
+    } catch { /* fail silently */ }
+  }
+
+  gymState.mode = 'tp2'
+  gymState.isTargetPractice = true
+  goTo('gym')
+  gymReset()
+  gymState.mode = 'tp2'
+  gymState.isTargetPractice = true
+
+  // Fire first batch immediately, then show loading for tenant 0
+  tp2StartBatch(0)
+  tp2ShowWaitingScreen(0)
+}
+
+/** Fire up to batchSize analyses starting at startIdx — all non-blocking */
+function tp2StartBatch(startIdx) {
+  const end = Math.min(startIdx + tp2Session.batchSize, tp2Session.tenants.length)
+  for (let i = startIdx; i < end; i++) {
+    const tenantId = tp2Session.tenants[i].id
+    if (!tp2Session.analysisCache[tenantId]) {
+      tp2Session.analysisCache[tenantId] = { status: 'pending', data: null }
+      tp2AnalyzeTenant(i)  // non-blocking
+    }
+  }
+}
+
+/** Background analysis for a single tenant — stores result in cache */
+async function tp2AnalyzeTenant(idx) {
+  const tenant = tp2Session.tenants[idx]
+  if (!tenant) return
+  const tenantId = tenant.id
+  tp2Session.analysisCache[tenantId] = { status: 'loading', data: null }
+  try {
+    await gymRegisterLocalFiles(tenantId)
+    const url = sameOriginApi(
+      `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenantId)}${cheapQs()}`
+    )
+    const es = new EventSource(url)
+    es.addEventListener('gym-complete', e => {
+      es.close()
+      const d = JSON.parse(e.data)
+      tp2Session.analysisCache[tenantId] = { status: 'ready', data: d }
+      tp2CheckWaiting(idx)
+    })
+    es.addEventListener('gym-error', e => {
+      es.close()
+      const d = JSON.parse(e.data)
+      tp2Session.analysisCache[tenantId] = { status: 'error', data: null }
+      console.warn(`[tp2] tenant ${idx + 1} error:`, d.error)
+      tp2CheckWaiting(idx)
+    })
+    es.onerror = () => {
+      es.close()
+      if (tp2Session.analysisCache[tenantId]?.status === 'loading') {
+        tp2Session.analysisCache[tenantId] = { status: 'error', data: null }
+        tp2CheckWaiting(idx)
+      }
+    }
+  } catch (err) {
+    tp2Session.analysisCache[tenantId] = { status: 'error', data: null }
+    tp2CheckWaiting(idx)
+  }
+}
+
+/** Called when a background analysis finishes — auto-advances if UI was waiting */
+function tp2CheckWaiting(completedIdx) {
+  if (!tp2Session.active) return
+  if (tp2Session.waitingForIdx === completedIdx) {
+    tp2Session.waitingForIdx = -1
+    tp2StartReview(completedIdx)
+  }
+}
+
+/** Show loading screen while waiting for a tenant's background analysis */
+function tp2ShowWaitingScreen(idx) {
+  const tenant = tp2Session.tenants[idx]
+  const total  = tp2Session.tenants.length
+  gymState.isTargetPractice = true
+  gymShowPanel('loading')
+  const titleEl = document.getElementById('gym-title')
+  if (titleEl) titleEl.textContent = '🎯 Target Practice 2.0'
+  document.getElementById('gym-subtitle').textContent  = `🎯 Rapid Batch ${idx + 1}/${total}: ${tenant?.tenantName || ''}`
+  document.getElementById('gym-loading-msg').textContent = '⏳ Hang on, loading in background...'
+  document.getElementById('gym-progress-fill').style.width = '35%'
+  tp2Session.waitingForIdx = idx
+}
+
+/** Navigate reviewer to tenant idx — instant from cache or show wait screen */
+function tp2NavigateTo(idx) {
+  tp2Session.currentIdx = idx
+  const tenantId = tp2Session.tenants[idx]?.id
+  const cache    = tenantId ? tp2Session.analysisCache[tenantId] : null
+  if (cache?.status === 'ready') tp2StartReview(idx)
+  else tp2ShowWaitingScreen(idx)
+}
+
+/** Pre-load next batch when reviewer moves to position 1 (2nd) in current batch */
+function tp2MaybePreloadNextBatch(newIdx) {
+  const bs         = tp2Session.batchSize
+  const batchStart = Math.floor(newIdx / bs) * bs
+  const posInBatch = newIdx - batchStart
+  if (posInBatch === 1) {
+    const nextBatchStart = batchStart + bs
+    if (nextBatchStart < tp2Session.tenants.length) tp2StartBatch(nextBatchStart)
+  }
+}
+
+/** Launch the review UI for a ready tenant */
+function tp2StartReview(idx) {
+  if (!tp2Session.active) return
+  const tenant   = tp2Session.tenants[idx]
+  if (!tenant) return
+  const tenantId = tenant.id
+  const cache    = tp2Session.analysisCache[tenantId]
+  const total    = tp2Session.tenants.length
+
+  if (!cache || cache.status === 'error') {
+    toast(`Tenant ${idx + 1} failed — skipping.`, 'error')
+    const next = idx + 1
+    if (next < total) { tp2MaybePreloadNextBatch(next); tp2NavigateTo(next) }
+    else tp2FinishSession()
+    return
+  }
+  if (cache.status !== 'ready') {
+    tp2ShowWaitingScreen(idx)
+    return
+  }
+
+  gymReset()
+  gymState.mode = 'tp2'
+  gymState.isTargetPractice = true
+  gymLaunchWorkout(cache.data)
+
+  document.getElementById('gym-save-isaac-btn')?.classList.add('hidden')
+  document.getElementById('gym-ex-save-next-btn')?.classList.add('hidden')
+  document.getElementById('gym-submit-btn')?.classList.add('hidden')
+  document.getElementById('gym-target-save-btn')?.classList.add('hidden')
+  const tp2SaveBtn = document.getElementById('gym-tp2-save-btn')
+  if (tp2SaveBtn) {
+    tp2SaveBtn.classList.remove('hidden')
+    tp2SaveBtn.disabled = false
+    tp2SaveBtn.textContent = idx < total - 1 ? '✅ Save & Next →' : '✅ Save Final'
+  }
+
+  const wrap  = document.getElementById('gym-ex-progress-wrap')
+  const fill  = document.getElementById('gym-ex-progress-fill')
+  const label = document.getElementById('gym-ex-progress-label')
+  if (wrap) wrap.classList.remove('hidden')
+  const pct = total > 1 ? Math.round((idx / total) * 100) : 0
+  if (fill)  fill.style.width = pct + '%'
+  if (label) label.textContent = `🎯 Rapid Batch: ${idx + 1} of ${total} — ${tenant.tenantName}`
+}
+
+async function tp2SaveAndNext() {
+  const btn = document.getElementById('gym-tp2-save-btn')
+  if (btn) { btn.disabled = true; btn.textContent = '💾 Saving...' }
+
+  const findings    = gymFindingsForIsaacPayload()
+  const feedbacks   = gymFeedbacksArray()
+  const annotations = gymAnnotationsForIsaacExcel()
+  const idx         = tp2Session.currentIdx
+
+  const rejectedFindings = findings.filter(f => {
+    const fb = (gymState.feedbacks || {})[f.id]
+    return fb && (fb.verdict === 'wrong' || fb.verdict === 'partial')
+  }).map(f => {
+    const fb = (gymState.feedbacks || {})[f.id] || {}
+    return { ...f, reviewerNote: (fb.verdict === 'partial' ? '◐ Partial: ' : '') + (fb.comment || '') }
+  })
+  const confirmedFindings = findings.filter(f => {
+    const fb = (gymState.feedbacks || {})[f.id]
+    return !fb || fb.verdict === 'correct'
+  })
+
+  tp2Session.allFeedbacks.push({
+    tenantName: gymState.tenantName, tenantIdx: idx,
+    confirmedFindings, rejectedFindings, annotations: gymAnnotationsForIsaacExcel()
+  })
+  const tenantMeta = state.tenants.find(t => t.id === gymState.tenantId) || {}
+  tp2Session.allTenantResults.push({
+    tenantName: gymState.tenantName, folderName: gymState.folderName,
+    property: tenantMeta.property || '', suite: tenantMeta.suite || '',
+    confirmedFindings, rejectedFindings, annotations: gymAnnotationsForIsaacExcel()
+  })
+
+  // Save to Isaac — fire non-blocking
+  const payload = {
+    type: 'tp2-practice', tenantName: gymState.tenantName, folderName: gymState.folderName,
+    findings, feedbacks, annotations,
+    sessionId: tp2Session.sessionId, sessionIdx: idx, sessionTotal: tp2Session.tenants.length,
+    reviewerName: tp2Session.reviewerName, uploadSessionId: state.sessionId, tenantId: gymState.tenantId
+  }
+  const localFiles = buildIsaacLocalFiles(gymState.tenantId)
+  if (localFiles) payload.localFiles = localFiles
+  fetch(sameOriginApi('/api/gym/save-for-isaac'), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).catch(() => {})
+
+  sfxReady()
+  if (btn) btn.textContent = '✅ Saved!'
+  await new Promise(r => setTimeout(r, 400))
+
+  const next = idx + 1
+  if (next >= tp2Session.tenants.length) { tp2FinishSession(); return }
+  tp2MaybePreloadNextBatch(next)
+  tp2NavigateTo(next)
+}
+
+function tp2FinishSession() {
+  tp2Session.active = false
+  gymState.mode     = null
+  document.getElementById('gym-ex-progress-wrap')?.classList.add('hidden')
+  sfxHuntComplete()
+  tp2ShowSessionComplete()
+}
+
+function tp2ShowSessionComplete() {
+  const panel = document.getElementById('tp2-session-complete')
+  if (!panel) {
+    toast(`🎯 Rapid Batch done — ${tp2Session.tenants.length} tenants reviewed.`, 'success')
+    gymOpenPicker()
+    return
+  }
+  document.getElementById('tp2sc-tenants').textContent  = tp2Session.tenants.length
+  document.getElementById('tp2sc-reviewer').textContent = tp2Session.reviewerName
+  document.getElementById('tp2sc-rules').textContent    = '—'
+  const saveBtn = document.getElementById('tp2sc-save-model-btn')
+  if (saveBtn) saveBtn.disabled = true
+  const parentRow = document.getElementById('tp2sc-parent-row')
+  if (parentRow) {
+    parentRow.textContent = tp2Session.loadedModelName ? `↳ Loaded: ${tp2Session.loadedModelName}` : ''
+    parentRow.classList.toggle('hidden', !tp2Session.loadedModelName)
+  }
+  goTo('gym')
+  gymShowPanel('tp2-complete')
+}
+
+async function tp2DeepJuiceExtract() {
+  const btn = document.getElementById('tp2sc-juice-btn')
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Extracting...' }
+  try {
+    const res = await fetch(sameOriginApi('/api/target/deep-synthesize'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: state.sessionId, tenantFeedbacks: tp2Session.allFeedbacks })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Deep synthesis failed')
+    tp2Session.deepJuiceRules   = data.rules   || []
+    tp2Session.deepJuiceSummary = data.summary || ''
+    const rulesEl = document.getElementById('tp2sc-rules')
+    if (rulesEl) rulesEl.textContent = tp2Session.deepJuiceRules.length
+    if (btn) btn.textContent = `⚡ ${tp2Session.deepJuiceRules.length} Rules Extracted!`
+    sfxReady()
+    const saveBtn = document.getElementById('tp2sc-save-model-btn')
+    if (saveBtn) saveBtn.disabled = false
+    toast(`⚡ Deep Juice: ${tp2Session.deepJuiceRules.length} rules from ${tp2Session.allFeedbacks.length} tenants`, 'success')
+  } catch (err) {
+    sfxError()
+    toast('Deep synthesis failed: ' + err.message, 'error')
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ Deep Juice Extract' }
+  }
+}
+
+async function tp2SaveJuiceModel() {
+  const rules = tp2Session.deepJuiceRules
+  if (!rules?.length) { toast('Run Deep Juice Extract first', 'error'); return }
+  const comment = await pixelPrompt('Add a note about this model (optional).', '💾 SAVE JUICE MODEL', 'e.g. Great for retail strip malls')
+  if (comment === null) return
+  const btn = document.getElementById('tp2sc-save-model-btn')
+  if (btn) { btn.disabled = true; btn.textContent = '💾 Saving...' }
+  try {
+    const res = await fetch(sameOriginApi('/api/target/save-model'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rules, reviewerName: tp2Session.reviewerName, comment: comment || '',
+        correctionsByTenant: tp2Session.allFeedbacks.map(f => f.rejectedFindings.length + f.annotations.length),
+        sessionId: tp2Session.sessionId, tenantCount: tp2Session.tenants.length,
+        parentModelId: tp2Session.loadedModelId, parentModelName: tp2Session.loadedModelName
+      })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Save failed')
+    if (btn) btn.textContent = '✅ Model Saved!'
+    sfxReady()
+    toast(`🧠 Juice Model saved — ${data.errorReduction}% error reduction recorded`, 'success')
+  } catch (err) {
+    sfxError()
+    toast('Save failed: ' + err.message, 'error')
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Save as Juice Model' }
+  }
+}
+
+async function tp2DownloadFindings() {
+  const btn = document.getElementById('tp2sc-download-btn')
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Generating...' }
+  try {
+    const res = await fetch(sameOriginApi('/api/target/download-excel'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tenantResults: tp2Session.allTenantResults,
+        reviewerName:  tp2Session.reviewerName,
+        juiceRules:    tp2Session.deepJuiceRules || [],
+        sessionId:     tp2Session.sessionId
+      })
+    })
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Download failed')
+    const blob = await res.blob()
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a'); a.href = url
+    a.download = `Target-Practice-2-${new Date().toISOString().slice(0, 10)}.xlsx`
+    a.click(); URL.revokeObjectURL(url)
+    if (btn) { btn.disabled = false; btn.textContent = '📥 Download Findings' }
+  } catch (err) {
+    sfxError()
+    toast('Download failed: ' + err.message, 'error')
+    if (btn) { btn.disabled = false; btn.textContent = '📥 Download Findings' }
+  }
 }
 
 // ── Exercise Session state ─────────────────────────────────
@@ -5851,6 +6269,10 @@ async function targetDownloadFindings() {
 document.getElementById('tsc-download-btn')?.addEventListener('click', targetDownloadFindings)
 document.getElementById('tsc-save-model-btn')?.addEventListener('click', targetSaveModel)
 document.getElementById('tsc-done-btn')?.addEventListener('click', () => gymOpenPicker())
+document.getElementById('tp2sc-juice-btn')?.addEventListener('click', tp2DeepJuiceExtract)
+document.getElementById('tp2sc-save-model-btn')?.addEventListener('click', tp2SaveJuiceModel)
+document.getElementById('tp2sc-download-btn')?.addEventListener('click', tp2DownloadFindings)
+document.getElementById('tp2sc-done-btn')?.addEventListener('click', () => gymOpenPicker())
 
 // ── TSC tab switching ──────────────────────────────────────
 document.querySelectorAll('.tsc-tab').forEach(tab => {
@@ -5901,6 +6323,7 @@ function buildTscFindingsTable() {
 }
 
 document.getElementById('gym-target-save-btn')?.addEventListener('click', targetSaveAndNext)
+document.getElementById('gym-tp2-save-btn')?.addEventListener('click', tp2SaveAndNext)
 
 // ── Running animation loop ─────────────────────────────────
 const GYM_RUN_CANVAS = document.getElementById('gym-run-canvas')
@@ -5936,10 +6359,7 @@ document.getElementById('btn-workout').addEventListener('click', () => {
   gymOpenPicker()
 })
 
-document.getElementById('btn-target-launch')?.addEventListener('click', () => {
-  if (state.tenants.length === 0) { toast('Upload files first', 'error'); return }
-  startTargetPractice()
-})
+document.getElementById('btn-target-launch')?.addEventListener('click', () => startTargetPracticeWithPicker())
 
 document.getElementById('gym-back').addEventListener('click', () => {
   if (state.eventSource) { state.eventSource.close(); state.eventSource = null }
@@ -6009,6 +6429,7 @@ function gymShowPanel(name) {
   document.getElementById('gym-panel-workout').classList.toggle('hidden', name !== 'workout')
   document.getElementById('gym-panel-results').classList.toggle('hidden', name !== 'results')
   document.getElementById('target-session-complete')?.classList.toggle('hidden', name !== 'target-complete')
+  document.getElementById('tp2-session-complete')?.classList.toggle('hidden', name !== 'tp2-complete')
 
   if (name === 'loading') {
     const isTP = !!gymState.isTargetPractice

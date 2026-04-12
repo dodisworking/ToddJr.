@@ -10,7 +10,7 @@ import fs from 'fs'
 import os from 'os'
 import unzipper from 'unzipper'
 import { analyzeTenant, gymAnalyzeTenant, beefedUpAnalyzeTenant, doubleCheckTenant } from './lib/analyzer.js'
-import { synthesizeActiveLearning } from './lib/claude.js'
+import { synthesizeActiveLearning, synthesizeDeepLearning } from './lib/claude.js'
 import { openaiAnalyzeTenant, isOpenAiKeyConfigured, getServerOpenAiKeyHint } from './lib/openai.js'
 import { generateReport } from './lib/reporter.js'
 import { mountIsaacRoutes } from './lib/isaac-routes.js'
@@ -1737,6 +1737,24 @@ app.post('/api/target/synthesize', express.json({ limit: '2mb' }), async (req, r
   } catch (err) {
     console.error('[target/synthesize]', err)
     res.status(500).json({ error: err.message || 'Synthesis failed' })
+  }
+})
+
+// POST /api/target/deep-synthesize — end-of-session deep synthesis for TP 2.0
+app.post('/api/target/deep-synthesize', express.json({ limit: '4mb' }), async (req, res) => {
+  try {
+    const { sessionId, tenantFeedbacks = [] } = req.body
+    const session = sessions.get(sessionId)
+    if (!session) return res.status(404).json({ error: 'Session not found' })
+    if (tenantFeedbacks.length === 0) return res.status(400).json({ error: 'No feedback provided' })
+
+    const result = await synthesizeDeepLearning({ tenantFeedbacks })
+    // Store rules in session so they can be loaded if user runs TP 1.0 after
+    session.targetJuiceRules = result.rules || []
+    res.json({ ok: true, rules: session.targetJuiceRules, summary: result.summary || '' })
+  } catch (err) {
+    console.error('[target/deep-synthesize]', err)
+    res.status(500).json({ error: err.message || 'Deep synthesis failed' })
   }
 })
 

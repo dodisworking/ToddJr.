@@ -7301,3 +7301,159 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   box-shadow: 2px 2px 0 #14532d;
   opacity: 0.7;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   TARGET PRACTICE 2.0
+═══════════════════════════════════════════════════════════ */
+
+/* ── TP2 save button in workout panel ─────────────────────── */
+.btn-gym-tp2-save {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  letter-spacing: 0.6px;
+  background: #1e3a1e;
+  border: 2px solid #22c55e;
+  color: #86efac;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
+  box-shadow: 2px 2px 0 #14532d;
+  white-space: nowrap;
+}
+.btn-gym-tp2-save:hover:not(:disabled) {
+  background: #14532d;
+  box-shadow: 3px 3px 0 #052e16;
+}
+.btn-gym-tp2-save:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Mode picker overlay ──────────────────────────────────── */
+.tp-mode-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+.tp-mode-box {
+  background: #0f172a;
+  border: 2px solid #1e3a5f;
+  padding: 32px 28px 24px;
+  max-width: 520px;
+  width: 92%;
+  box-shadow: 0 0 40px rgba(59,130,246,0.12);
+  text-align: center;
+}
+.tp-mode-title {
+  font-family: var(--font-pixel);
+  font-size: 14px;
+  color: #e2e8f0;
+  letter-spacing: 1px;
+  margin: 0 0 24px;
+}
+.tp-mode-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.tp-mode-card {
+  background: #111827;
+  border: 2px solid #1e3a5f;
+  padding: 20px 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  box-shadow: 2px 2px 0 #0a0f1e;
+}
+.tp-mode-card:hover {
+  border-color: #3b82f6;
+  background: #1e293b;
+  box-shadow: 3px 3px 0 #1d4ed8;
+}
+.tp-mode-card-rapid {
+  border-color: #ca8a04;
+}
+.tp-mode-card-rapid:hover {
+  border-color: #facc15;
+  background: #1e293b;
+  box-shadow: 3px 3px 0 #854d0e;
+}
+.tp-mode-card-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+.tp-mode-card-label {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  color: #e2e8f0;
+  letter-spacing: 0.8px;
+}
+.tp-mode-card-sub {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #64748b;
+  letter-spacing: 0.5px;
+}
+.tp-mode-card-desc {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #94a3b8;
+  letter-spacing: 0.3px;
+  line-height: 1.6;
+  text-align: center;
+}
+.tp-mode-cancel {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  letter-spacing: 0.5px;
+  background: none;
+  border: 1px solid #334155;
+  color: #475569;
+  padding: 6px 16px;
+  cursor: pointer;
+}
+.tp-mode-cancel:hover { color: #94a3b8; border-color: #475569; }
+
+/* ── TP 2.0 session complete panel ────────────────────────── */
+.tp2sc-box {
+  max-width: 560px;
+}
+.tp2sc-rules-val {
+  color: #facc15;
+}
+.tp2sc-juice-section {
+  margin: 20px 0 8px;
+  padding: 16px;
+  background: #0a0f1e;
+  border: 1px solid #ca8a04;
+  text-align: center;
+}
+.tp2sc-juice-hint {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #94a3b8;
+  letter-spacing: 0.4px;
+  margin: 0 0 12px;
+}
+.btn-tp2sc-juice {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  letter-spacing: 0.8px;
+  background: #1c1917;
+  border: 2px solid #facc15;
+  color: #fef08a;
+  padding: 10px 22px;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 #713f12;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.btn-tp2sc-juice:hover:not(:disabled) {
+  background: #292524;
+  box-shadow: 3px 3px 0 #451a03;
+}
+.btn-tp2sc-juice:disabled { opacity: 0.5; cursor: not-allowed; }
