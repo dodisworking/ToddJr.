@@ -5544,6 +5544,14 @@ function tp2StartReview(idx) {
 
 async function tp2SaveAndNext() {
   const btn = document.getElementById('gym-tp2-save-btn')
+
+  // Block if any finding still has no verdict
+  const unreviewedCount = (gymState.findings || []).filter(f => !gymState.feedbacks[f.id]).length
+  if (unreviewedCount > 0) {
+    toast(`Mark every finding correct or wrong first — ${unreviewedCount} remaining`, 'error')
+    return
+  }
+
   if (btn) { btn.disabled = true; btn.textContent = '💾 Saving...' }
 
   const findings    = gymFindingsForIsaacPayload()
@@ -5611,18 +5619,76 @@ function tp2ShowSessionComplete() {
     gymOpenPicker()
     return
   }
-  document.getElementById('tp2sc-tenants').textContent  = tp2Session.tenants.length
-  document.getElementById('tp2sc-reviewer').textContent = tp2Session.reviewerName
-  document.getElementById('tp2sc-rules').textContent    = '—'
-  const saveBtn = document.getElementById('tp2sc-save-model-btn')
-  if (saveBtn) saveBtn.disabled = true
-  const parentRow = document.getElementById('tp2sc-parent-row')
-  if (parentRow) {
-    parentRow.textContent = tp2Session.loadedModelName ? `↳ Loaded: ${tp2Session.loadedModelName}` : ''
-    parentRow.classList.toggle('hidden', !tp2Session.loadedModelName)
+
+  let totalConfirmed = 0, totalRejected = 0
+  tp2Session.allFeedbacks.forEach(f => {
+    totalConfirmed += (f.confirmedFindings || []).length
+    totalRejected  += (f.rejectedFindings  || []).length + (f.annotations || []).length
+  })
+
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val }
+  set('tp2sc-confirmed', totalConfirmed)
+  set('tp2sc-rejected',  totalRejected)
+  set('tp2sc-tenants',   tp2Session.tenants.length)
+  set('tp2sc-reviewer',  tp2Session.reviewerName)
+
+  const banner = document.getElementById('tp2sc-synthesis-banner')
+  if (banner) {
+    banner.className = 'tp2sc-synthesis-banner'
+    const icon = banner.querySelector('.tp2sc-banner-icon')
+    const text = banner.querySelector('.tp2sc-banner-text')
+    if (icon) icon.textContent = '⏳'
+    if (text) text.textContent = "Analyzing your session — please don't close this page until we give you the all-clear"
   }
+
   goTo('gym')
   gymShowPanel('tp2-complete')
+
+  // Auto-fire synthesis + save in background — no manual step required
+  tp2AutoSaveJuice()
+}
+
+async function tp2AutoSaveJuice() {
+  const banner = document.getElementById('tp2sc-synthesis-banner')
+  const setB = (cls, iconTxt, msgTxt) => {
+    if (!banner) return
+    banner.className = `tp2sc-synthesis-banner ${cls}`
+    const icon = banner.querySelector('.tp2sc-banner-icon')
+    const text = banner.querySelector('.tp2sc-banner-text')
+    if (icon) icon.textContent = iconTxt
+    if (text) text.textContent = msgTxt
+  }
+  try {
+    const res = await fetch(sameOriginApi('/api/target/deep-synthesize'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: state.sessionId, tenantFeedbacks: tp2Session.allFeedbacks })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Synthesis failed')
+    const rules = data.rules || []
+    tp2Session.deepJuiceRules = rules
+
+    const date      = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    const modelName = `${tp2Session.reviewerName} — ${date}`
+    const saveRes = await fetch(sameOriginApi('/api/target/save-model'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        modelName, rules, reviewerName: tp2Session.reviewerName, comment: '',
+        correctionsByTenant: tp2Session.allFeedbacks.map(f =>
+          (f.rejectedFindings || []).length + (f.annotations || []).length
+        ),
+        sessionId: tp2Session.sessionId, tenantCount: tp2Session.tenants.length,
+        parentModelId: tp2Session.loadedModelId, parentModelName: tp2Session.loadedModelName,
+        deepSynthesis: true
+      })
+    })
+    if (!saveRes.ok) throw new Error((await saveRes.json().catch(() => ({}))).error || 'Save failed')
+    setB('done', '✅', `All clear — juice model saved as "${modelName}"`)
+    sfxReady()
+  } catch (err) {
+    setB('error', '⚠️', `Analysis failed: ${err.message}`)
+    sfxError()
+  }
 }
 
 async function tp2DeepJuiceExtract() {
@@ -6616,10 +6682,12 @@ async function targetDownloadFindings() {
 document.getElementById('tsc-download-btn')?.addEventListener('click', targetDownloadFindings)
 document.getElementById('tsc-save-model-btn')?.addEventListener('click', targetSaveModel)
 document.getElementById('tsc-done-btn')?.addEventListener('click', () => gymOpenPicker())
-document.getElementById('tp2sc-juice-btn')?.addEventListener('click', tp2DeepJuiceExtract)
-document.getElementById('tp2sc-save-model-btn')?.addEventListener('click', tp2SaveJuiceModel)
 document.getElementById('tp2sc-download-btn')?.addEventListener('click', tp2DownloadFindings)
-document.getElementById('tp2sc-done-btn')?.addEventListener('click', () => gymOpenPicker())
+document.getElementById('tp2sc-done-btn')?.addEventListener('click', () => {
+  tp2Session.active = false
+  gymReset()
+  goTo('home')
+})
 
 // ── TSC tab switching ──────────────────────────────────────
 document.querySelectorAll('.tsc-tab').forEach(tab => {
@@ -6867,6 +6935,7 @@ function gymLaunchWorkout(data) {
   if (folderLabel) folderLabel.textContent = `${gymState.files.length} doc${gymState.files.length !== 1 ? 's' : ''}`
 
   renderGymFindingCards()
+  renderGymAnnotations()   // clear annotation DOM from previous tenant
   gymUpdateReviewStatus()
 
   // Load first PDF immediately, then silently pre-load all others in background

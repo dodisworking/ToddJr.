@@ -804,21 +804,20 @@
     <!-- PANEL: TP 2.0 Session Complete -->
     <div id="tp2-session-complete" class="gym-panel gym-panel-center hidden">
       <div class="tsc-box tp2sc-box">
-        <h2 class="tsc-title">⚡ Rapid Batch Complete</h2>
+        <h2 class="tsc-title">⚡ Session Complete</h2>
         <div class="tsc-stats-row">
+          <div class="tsc-stat"><span class="tsc-stat-val" id="tp2sc-confirmed">—</span><span class="tsc-stat-lbl">Confirmed</span></div>
+          <div class="tsc-stat"><span class="tsc-stat-val" id="tp2sc-rejected">—</span><span class="tsc-stat-lbl">Rejected</span></div>
           <div class="tsc-stat"><span class="tsc-stat-val" id="tp2sc-tenants">—</span><span class="tsc-stat-lbl">Tenants</span></div>
-          <div class="tsc-stat"><span class="tsc-stat-val tp2sc-rules-val" id="tp2sc-rules">—</span><span class="tsc-stat-lbl">Rules Extracted</span></div>
         </div>
         <p class="tsc-reviewer-line">Reviewed by: <strong id="tp2sc-reviewer"></strong></p>
-        <p class="tsc-parent-row hidden" id="tp2sc-parent-row"></p>
-        <div class="tp2sc-juice-section">
-          <p class="tp2sc-juice-hint">Synthesize ALL session feedback into one powerful juice model:</p>
-          <button id="tp2sc-juice-btn" class="btn-tp2sc-juice">⚡ Deep Juice Extract</button>
+        <div class="tp2sc-synthesis-banner" id="tp2sc-synthesis-banner">
+          <span class="tp2sc-banner-icon">⏳</span>
+          <span class="tp2sc-banner-text">Analyzing your session — please don't close this page until we give you the all-clear</span>
         </div>
         <div class="tsc-actions">
           <button id="tp2sc-download-btn" class="btn-tsc-download">📥 Download Findings</button>
-          <button id="tp2sc-save-model-btn" class="btn-tsc-save" disabled>💾 Save as Juice Model</button>
-          <button id="tp2sc-done-btn" class="btn-tsc-done">← Back to Gym</button>
+          <button id="tp2sc-done-btn" class="btn-tsc-done">← Go Back Home</button>
         </div>
       </div>
     </div>
@@ -1244,7 +1243,7 @@
   <script src="drlab-flasks.js?v=6"></script>
   <script src="sbs-boxing.js?v=3"></script>
   <script src="target-game.js?v=4"></script>
-  <script src="app.js?v=97"></script>
+  <script src="app.js?v=98"></script>
   <script src="game-mode.js?v=4"></script>
   <script src="rr-app.js?v=1"></script>
 </body>

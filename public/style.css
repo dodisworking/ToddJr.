@@ -6656,6 +6656,25 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
 }
 .btn-tsc-done:hover { background: #273449; color: #cbd5e1; }
 
+/* ── TP2 Session Complete — synthesis banner ─────────────── */
+.tp2sc-synthesis-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #0f172a;
+  border: 1px solid #1e3a5f;
+  color: #94a3b8;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  line-height: 1.6;
+  padding: 12px 14px;
+  letter-spacing: 0.4px;
+  margin: 14px 0 6px;
+}
+.tp2sc-banner-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+.tp2sc-synthesis-banner.done  { border-color: #16a34a; color: #86efac; background: #052e16; }
+.tp2sc-synthesis-banner.error { border-color: #dc2626; color: #fca5a5; background: #1a0000; }
+
 /* ── TSC Tabs ───────────────────────────────────────────── */
 .tsc-tabs {
   display: flex;
