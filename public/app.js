@@ -5683,6 +5683,18 @@ async function tp2AutoSaveJuice() {
       })
     })
     if (!saveRes.ok) throw new Error((await saveRes.json().catch(() => ({}))).error || 'Save failed')
+
+    // Auto-save Excel to Isaac storage so it's viewable in session reports
+    fetch(sameOriginApi('/api/target/download-excel'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tenantResults: tp2Session.allTenantResults,
+        reviewerName:  tp2Session.reviewerName,
+        juiceRules:    rules,
+        sessionId:     tp2Session.sessionId
+      })
+    }).catch(() => {})  // non-blocking, failure is non-fatal
+
     setB('done', '✅', `All clear — juice model saved as "${modelName}"`)
     sfxReady()
   } catch (err) {
