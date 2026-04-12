@@ -6835,6 +6835,26 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   letter-spacing: 0.5px;
 }
 .btn-tso-cancel:hover { border-color: #334155; color: #64748b; }
+.tso-dumb-row { margin-top: 4px; }
+.btn-tso-dumb {
+  width: 100%;
+  padding: 9px 20px;
+  background: transparent;
+  border: 2px solid #334155;
+  color: #64748b;
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+.btn-tso-dumb:hover { border-color: #78350f; color: #fbbf24; }
+.btn-tso-dumb.active {
+  background: #1c1007;
+  border-color: #d97706;
+  color: #fbbf24;
+  text-shadow: 0 0 8px #d97706;
+}
 
 /* ── Juice Library overlay ───────────────────────────────── */
 .juice-library-overlay {

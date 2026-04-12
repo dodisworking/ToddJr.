@@ -5117,7 +5117,7 @@ async function startTP2() {
 
   const setup = await showTargetSetupScreen()
   if (!setup) return
-  const { reviewerName, loadedModel } = setup
+  const { reviewerName, loadedModel, dumbMode } = setup
 
   await fetch(sameOriginApi('/api/target/reset-juice'), {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -5160,8 +5160,8 @@ async function startTP2() {
     } catch { /* fail silently */ }
   }
 
-  // "dumb mode" reviewer name → activate cheap (Haiku) model for this session
-  if (tp2Session.reviewerName.toLowerCase().trim() === 'dumb mode') {
+  // Dumb mode (button toggle) → activate cheap (Haiku) model for this session
+  if (dumbMode) {
     syncCheapToggles(true)
     localStorage.setItem(CHEAP_MODE_KEY, '1')
     toast('🪙 DUMB MODE — using cheap model', 'info')
@@ -5362,7 +5362,7 @@ function tp2UpdateBatchProgress() {
     if (status === 'ready')       { readyCount++; doneCount++ }
     else if (status === 'error')  { doneCount++ }
     const icon   = status === 'ready' ? '✅' : status === 'error' ? '❌' : '⏳'
-    const keyNum = (i % 3) + 1  // which API key handles this tenant (1, 2, or 3)
+    const keyNum = (i % 4) + 1  // which API key handles this tenant (1–4)
     const keyTag = `<span class="tp2-dot-key">API ${keyNum}</span>`
     items.push(`<div class="tp2-dot-row"><span class="tp2-dot-icon">${icon}</span><span class="tp2-dot-name">${escHtml(tp2Session.tenants[i].tenantName)}</span>${keyTag}</div>`)
   }
@@ -5867,7 +5867,7 @@ async function startTargetPractice() {
   const setup = await showTargetSetupScreen(null)   // null = loading state
   if (!setup) return   // user cancelled
 
-  const { reviewerName, loadedModel } = setup
+  const { reviewerName, loadedModel, dumbMode } = setup
 
   // Reset juice in session, optionally load model rules
   await fetch(sameOriginApi('/api/target/reset-juice'), {
@@ -5904,8 +5904,8 @@ async function startTargetPractice() {
   targetSession.correctionsByTenant = []
   targetSession.allTenantResults    = []
 
-  // "dumb mode" reviewer name → cheap model
-  if (targetSession.reviewerName.toLowerCase().trim() === 'dumb mode') {
+  // Dumb mode (button toggle) → cheap model
+  if (dumbMode) {
     syncCheapToggles(true)
     localStorage.setItem(CHEAP_MODE_KEY, '1')
     toast('🪙 DUMB MODE — using cheap model', 'info')
@@ -5935,6 +5935,7 @@ function showTargetSetupScreen() {
     const jlibList    = document.getElementById('jlib-list')
     const jlibClose   = document.getElementById('jlib-close-btn')
     const juiceCanvas = document.getElementById('tso-juicebox-canvas')
+    const dumbBtn     = document.getElementById('tso-dumb-btn')
 
     if (!overlay || !reviewerIn || !startBtn || !cancelBtn) {
       pixelPrompt('Who is reviewing these findings?', '🎯 START TARGET PRACTICE', 'e.g. Sarah M.')
@@ -5947,6 +5948,23 @@ function showTargetSetupScreen() {
 
     let selectedModel = null
     let savedModels   = []
+    let dumbModeOn    = false
+
+    function updateDumbBtn() {
+      if (!dumbBtn) return
+      if (dumbModeOn) {
+        dumbBtn.textContent = '🪙 DUMB MODE: ON'
+        dumbBtn.classList.add('active')
+      } else {
+        dumbBtn.textContent = '🪙 DUMB MODE: OFF'
+        dumbBtn.classList.remove('active')
+      }
+    }
+    dumbBtn && dumbBtn.addEventListener('click', () => {
+      dumbModeOn = !dumbModeOn
+      updateDumbBtn()
+    })
+    updateDumbBtn()
 
     // Reset state
     reviewerIn.value = ''
@@ -6027,7 +6045,7 @@ function showTargetSetupScreen() {
       const name = reviewerIn.value.trim()
       if (!name) { reviewerIn.focus(); reviewerIn.style.borderColor = '#ef4444'; return }
       reviewerIn.style.borderColor = ''
-      cleanup({ reviewerName: name, loadedModel: selectedModel })
+      cleanup({ reviewerName: name, loadedModel: selectedModel, dumbMode: dumbModeOn })
     }
     function onCancel() { cleanup(null) }
     function onKey(e) {
