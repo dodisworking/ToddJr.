@@ -159,7 +159,8 @@ app.get('/api/health/keys', async (_req, res) => {
   const keys = [
     process.env.ANTHROPIC_API_KEY,
     process.env.ANTHROPIC_API_KEY_2,
-    process.env.ANTHROPIC_API_KEY_3
+    process.env.ANTHROPIC_API_KEY_3,
+    process.env.ANTHROPIC_API_KEY_4
   ]
   const results = await Promise.all(keys.map(async (key, i) => {
     if (!key?.trim()) return { key: `KEY_${i + 1}`, status: 'not_configured' }
