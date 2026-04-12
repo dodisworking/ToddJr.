@@ -1186,6 +1186,10 @@ function applyClientMode() {
   // Secret button visual
   const unlockBtn = document.getElementById('btn-secret-unlock')
   if (unlockBtn) unlockBtn.classList.toggle('unlocked', !pub)
+
+  // Juice Library row on home screen — owner only
+  const juiceLibBtn = document.getElementById('btn-juice-library')
+  if (juiceLibBtn) juiceLibBtn.classList.toggle('hidden', pub)
 }
 
 // Run once on load
@@ -6425,6 +6429,7 @@ document.getElementById('btn-workout').addEventListener('click', () => {
 })
 
 document.getElementById('btn-target-launch')?.addEventListener('click', () => startTargetPracticeWithPicker())
+document.getElementById('btn-juice-library')?.addEventListener('click', () => openJuiceReviewer())
 
 document.getElementById('gym-back').addEventListener('click', () => {
   if (state.eventSource) { state.eventSource.close(); state.eventSource = null }
