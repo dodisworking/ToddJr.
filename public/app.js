@@ -5143,9 +5143,10 @@ async function startTP2() {
   gymState.mode = 'tp2'
   gymState.isTargetPractice = true
 
-  // Fire first batch immediately, then show loading for tenant 0
+  // Fire first batch immediately, then show "grab a coffee" progress screen
+  tp2Session.batchLoadingActive = true
   tp2StartBatch(0)
-  tp2ShowWaitingScreen(0)
+  tp2ShowBatchLoadingScreen()
 }
 
 /** Fire up to batchSize analyses starting at startIdx — all non-blocking */
@@ -5176,6 +5177,7 @@ async function tp2AnalyzeTenant(idx) {
       es.close()
       const d = JSON.parse(e.data)
       tp2Session.analysisCache[tenantId] = { status: 'ready', data: d }
+      tp2UpdateBatchProgress()  // update dots / maybe auto-advance
       tp2CheckWaiting(idx)
     })
     es.addEventListener('gym-error', e => {
@@ -5183,12 +5185,14 @@ async function tp2AnalyzeTenant(idx) {
       const d = JSON.parse(e.data)
       tp2Session.analysisCache[tenantId] = { status: 'error', data: null }
       console.warn(`[tp2] tenant ${idx + 1} error:`, d.error)
+      tp2UpdateBatchProgress()
       tp2CheckWaiting(idx)
     })
     es.onerror = () => {
       es.close()
       if (tp2Session.analysisCache[tenantId]?.status === 'loading') {
         tp2Session.analysisCache[tenantId] = { status: 'error', data: null }
+        tp2UpdateBatchProgress()
         tp2CheckWaiting(idx)
       }
     }
@@ -5204,6 +5208,67 @@ function tp2CheckWaiting(completedIdx) {
   if (tp2Session.waitingForIdx === completedIdx) {
     tp2Session.waitingForIdx = -1
     tp2StartReview(completedIdx)
+  }
+}
+
+/** "Grab a coffee" screen — shown while ALL of batch 1 loads in parallel */
+function tp2ShowBatchLoadingScreen() {
+  const bs     = tp2Session.batchSize
+  const total  = tp2Session.tenants.length
+  const count  = Math.min(bs, total)
+  gymState.isTargetPractice = true
+  gymShowPanel('loading')
+  const titleEl = document.getElementById('gym-title')
+  if (titleEl) titleEl.textContent = '⚡ Rapid Batch — Pre-loading'
+  document.getElementById('gym-subtitle').textContent = `Loading ${count} tenants in parallel — sit back`
+  document.getElementById('gym-loading-msg').textContent = '☕ Grab a coffee and come back when ready. We\'ll auto-start when done.'
+  document.getElementById('gym-progress-fill').style.width = '0%'
+
+  // Inject per-tenant status dots if not already there
+  let dots = document.getElementById('tp2-batch-dots')
+  if (!dots) {
+    dots = document.createElement('div')
+    dots.id = 'tp2-batch-dots'
+    dots.className = 'tp2-batch-dots'
+    const progressBar = document.getElementById('gym-progress-fill')?.closest('.gym-loading-progress') || document.getElementById('gym-loading-msg')?.parentElement
+    if (progressBar) progressBar.after(dots)
+    else document.getElementById('gym-panel-loading')?.appendChild(dots)
+  }
+  tp2UpdateBatchProgress()
+}
+
+/** Update per-tenant status dots and progress bar. Auto-advances when all batch 1 are done. */
+function tp2UpdateBatchProgress() {
+  if (!tp2Session.batchLoadingActive) return
+  const bs    = tp2Session.batchSize
+  const count = Math.min(bs, tp2Session.tenants.length)
+  const dots  = document.getElementById('tp2-batch-dots')
+
+  let readyCount = 0
+  const items = []
+  for (let i = 0; i < count; i++) {
+    const tenantId = tp2Session.tenants[i].id
+    const cache    = tp2Session.analysisCache[tenantId]
+    const status   = cache?.status || 'pending'
+    if (status === 'ready' || status === 'error') readyCount++
+    const icon  = status === 'ready' ? '✅' : status === 'error' ? '❌' : '⏳'
+    const name  = tp2Session.tenants[i].tenantName
+    items.push(`<div class="tp2-dot-row"><span class="tp2-dot-icon">${icon}</span><span class="tp2-dot-name">${escHtml(name)}</span></div>`)
+  }
+
+  if (dots) dots.innerHTML = items.join('')
+  const pct = Math.round((readyCount / count) * 100)
+  const fill = document.getElementById('gym-progress-fill')
+  if (fill) fill.style.width = pct + '%'
+  const msg = document.getElementById('gym-loading-msg')
+  if (msg) msg.textContent = readyCount === count
+    ? '🎯 All loaded! Starting review...'
+    : `☕ ${readyCount}/${count} ready — hang tight...`
+
+  // All done → enter review
+  if (readyCount === count) {
+    tp2Session.batchLoadingActive = false
+    setTimeout(() => { if (tp2Session.active) tp2NavigateTo(0) }, 1200)
   }
 }
 

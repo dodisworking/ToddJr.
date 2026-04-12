@@ -7633,3 +7633,38 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   letter-spacing: 0.3px;
 }
 .jrev-delete-btn:hover { color: #ef4444; border-color: #ef4444; }
+
+/* ── TP 2.0 Batch Loading Dots ─────────────────────────── */
+.tp2-batch-dots {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 18px;
+  width: 100%;
+  max-width: 340px;
+  align-self: center;
+}
+.tp2-dot-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: var(--color-text-dim);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  padding: 7px 12px;
+  letter-spacing: 0.4px;
+}
+.tp2-dot-icon {
+  font-size: 12px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.tp2-dot-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  text-transform: uppercase;
+}
