@@ -5081,7 +5081,6 @@ function showTargetModePicker() {
 
 /** Entry point — shows mode picker, then routes to classic or rapid */
 async function startTargetPracticeWithPicker() {
-  if (state.tenants.length === 0) { toast('Upload files first', 'error'); return }
   const mode = await showTargetModePicker()
   if (!mode) return
   if (mode === 'classic') startTargetPractice()

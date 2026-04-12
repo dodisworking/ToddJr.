@@ -816,28 +816,6 @@
       </div>
     </div>
 
-    <!-- MODE PICKER: Classic vs Rapid Batch -->
-    <div id="tp-mode-picker-overlay" class="tp-mode-overlay hidden">
-      <div class="tp-mode-box">
-        <h2 class="tp-mode-title">🎯 TARGET PRACTICE</h2>
-        <div class="tp-mode-cards">
-          <button id="tp-mode-classic-btn" class="tp-mode-card">
-            <div class="tp-mode-card-icon">🏹</div>
-            <div class="tp-mode-card-label">CLASSIC</div>
-            <div class="tp-mode-card-sub">TP 1.0</div>
-            <div class="tp-mode-card-desc">One tenant at a time · Active learning per tenant</div>
-          </button>
-          <button id="tp-mode-rapid-btn" class="tp-mode-card tp-mode-card-rapid">
-            <div class="tp-mode-card-icon">⚡</div>
-            <div class="tp-mode-card-label">RAPID BATCH</div>
-            <div class="tp-mode-card-sub">TP 2.0</div>
-            <div class="tp-mode-card-desc">5 at once · Deep Juice Extract at the end</div>
-          </button>
-        </div>
-        <button id="tp-mode-cancel-btn" class="tp-mode-cancel">✕ Cancel</button>
-      </div>
-    </div>
-
     <!-- TARGET PRACTICE: Juice Model Picker overlay (kept for legacy, hidden) -->
     <div id="target-model-picker-overlay" class="target-model-picker-overlay hidden">
       <div class="target-model-picker-box">
@@ -976,6 +954,28 @@
 
   <!-- ── Secret owner unlock button (bottom-right red pixel) ── -->
   <button type="button" id="btn-secret-unlock" class="secret-unlock-btn" title="" aria-label="Owner access"></button>
+
+  <!-- MODE PICKER: Classic vs Rapid Batch (outside screen-gym to avoid overflow:hidden clip) -->
+  <div id="tp-mode-picker-overlay" class="tp-mode-overlay hidden">
+    <div class="tp-mode-box">
+      <h2 class="tp-mode-title">🎯 TARGET PRACTICE</h2>
+      <div class="tp-mode-cards">
+        <button id="tp-mode-classic-btn" class="tp-mode-card">
+          <div class="tp-mode-card-icon">🏹</div>
+          <div class="tp-mode-card-label">CLASSIC</div>
+          <div class="tp-mode-card-sub">TP 1.0</div>
+          <div class="tp-mode-card-desc">One tenant at a time · Active learning per tenant</div>
+        </button>
+        <button id="tp-mode-rapid-btn" class="tp-mode-card tp-mode-card-rapid">
+          <div class="tp-mode-card-icon">⚡</div>
+          <div class="tp-mode-card-label">RAPID BATCH</div>
+          <div class="tp-mode-card-sub">TP 2.0</div>
+          <div class="tp-mode-card-desc">5 at once · Deep Juice Extract at the end</div>
+        </button>
+      </div>
+      <button id="tp-mode-cancel-btn" class="tp-mode-cancel">✕ Cancel</button>
+    </div>
+  </div>
 
   <!-- ══════════════════════════════════════════════════════════
        JUICE REVIEWER — owner-only overlay, opened via red pixel
@@ -1233,7 +1233,7 @@
   <script src="drlab-flasks.js?v=6"></script>
   <script src="sbs-boxing.js?v=3"></script>
   <script src="target-game.js?v=4"></script>
-  <script src="app.js?v=92"></script>
+  <script src="app.js?v=93"></script>
   <script src="game-mode.js?v=4"></script>
   <script src="rr-app.js?v=1"></script>
 </body>
