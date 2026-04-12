@@ -5038,19 +5038,8 @@ const targetSession = {
 }
 
 // ── Target Practice 2.0 session state ─────────────────────
-// Wave size: 2 tenants per API key × number of keys loaded.
-// Fetched from server at startup so adding a key auto-scales the batch.
-// Falls back to 6 (3 keys × 2) until the server responds.
-let WAVE_SIZE = 6  // will be updated by tp2FetchWaveSize()
-
-async function tp2FetchWaveSize() {
-  try {
-    const res  = await fetch(sameOriginApi('/api/health'))
-    const data = res.ok ? await res.json() : null
-    if (data?.claudeKeyCount > 0) WAVE_SIZE = data.claudeKeyCount * 2
-  } catch { /* keep default */ }
-}
-tp2FetchWaveSize()
+// 3 API keys × 2 tenants each = 6 per wave (hardcoded — always use all 3 keys)
+const WAVE_SIZE = 6
 
 // Cycling messages shown during the loading countdown
 const TIMER_MSGS = [
