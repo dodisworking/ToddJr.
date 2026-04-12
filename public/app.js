@@ -1194,7 +1194,7 @@ applyClientMode()
 // Secret owner unlock button
 document.getElementById('btn-secret-unlock')?.addEventListener('click', async () => {
   if (clientMode === 'full') {
-    toast('\u{1F512} Owner mode active', 'success')
+    openJuiceReviewer()
     return
   }
   const pin = await pixelPrompt('ENTER OWNER PIN', '\uD83D\uDD10 UNLOCK', '')
@@ -1206,6 +1206,72 @@ document.getElementById('btn-secret-unlock')?.addEventListener('click', async ()
     toast('Wrong PIN', 'error')
   }
 })
+
+function openJuiceReviewer() {
+  const overlay = document.getElementById('juice-reviewer-overlay')
+  const list    = document.getElementById('juice-reviewer-list')
+  const closeBtn = document.getElementById('juice-reviewer-close')
+  if (!overlay || !list) return
+
+  overlay.classList.remove('hidden')
+  list.innerHTML = '<div class="juice-reviewer-loading">Loading models...</div>'
+
+  fetch(sameOriginApi('/api/target/models'))
+    .then(r => r.ok ? r.json() : [])
+    .catch(() => [])
+    .then(models => {
+      if (!models.length) {
+        list.innerHTML = '<div class="juice-reviewer-empty">No juice models saved yet.<br>Complete a Target Practice session and save juice to build your library.</div>'
+        return
+      }
+      list.innerHTML = models.map(m => {
+        const date      = m.savedAt ? new Date(m.savedAt).toLocaleDateString() : '—'
+        const reduction = m.errorReduction != null ? `${m.errorReduction}% better` : ''
+        const tenants   = m.tenantCount ? `${m.tenantCount} tenants` : ''
+        const reviewer  = m.reviewerName || ''
+        const deep      = m.deepSynthesis ? '<span class="jrev-badge-deep">⚡ DEEP</span>' : '<span class="jrev-badge-classic">TP 1.0</span>'
+        return `<div class="jrev-card" data-id="${m.id}">
+          <div class="jrev-card-top">
+            <span class="jrev-card-name">🧠 ${escHtml(m.name)}</span>
+            ${deep}
+            ${reduction ? `<span class="jrev-card-score">${escHtml(reduction)}</span>` : ''}
+          </div>
+          <div class="jrev-card-meta">${[reviewer, tenants, date].filter(Boolean).map(escHtml).join(' · ')}</div>
+          ${m.comment ? `<div class="jrev-card-comment">"${escHtml(m.comment)}"</div>` : ''}
+          <div class="jrev-card-actions">
+            <button class="jrev-view-btn" data-id="${m.id}" data-name="${escHtml(m.name)}">👁 VIEW RULES</button>
+            <button class="jrev-delete-btn" data-id="${m.id}" data-name="${escHtml(m.name)}">🗑 DELETE</button>
+          </div>
+        </div>`
+      }).join('')
+
+      list.querySelectorAll('.jrev-view-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          openModelDetail(btn.dataset.id, btn.dataset.name, null)
+        })
+      })
+      list.querySelectorAll('.jrev-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const confirmed = await pixelPrompt(`Delete model "${btn.dataset.name}"?\nThis cannot be undone. Type DELETE to confirm.`, '🗑 DELETE MODEL', '')
+          if (confirmed !== 'DELETE') return
+          try {
+            const res = await fetch(sameOriginApi(`/api/target/models/${btn.dataset.id}`), { method: 'DELETE' })
+            if (!res.ok) throw new Error('Delete failed')
+            toast('Model deleted', 'success')
+            openJuiceReviewer()  // refresh
+          } catch (e) {
+            toast('Delete failed: ' + e.message, 'error')
+          }
+        })
+      })
+    })
+
+  function onClose() {
+    overlay.classList.add('hidden')
+    closeBtn.removeEventListener('click', onClose)
+  }
+  closeBtn.addEventListener('click', onClose)
+}
 
 // ═══════════════════════════════════════════════════════════
 // UPLOAD SCREEN
