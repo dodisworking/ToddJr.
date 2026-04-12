@@ -5038,8 +5038,8 @@ const targetSession = {
 }
 
 // ── Target Practice 2.0 session state ─────────────────────
-// 3 API keys × 2 tenants each = 6 per wave (hardcoded — always use all 3 keys)
-const WAVE_SIZE = 6
+// 4 API keys × 2 tenants each = 8 per wave (hardcoded — always use all 4 keys)
+const WAVE_SIZE = 8
 
 // Cycling messages shown during the loading countdown
 const TIMER_MSGS = [
@@ -5160,6 +5160,13 @@ async function startTP2() {
     } catch { /* fail silently */ }
   }
 
+  // "dumb mode" reviewer name → activate cheap (Haiku) model for this session
+  if (tp2Session.reviewerName.toLowerCase().trim() === 'dumb mode') {
+    syncCheapToggles(true)
+    localStorage.setItem(CHEAP_MODE_KEY, '1')
+    toast('🪙 DUMB MODE — using cheap model', 'info')
+  }
+
   gymState.mode = 'tp2'
   gymState.isTargetPractice = true
   goTo('gym')
@@ -5271,8 +5278,8 @@ function tp2ShowBatchLoadingScreen() {
   const titleEl = document.getElementById('gym-title')
   if (titleEl) titleEl.textContent = '⚡ RAPID BATCH'
   document.getElementById('gym-subtitle').textContent =
-    `Loading ${waveSize} of ${total} tenant${total !== 1 ? 's' : ''} — be right back`
-  document.getElementById('gym-loading-msg').textContent = TIMER_MSGS[0]
+    `Loading ${waveSize} of ${total} tenant${total !== 1 ? 's' : ''} — be right back${isCheapModeActive() ? '  🪙 DUMB MODE' : ''}`
+  document.getElementById('gym-loading-msg').textContent = isCheapModeActive() ? '🪙 DUMB MODE ACTIVE — using cheap model' : TIMER_MSGS[0]
   document.getElementById('gym-progress-fill').style.width = '0%'
 
   // Inject 8-bit timer block + start-early button
@@ -5896,6 +5903,13 @@ async function startTargetPractice() {
   targetSession.reviewerName        = reviewerName || 'Unknown'
   targetSession.correctionsByTenant = []
   targetSession.allTenantResults    = []
+
+  // "dumb mode" reviewer name → cheap model
+  if (targetSession.reviewerName.toLowerCase().trim() === 'dumb mode') {
+    syncCheapToggles(true)
+    localStorage.setItem(CHEAP_MODE_KEY, '1')
+    toast('🪙 DUMB MODE — using cheap model', 'info')
+  }
 
   gymState.mode = 'target'
   goTo('gym')
