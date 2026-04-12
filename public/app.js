@@ -5038,11 +5038,21 @@ const targetSession = {
 }
 
 // ── Target Practice 2.0 session state ─────────────────────
-// First-wave size: how many tenants fire during the 7-min loading countdown.
-// Remaining tenants fire in background once the reviewer makes their first move.
-const FIRST_WAVE_SIZE = 5
+// Wave size: 2 tenants per API key × number of keys loaded.
+// Fetched from server at startup so adding a key auto-scales the batch.
+// Falls back to 6 (3 keys × 2) until the server responds.
+let WAVE_SIZE = 6  // will be updated by tp2FetchWaveSize()
 
-// Cycling messages shown during the 7-min countdown
+async function tp2FetchWaveSize() {
+  try {
+    const res  = await fetch(sameOriginApi('/api/health'))
+    const data = res.ok ? await res.json() : null
+    if (data?.claudeKeyCount > 0) WAVE_SIZE = data.claudeKeyCount * 2
+  } catch { /* keep default */ }
+}
+tp2FetchWaveSize()
+
+// Cycling messages shown during the loading countdown
 const TIMER_MSGS = [
   "☕ Brewing tenant insights...",
   "🧠 Firing up the model...",
@@ -5066,7 +5076,7 @@ const tp2Session = {
   readyQueue:         [],   // tenant indices pushed in completion order (arrival order)
   reviewedCount:      0,    // pointer into readyQueue (how many reviewed so far)
   waitingForNext:     false,// reviewer is waiting for next tenant to arrive
-  secondWaveFired:    false,// true once background tenants (beyond FIRST_WAVE_SIZE) are fired
+  secondWaveFired:    false,// true once background tenants (beyond WAVE_SIZE) are fired
   batchLoadingActive: false,// true while the 7-min loading screen is shown
   loadTimer:          null, // setInterval handle for countdown
   loadedModelId:      null,
@@ -5170,11 +5180,11 @@ async function startTP2() {
 
   // Initialize all cache entries (second-wave ones start as 'queued', not yet fired)
   tp2Session.tenants.forEach((t, i) => {
-    tp2Session.analysisCache[t.id] = { status: i < FIRST_WAVE_SIZE ? 'pending' : 'queued', data: null }
+    tp2Session.analysisCache[t.id] = { status: i < WAVE_SIZE ? 'pending' : 'queued', data: null }
   })
   // Fire first wave immediately — they load during the 7-min countdown
   tp2Session.batchLoadingActive = true
-  const waveSize = Math.min(FIRST_WAVE_SIZE, tp2Session.tenants.length)
+  const waveSize = Math.min(WAVE_SIZE, tp2Session.tenants.length)
   for (let i = 0; i < waveSize; i++) tp2AnalyzeTenant(i)
   tp2ShowBatchLoadingScreen()
 }
@@ -5244,9 +5254,9 @@ function tp2CheckWaitingNext() {
   }
 }
 
-/** 7-minute 8-bit countdown loading screen — fires first wave, waits, then enters review */
+/** 5:40 8-bit countdown loading screen — fires first wave (WAVE_SIZE tenants), then enters review */
 function tp2ShowBatchLoadingScreen() {
-  const waveSize = Math.min(FIRST_WAVE_SIZE, tp2Session.tenants.length)
+  const waveSize = Math.min(WAVE_SIZE, tp2Session.tenants.length)
   const total    = tp2Session.tenants.length
   gymState.isTargetPractice = true
   gymShowPanel('loading')
@@ -5272,7 +5282,7 @@ function tp2ShowBatchLoadingScreen() {
   extras.innerHTML = `
     <div class="tp2-timer-box">
       <div class="tp2-timer-pixel-label">TIME REMAINING</div>
-      <div class="tp2-timer-digits" id="tp2-timer-digits">7:00</div>
+      <div class="tp2-timer-digits" id="tp2-timer-digits">5:40</div>
     </div>
     <button id="tp2-start-early-btn" class="btn-tp2-start-early hidden" type="button">▶ START NOW</button>`
   document.getElementById('tp2-start-early-btn')?.addEventListener('click', () => tp2EnterReview())
@@ -5286,8 +5296,8 @@ function tp2ShowBatchLoadingScreen() {
     extras.after(dots)
   }
 
-  // 7-minute countdown — auto-enter review when it hits 0:00
-  const MAX_WAIT_MS = 7 * 60 * 1000
+  // 5:40 countdown — auto-enter review when it hits 0:00
+  const MAX_WAIT_MS = (5 * 60 + 40) * 1000
   const startTime   = Date.now()
   let   msgIdx      = 0
   if (tp2Session.loadTimer) clearInterval(tp2Session.loadTimer)
@@ -5326,7 +5336,7 @@ function tp2ShowBatchLoadingScreen() {
 /** Update first-wave dots and progress bar. Enters review when all first-wave tenants are done. */
 function tp2UpdateBatchProgress() {
   if (!tp2Session.batchLoadingActive) return
-  const waveSize = Math.min(FIRST_WAVE_SIZE, tp2Session.tenants.length)
+  const waveSize = Math.min(WAVE_SIZE, tp2Session.tenants.length)
   const dots     = document.getElementById('tp2-batch-dots')
 
   let readyCount = 0, doneCount = 0
@@ -5379,21 +5389,27 @@ function tp2EnterReview() {
   }
 }
 
-/** Fire remaining tenants (beyond first wave) in background — called when review starts */
-function tp2FireSecondWave() {
-  if (tp2Session.secondWaveFired) return
-  tp2Session.secondWaveFired = true
-  const total = tp2Session.tenants.length
-  for (let i = FIRST_WAVE_SIZE; i < total; i++) {
+/** Fire up to WAVE_SIZE tenants starting at startIdx — 2 per API key in round-robin */
+function tp2FireWaveAt(startIdx) {
+  if (!tp2Session.active) return
+  const end   = Math.min(startIdx + WAVE_SIZE, tp2Session.tenants.length)
+  let   fired = 0
+  for (let i = startIdx; i < end; i++) {
     const t = tp2Session.tenants[i]
     if (t && tp2Session.analysisCache[t.id]?.status === 'queued') {
       tp2Session.analysisCache[t.id] = { status: 'pending', data: null }
       tp2AnalyzeTenant(i)
+      fired++
     }
   }
-  if (total > FIRST_WAVE_SIZE) {
-    console.log(`[tp2] second wave fired: tenants ${FIRST_WAVE_SIZE + 1}–${total}`)
-  }
+  if (fired > 0) console.log(`[tp2] wave fired: tenants ${startIdx + 1}–${end} (${fired} new)`)
+}
+
+/** Backward-compat alias — fires wave starting at WAVE_SIZE (wave 2) */
+function tp2FireSecondWave() {
+  if (tp2Session.secondWaveFired) return
+  tp2Session.secondWaveFired = true
+  tp2FireWaveAt(WAVE_SIZE)
 }
 
 /** Brief wait screen — shown when reviewer outpaces loading */
@@ -5417,15 +5433,24 @@ function tp2NavigateTo(idx) {
   else tp2ShowWaitingScreen(idx)
 }
 
-/** Advance to the next unreviewed tenant from readyQueue — or wait/finish */
+/** Advance to next tenant. Fire the next wave when reviewedCount % WAVE_SIZE === 1
+ *  (i.e. after saving the first tenant of every wave — 1, 7, 13, 19…) */
 function tp2TryAdvance() {
+  // Wave trigger: fire next batch of WAVE_SIZE tenants at the right moment
+  if (tp2Session.reviewedCount > 0 && tp2Session.reviewedCount % WAVE_SIZE === 1) {
+    const nextWaveStart = Math.ceil(tp2Session.reviewedCount / WAVE_SIZE) * WAVE_SIZE
+    tp2FireWaveAt(nextWaveStart)
+  }
+
   const nextIdx = tp2Session.readyQueue[tp2Session.reviewedCount]
   if (nextIdx !== undefined) {
     tp2NavigateTo(nextIdx)
     return
   }
-  // Nothing in queue yet — check if any still loading
-  const anyLoading = tp2Session.tenants.some(t => ['loading','pending'].includes(tp2Session.analysisCache[t.id]?.status))
+  // Nothing ready yet — check if any still loading
+  const anyLoading = tp2Session.tenants.some(t =>
+    ['loading','pending'].includes(tp2Session.analysisCache[t.id]?.status)
+  )
   if (anyLoading) {
     tp2Session.waitingForNext = true
     tp2ShowWaitingNextScreen()

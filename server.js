@@ -10,7 +10,7 @@ import fs from 'fs'
 import os from 'os'
 import unzipper from 'unzipper'
 import { analyzeTenant, gymAnalyzeTenant, beefedUpAnalyzeTenant, doubleCheckTenant } from './lib/analyzer.js'
-import { synthesizeActiveLearning, synthesizeDeepLearning } from './lib/claude.js'
+import { synthesizeActiveLearning, synthesizeDeepLearning, getKeyCount } from './lib/claude.js'
 import { openaiAnalyzeTenant, isOpenAiKeyConfigured, getServerOpenAiKeyHint } from './lib/openai.js'
 import { generateReport } from './lib/reporter.js'
 import { mountIsaacRoutes } from './lib/isaac-routes.js'
@@ -143,6 +143,7 @@ app.get('/api/health', (_req, res) => {
     service: 'todd-jr',
     isaacRoutes: true,
     claudeConfigured: !!process.env.ANTHROPIC_API_KEY?.trim(),
+    claudeKeyCount: getKeyCount(),
     openaiConfigured: isOpenAiKeyConfigured(),
     openaiKeySource: getServerOpenAiKeyHint(),
     localDevCors: LOCAL_DEV_CORS,
@@ -150,6 +151,31 @@ app.get('/api/health', (_req, res) => {
     gitCommit: process.env.RAILWAY_GIT_COMMIT_SHA || null,
     time: new Date().toISOString()
   })
+})
+
+/** Test each Anthropic API key with a minimal 1-token call — owner-accessible only */
+app.get('/api/health/keys', async (_req, res) => {
+  const Anthropic = (await import('@anthropic-ai/sdk')).default
+  const keys = [
+    process.env.ANTHROPIC_API_KEY,
+    process.env.ANTHROPIC_API_KEY_2,
+    process.env.ANTHROPIC_API_KEY_3
+  ]
+  const results = await Promise.all(keys.map(async (key, i) => {
+    if (!key?.trim()) return { key: `KEY_${i + 1}`, status: 'not_configured' }
+    try {
+      await new Anthropic({ apiKey: key }).messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'hi' }]
+      })
+      return { key: `KEY_${i + 1}`, status: 'ok' }
+    } catch (err) {
+      return { key: `KEY_${i + 1}`, status: 'error', error: err.message?.slice(0, 80) }
+    }
+  }))
+  const allOk = results.every(r => r.status === 'ok' || r.status === 'not_configured')
+  res.json({ ok: allOk, keys: results })
 })
 
 // ═══════════════════════════════════════════════════════════
