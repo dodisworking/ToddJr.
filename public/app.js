@@ -5198,8 +5198,10 @@ function tp2StartBatch(startIdx) {
   }
 }
 
-/** Register files for a batch of tenants in parallel, then open ALL SSEs simultaneously */
-async function tp2AnalyzeBatch(indices) {
+/** Register files for a batch of tenants in parallel.
+ *  Each tenant opens its SSE immediately after ITS OWN upload finishes —
+ *  no tenant waits for another's large files. */
+function tp2AnalyzeBatch(indices) {
   if (!indices.length) return
   // Set all to 'loading' immediately so dots update
   indices.forEach(idx => {
@@ -5208,14 +5210,17 @@ async function tp2AnalyzeBatch(indices) {
   })
   tp2UpdateBatchProgress()
 
-  // Register all files in parallel — no stagger
-  await Promise.all(indices.map(idx => {
+  // Each tenant: upload → SSE open, independently (no cross-tenant waiting)
+  indices.forEach(idx => {
     const tenantId = tp2Session.tenants[idx]?.id
-    return tenantId ? gymRegisterLocalFiles(tenantId) : Promise.resolve()
-  }))
-
-  // Open ALL SSE connections in the same synchronous loop — truly simultaneous
-  indices.forEach(idx => tp2OpenSSE(idx))
+    if (!tenantId) return
+    gymRegisterLocalFiles(tenantId)
+      .then(() => tp2OpenSSE(idx))
+      .catch(() => {
+        tp2Session.analysisCache[tenantId] = { status: 'error', data: null }
+        tp2UpdateBatchProgress()
+      })
+  })
 }
 
 /** Open a single SSE connection for one tenant (called after file registration) */
@@ -5430,16 +5435,26 @@ function tp2FireSecondWave() {
   tp2FireWaveAt(WAVE_SIZE)
 }
 
-/** Brief wait screen — shown when reviewer outpaces loading */
+/** Brief wait screen — shown when reviewer outpaces loading. No animation, plain message. */
 function tp2ShowWaitingNextScreen() {
-  gymState.isTargetPractice = true
+  gymState.isTargetPractice = false   // suppress Robin Hood archer
   gymShowPanel('loading')
+  gymState.isTargetPractice = true    // restore for other checks
+  // Hide both animations
+  document.getElementById('gym-target-wrap')?.classList.add('hidden')
+  document.getElementById('gym-run-wrap')?.classList.add('hidden')
+  document.getElementById('gym-loading-label')?.classList.add('hidden')
   const titleEl = document.getElementById('gym-title')
-  if (titleEl) titleEl.textContent = '⏳ Loading Next'
-  const pending = tp2Session.tenants.filter(t => ['loading','pending'].includes(tp2Session.analysisCache[t.id]?.status)).length
-  document.getElementById('gym-subtitle').textContent   = `${pending} tenant${pending !== 1 ? 's' : ''} still in flight`
-  document.getElementById('gym-loading-msg').textContent = '⚡ Next tenant arriving any moment — sit tight!'
-  document.getElementById('gym-progress-fill').style.width = '85%'
+  if (titleEl) titleEl.textContent = '⏳ One moment'
+  document.getElementById('gym-subtitle').textContent    = ''
+  document.getElementById('gym-loading-msg').textContent = "Shouldn't take long — next tenant loading right up"
+  document.getElementById('gym-progress-fill').style.width = '90%'
+}
+
+/** Called when navigating to a tenant that isn't ready yet */
+function tp2ShowWaitingScreen(idx) {
+  tp2Session.waitingForNext = true
+  tp2ShowWaitingNextScreen()
 }
 
 /** Navigate reviewer to tenant idx — instant from cache or show wait screen */
