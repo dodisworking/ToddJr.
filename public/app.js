@@ -5247,21 +5247,40 @@ function tp2PickFreshKey() {
 }
 
 /** Open a single SSE connection for one tenant (called after file registration).
- *  Retries up to MAX_SSE_RETRIES times on error/timeout.
- *  Each retry picks the FRESHEST key (least recently rate-limited) — key0 wins ties
- *  because it has the highest API tier. Failed keys are tracked in tp2Session.keyHealth. */
+ *
+ * BURST KEY ROTATION — each key gets KEY_SILENCE_MS (18s) to produce ANY event.
+ * If 18s pass with no event → close immediately, switch to the next freshest key,
+ * open a new SSE right away (no delay). On an actual error/429 → same: close + switch
+ * instantly. Progress events (gym-start / gym-progress) reset the 18s clock so a
+ * healthy analysis that is mid-run never gets killed.
+ *
+ * Max 5 attempts total across all keys. Key 0 (Tier-3) wins ties in freshness. */
 const MAX_SSE_RETRIES = 5
+const KEY_SILENCE_MS  = 18000   // 18s of silence → give up on this key, try next
+
 function tp2OpenSSE(idx) {
   const tenant = tp2Session.tenants[idx]
   if (!tenant || !tp2Session.active) return
   const tenantId = tenant.id
 
-  // Smart key selection: pick whichever key has been idle the longest.
-  // Key 0 is tier-3 (highest) so it wins ties and gets the majority of calls.
   const chosenKeyIdx = tp2PickFreshKey()
+  let   silenceTimer = null
+  let   closed       = false
+
+  // Reset the 18s silence watchdog — called on every incoming event
+  function keepAlive() {
+    if (silenceTimer) clearTimeout(silenceTimer)
+    silenceTimer = setTimeout(() => {
+      if (!closed && tp2Session.analysisCache[tenantId]?.status === 'loading') {
+        closed = true
+        es.close()
+        markError(`no response for ${KEY_SILENCE_MS / 1000}s`, chosenKeyIdx)
+      }
+    }, KEY_SILENCE_MS)
+  }
 
   function markError(reason, failedKey) {
-    // Record the failed key so future retries avoid it until it recovers
+    if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null }
     const keyToMark = (typeof failedKey === 'number' && failedKey >= 0 && failedKey <= 3)
       ? failedKey : chosenKeyIdx
     tp2Session.keyHealth[keyToMark] = Date.now()
@@ -5271,15 +5290,13 @@ function tp2OpenSSE(idx) {
     const attempts = (tp2Session.retryCount[tenantId] || 0)
     if (attempts < MAX_SSE_RETRIES) {
       tp2Session.retryCount[tenantId] = attempts + 1
-      const delay = attempts * 4000 + 3000   // 3s, 7s, 11s, 15s, 19s
       const nextKey = tp2PickFreshKey()
-      console.log(`[tp2] tenant ${idx + 1} ${reason} (key${keyToMark + 1} failed) — retry ${attempts + 1}/${MAX_SSE_RETRIES} in ${delay / 1000}s using key${nextKey + 1} | ${healthStr}`)
+      console.log(`[tp2] tenant ${idx + 1} → key${keyToMark + 1} FAILED (${reason}) — switching to key${nextKey + 1} NOW | ${healthStr}`)
       tp2Session.analysisCache[tenantId] = { status: 'loading', data: null }
-      setTimeout(() => {
-        if (tp2Session.active) tp2OpenSSE(idx)
-      }, delay)
+      // Immediate — no delay, burst straight to next key
+      if (tp2Session.active) tp2OpenSSE(idx)
     } else {
-      console.warn(`[tp2] tenant ${idx + 1} failed after ${MAX_SSE_RETRIES} retries (${reason}) | ${healthStr}`)
+      console.warn(`[tp2] tenant ${idx + 1} exhausted all ${MAX_SSE_RETRIES} retries (${reason}) | ${healthStr}`)
       tp2Session.analysisCache[tenantId] = { status: 'error', data: null }
       tp2UpdateBatchProgress()
       tp2CheckWaitingNext()
@@ -5293,7 +5310,16 @@ function tp2OpenSSE(idx) {
   console.log(`[tp2] tenant ${idx + 1} → key${chosenKeyIdx + 1} (health: ${tp2Session.keyHealth.map((t, i) => t ? `k${i + 1}=${Math.round((Date.now() - t) / 1000)}s` : `k${i + 1}=✓`).join(' ')})`)
   const es = new EventSource(url)
 
+  // Start the 18s silence watchdog the moment we open the connection
+  keepAlive()
+
+  es.addEventListener('gym-start', () => keepAlive())   // server accepted → reset clock
+
+  es.addEventListener('gym-progress', () => keepAlive()) // analysis running → reset clock
+
   es.addEventListener('gym-complete', e => {
+    closed = true
+    if (silenceTimer) clearTimeout(silenceTimer)
     es.close()
     const d = JSON.parse(e.data)
     tp2Session.analysisCache[tenantId] = { status: 'ready', data: d }
@@ -5303,20 +5329,22 @@ function tp2OpenSSE(idx) {
   })
 
   es.addEventListener('gym-error', e => {
+    closed = true
     es.close()
     let errMsg = 'server error'
     let failedKeyFromServer
     try {
       const parsed = JSON.parse(e.data)
       errMsg = parsed.error || errMsg
-      failedKeyFromServer = parsed.failedKeyIdx   // server reports which key was actually used
+      failedKeyFromServer = parsed.failedKeyIdx
     } catch {}
     markError(errMsg, failedKeyFromServer)
   })
 
   es.onerror = () => {
-    es.close()
-    if (tp2Session.analysisCache[tenantId]?.status === 'loading') {
+    if (!closed && tp2Session.analysisCache[tenantId]?.status === 'loading') {
+      closed = true
+      es.close()
       markError('connection dropped', chosenKeyIdx)
     }
   }
