@@ -1768,7 +1768,7 @@ app.post('/api/target/synthesize', express.json({ limit: '2mb' }), async (req, r
 })
 
 // POST /api/target/deep-synthesize — end-of-session deep synthesis for TP 2.0
-app.post('/api/target/deep-synthesize', express.json({ limit: '4mb' }), async (req, res) => {
+app.post('/api/target/deep-synthesize', express.json({ limit: '16mb' }), async (req, res) => {
   try {
     const { sessionId, tenantFeedbacks = [] } = req.body
     const session = sessions.get(sessionId)
