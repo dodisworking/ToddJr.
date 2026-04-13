@@ -5273,7 +5273,7 @@ function tp2CheckWaitingNext() {
   }
 }
 
-/** 5:40 8-bit countdown loading screen — fires first wave (WAVE_SIZE tenants), then enters review */
+/** 3:36 8-bit countdown loading screen — fires first wave (WAVE_SIZE tenants), then enters review */
 function tp2ShowBatchLoadingScreen() {
   const waveSize = Math.min(WAVE_SIZE, tp2Session.tenants.length)
   const total    = tp2Session.tenants.length
@@ -5301,7 +5301,7 @@ function tp2ShowBatchLoadingScreen() {
   extras.innerHTML = `
     <div class="tp2-timer-box">
       <div class="tp2-timer-pixel-label">TIME REMAINING</div>
-      <div class="tp2-timer-digits" id="tp2-timer-digits">5:40</div>
+      <div class="tp2-timer-digits" id="tp2-timer-digits">3:36</div>
     </div>
     <button id="tp2-start-early-btn" class="btn-tp2-start-early hidden" type="button">▶ START NOW</button>`
   document.getElementById('tp2-start-early-btn')?.addEventListener('click', () => tp2EnterReview())
@@ -5315,8 +5315,8 @@ function tp2ShowBatchLoadingScreen() {
     extras.after(dots)
   }
 
-  // 5:40 countdown — auto-enter review when it hits 0:00
-  const MAX_WAIT_MS = (5 * 60 + 40) * 1000
+  // 3:36 countdown — auto-enter review when it hits 0:00
+  const MAX_WAIT_MS = (3 * 60 + 36) * 1000
   const startTime   = Date.now()
   let   msgIdx      = 0
   if (tp2Session.loadTimer) clearInterval(tp2Session.loadTimer)
@@ -5383,12 +5383,15 @@ function tp2UpdateBatchProgress() {
     startBtn.textContent = `▶ START NOW  (${readyCount} ready)`
   }
 
-  // First wave fully done before timer — skip waiting, enter review early
-  if (doneCount === waveSize) tp2EnterReview()
+  // First wave fully done before timer — skip waiting, enter review in list order
+  if (doneCount === waveSize) tp2EnterReview(true)
 }
 
-/** Called by timer expiry or first-wave completion — enter review + fire second wave */
-function tp2EnterReview() {
+/** Called by timer expiry or first-wave completion — enter review + fire second wave.
+ *  @param {boolean} allReady  true = all first-wave tenants loaded → start with tenant 0 (list order)
+ *                             false = timer expired → start with whichever arrived first (readyQueue[0])
+ */
+function tp2EnterReview(allReady = false) {
   if (!tp2Session.batchLoadingActive) return  // already entered
   if (tp2Session.loadTimer) { clearInterval(tp2Session.loadTimer); tp2Session.loadTimer = null }
   tp2Session.batchLoadingActive = false
@@ -5401,7 +5404,10 @@ function tp2EnterReview() {
     if (digitsEl) { digitsEl.textContent = '✓'; digitsEl.className = 'tp2-timer-digits' }
     const msg = document.getElementById('gym-loading-msg')
     if (msg) msg.textContent = '🎯 Starting review...'
-    setTimeout(() => { if (tp2Session.active) tp2NavigateTo(tp2Session.readyQueue[0]) }, 1200)
+    // All ready before timer → start with first tenant in list order (index 0)
+    // Timer expired → start with whoever arrived first (fastest to load)
+    const startIdx = allReady ? 0 : tp2Session.readyQueue[0]
+    setTimeout(() => { if (tp2Session.active) tp2NavigateTo(startIdx) }, 1200)
   } else {
     // Timer fired but nothing ready yet — wait for first arrival
     tp2Session.waitingForNext = true
