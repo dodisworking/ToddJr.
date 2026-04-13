@@ -7088,6 +7088,26 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   padding-bottom: 4px;
   border-bottom: 1px solid #1e293b;
 }
+.mdl-dl-btn {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  background: #0f172a;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  padding: 6px 10px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  border-radius: 2px;
+  transition: background 0.1s, color 0.1s;
+}
+.mdl-dl-btn:hover:not(:disabled) {
+  background: #1e293b;
+  color: #e2e8f0;
+}
+.mdl-dl-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 .mdl-perf-bar-wrap {
   background: #020617;
   border: 1px solid #1e293b;

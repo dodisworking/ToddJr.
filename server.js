@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url'
 import fs from 'fs'
 import os from 'os'
 import unzipper from 'unzipper'
+import archiver from 'archiver'
 import { analyzeTenant, gymAnalyzeTenant, beefedUpAnalyzeTenant, doubleCheckTenant } from './lib/analyzer.js'
 import { synthesizeActiveLearning, synthesizeDeepLearning, getKeyCount } from './lib/claude.js'
 import { openaiAnalyzeTenant, isOpenAiKeyConfigured, getServerOpenAiKeyHint } from './lib/openai.js'
@@ -1891,6 +1892,28 @@ app.get('/api/target/session-reports/:fname', (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${fname}"`)
     fs.createReadStream(fpath).pipe(res)
   } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/target/session-zip/:uploadSessionId — download uploaded tenant files as ZIP
+app.get('/api/target/session-zip/:uploadSessionId', (req, res) => {
+  try {
+    const uploadSessionId = path.basename(req.params.uploadSessionId)
+    const sessionDir = path.join(UPLOADS_DIR, uploadSessionId)
+    if (!fs.existsSync(sessionDir)) {
+      return res.status(404).json({ error: 'Session files not found. Files may have been cleaned up after upload.' })
+    }
+    const zipName = `session-files-${uploadSessionId.slice(-8)}.zip`
+    res.setHeader('Content-Type', 'application/zip')
+    res.setHeader('Content-Disposition', `attachment; filename="${zipName}"`)
+    const archive = archiver('zip', { zlib: { level: 5 } })
+    archive.on('error', err => { console.error('[session-zip]', err); res.end() })
+    archive.pipe(res)
+    archive.directory(sessionDir, false)
+    archive.finalize()
+  } catch (err) {
+    console.error('[session-zip]', err)
     res.status(500).json({ error: err.message })
   }
 })

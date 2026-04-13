@@ -5103,11 +5103,9 @@ function showTargetModePicker() {
 }
 
 /** Entry point — shows mode picker, then routes to classic or rapid */
+/** Entry point — goes directly to TP 2.0 (mode picker removed) */
 async function startTargetPracticeWithPicker() {
-  const mode = await showTargetModePicker()
-  if (!mode) return
-  if (mode === 'classic') startTargetPractice()
-  else startTP2()
+  startTP2()
 }
 
 // ─── TP 2.0 ───────────────────────────────────────────────
@@ -5289,6 +5287,10 @@ function tp2ShowBatchLoadingScreen() {
   gymState.isTargetPractice = true
   gymShowPanel('loading')
 
+  // Hide the green progress bar — TP2 uses timer + subtitle instead
+  const _pb = document.querySelector('.gym-progress-bar')
+  if (_pb) _pb.style.display = 'none'
+
   const titleEl = document.getElementById('gym-title')
   if (titleEl) titleEl.textContent = '⚡ RAPID BATCH'
   document.getElementById('gym-subtitle').textContent =
@@ -5311,9 +5313,7 @@ function tp2ShowBatchLoadingScreen() {
     <div class="tp2-timer-box">
       <div class="tp2-timer-pixel-label">TIME REMAINING</div>
       <div class="tp2-timer-digits" id="tp2-timer-digits">3:36</div>
-    </div>
-    <button id="tp2-start-early-btn" class="btn-tp2-start-early hidden" type="button">▶ START NOW</button>`
-  document.getElementById('tp2-start-early-btn')?.addEventListener('click', () => tp2EnterReview())
+    </div>`
 
   // Remove any leftover tenant dots from a previous session
   const oldDots = document.getElementById('tp2-batch-dots')
@@ -5360,24 +5360,21 @@ function tp2ShowBatchLoadingScreen() {
 function tp2UpdateBatchProgress() {
   if (!tp2Session.batchLoadingActive) return
   const waveSize = Math.min(WAVE_SIZE, tp2Session.tenants.length)
+  const total    = tp2Session.tenants.length
 
-  let readyCount = 0, doneCount = 0
+  let doneCount = 0
   for (let i = 0; i < waveSize; i++) {
     const tenantId = tp2Session.tenants[i].id
     const status   = tp2Session.analysisCache[tenantId]?.status || 'pending'
-    if (status === 'ready')      { readyCount++; doneCount++ }
-    else if (status === 'error') { doneCount++ }
+    if (status === 'ready' || status === 'error') doneCount++
   }
 
   const fill = document.getElementById('gym-progress-fill')
   if (fill) fill.style.width = Math.round((doneCount / waveSize) * 100) + '%'
 
-  // Show "START NOW" once at least 1 tenant is ready
-  const startBtn = document.getElementById('tp2-start-early-btn')
-  if (startBtn && readyCount > 0) {
-    startBtn.classList.remove('hidden')
-    startBtn.textContent = `▶ START NOW  (${readyCount} ready)`
-  }
+  // Update subtitle: show X/total done
+  const subEl = document.getElementById('gym-subtitle')
+  if (subEl) subEl.textContent = `${doneCount}/${total} done${isCheapModeActive() ? '  🪙 DUMB MODE' : ''}`
 
   // First wave fully done before timer — skip waiting, enter review in list order
   if (doneCount === waveSize) tp2EnterReview(true)
@@ -5391,6 +5388,10 @@ function tp2EnterReview(allReady = false) {
   if (!tp2Session.batchLoadingActive) return  // already entered
   if (tp2Session.loadTimer) { clearInterval(tp2Session.loadTimer); tp2Session.loadTimer = null }
   tp2Session.batchLoadingActive = false
+
+  // Restore progress bar (hidden during loading screen, needed for "hold on" / TP1 flows)
+  const _pb = document.querySelector('.gym-progress-bar')
+  if (_pb) _pb.style.display = ''
 
   // Fire remaining tenants in background as reviewer starts
   tp2FireSecondWave()
@@ -5541,7 +5542,7 @@ function tp2StartReview(idx) {
   const qLen     = tp2Session.readyQueue.length
   const pct = qLen > 1 ? Math.round((reviewed / qLen) * 100) : 0
   if (fill)  fill.style.width = pct + '%'
-  if (label) label.textContent = `🎯 Rapid Batch: ${reviewed + 1}/${qLen} ready — ${tenant.tenantName}`
+  if (label) label.textContent = `🎯 Rapid Batch: ${reviewed + 1}/${tp2Session.tenants.length} — ${tenant.tenantName}`
 }
 
 async function tp2SaveAndNext() {
@@ -5682,6 +5683,7 @@ async function tp2AutoSaveJuice() {
           (f.rejectedFindings || []).length + (f.annotations || []).length
         ),
         sessionId: tp2Session.sessionId, tenantCount: tp2Session.tenants.length,
+        uploadSessionId: state.sessionId,
         parentModelId: tp2Session.loadedModelId, parentModelName: tp2Session.loadedModelName,
         deepSynthesis: true
       })
@@ -6333,7 +6335,44 @@ function openModelDetail(modelId, modelName, onSelect) {
         html += `</div>`
       }
 
+      // Downloads section
+      if (m.sessionId || m.uploadSessionId) {
+        html += `
+        <div>
+          <div class="mdl-section-title">DOWNLOADS</div>
+          <div id="mdl-downloads-wrap" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+            ${m.sessionId ? `<button id="mdl-dl-excel-btn" class="mdl-dl-btn" data-session="${escHtml(m.sessionId)}">📊 Loading Excel...</button>` : ''}
+            ${m.uploadSessionId ? `<a href="${sameOriginApi('/api/target/session-zip/' + encodeURIComponent(m.uploadSessionId))}" download class="mdl-dl-btn" style="text-decoration:none">📦 Download Files ZIP</a>` : ''}
+          </div>
+        </div>`
+      }
+
       bodyEl.innerHTML = html
+
+      // Wire Excel download button — look up saved report by sessionId
+      if (m.sessionId) {
+        const excelBtn = document.getElementById('mdl-dl-excel-btn')
+        if (excelBtn) {
+          fetch(sameOriginApi('/api/target/session-reports'))
+            .then(r => r.ok ? r.json() : null)
+            .catch(() => null)
+            .then(data => {
+              const entry = (data?.reports || []).find(e => e.sessionId === m.sessionId)
+              if (entry) {
+                excelBtn.textContent = '📊 Download Excel Report'
+                excelBtn.onclick = () => {
+                  const a = document.createElement('a')
+                  a.href = sameOriginApi(`/api/target/session-reports/${encodeURIComponent(entry.filename)}`)
+                  a.download = entry.filename
+                  a.click()
+                }
+              } else {
+                excelBtn.textContent = '📊 Excel not saved'
+                excelBtn.disabled = true
+              }
+            })
+        }
+      }
 
       // Draw sparkline if curve exists
       if (curve.length > 1) {
@@ -6943,6 +6982,8 @@ function gymLaunchWorkout(data) {
   gymState.folderName = data.folderName || ''
 
   gymShowPanel('workout')
+  const findingsScroll = document.getElementById('gym-findings-scroll')
+  if (findingsScroll) findingsScroll.scrollTop = 0
   document.getElementById('gym-skip-btn').classList.remove('hidden')
   document.getElementById('gym-subtitle').textContent = data.tenantName || ''
 
@@ -8059,7 +8100,7 @@ updateSpeakerIcon()
 
 // ── Patient Turtle Animation ─────────────────────────────────
 ;(function initPatientTurtles() {
-  const PATIENCE_MSG = 'be like todd... patient... this will take a minute or three or four...'
+  const PATIENCE_MSG = 'be like todd... patient... this will take a minute, or two, or 3...'
 
   // ── Draw turtle using explicit canvas shapes (no pixel arrays) ──────
   // This gives clean, recognizable turtle geometry at any scale.

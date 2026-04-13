@@ -123,32 +123,69 @@
 
   // ── Todd Robin Hood sprite ────────────────────────────────────
   function drawTodd(cx, cy, phase, frame, sc) {
-    const S   = Math.max(2, Math.round((sc || 1) * 3))
+    const S   = Math.max(2, Math.round((sc || 1) * 4))
     const bob = Math.floor(frame / 24) % 2 === 0 ? 0 : 1
     const ox  = cx - 6 * S
-    const oy  = cy - 16 * S + bob
+    const oy  = cy - 18 * S + bob
 
     function p(col, row, color) { pxl(col, row, S, ox, oy, color) }
     function r(col, row, w, h, color) { cls(color); rec(ox+col*S, oy+row*S, w*S, h*S) }
 
-    r(4, 0, 3, 1, HAT); r(3, 1, 5, 1, HAT); r(2, 2, 7, 1, HAT_L)
-    p(9, 1, FEATHER); p(10, 0, FEATHER)
-    r(3, 3, 5, 3, SKIN); r(2, 4, 7, 2, SKIN)
-    p(3, 4, EYE_C); p(6, 4, EYE_C)
-    r(4, 5, 3, 1, '#7c2c10')
-    r(2, 6, 8, 1, TUNIC_L); r(1, 7, 10, 3, TUNIC); r(3, 9, 6, 1, BELT)
-    p(0, 7, SKIN); p(0, 8, SKIN); p(0, 9, SKIN)
-    if (phase === 'draw') {
-      p(11, 7, SKIN); p(11, 8, SKIN)
-    } else {
-      p(11, 7, SKIN); p(10, 8, SKIN); p(11, 8, SKIN)
-    }
-    r(2, 10, 4, 2, PANTS); r(7, 10, 3, 2, PANTS)
-    r(1, 12, 4, 2, BOOTS); r(6, 12, 4, 2, BOOTS)
+    // ── Robin Hood hat (4 rows, pointed tip) ─────────────────────
+    r(5, 0, 2, 1, HAT)        // pointed tip
+    r(4, 1, 4, 1, HAT)        // upper hat
+    r(3, 2, 6, 1, HAT)        // mid hat
+    r(2, 3, 8, 1, HAT_L)      // brim (wider, lighter)
 
-    // Bow
+    // Feather — white plume curving up-right from brim
+    p(10, 1, FEATHER)
+    p(10, 2, FEATHER)
+    p(9,  3, FEATHER)
+
+    // ── Head / face (rows 4-8) ────────────────────────────────────
+    r(3, 4, 6, 5, SKIN)       // head block (6 wide × 5 tall)
+
+    // Eyebrows (row 4, just above eyes)
+    p(4, 4, '#4a2505')
+    p(7, 4, '#4a2505')
+
+    // Eyes (row 5, dark pupils)
+    p(4, 5, EYE_C)
+    p(7, 5, EYE_C)
+
+    // Nose (center, row 6)
+    p(5, 6, '#9a5025')
+
+    // Friendly smile (row 7, 4 wide)
+    r(4, 7, 4, 1, '#7c2c10')
+
+    // ── Neck ──────────────────────────────────────────────────────
+    r(5, 9, 2, 1, SKIN)
+
+    // ── Body (tunic rows 10-13, belt row 14) ──────────────────────
+    r(2, 10, 8, 1, TUNIC_L)   // collar / tunic top (lighter)
+    r(1, 11, 10, 3, TUNIC)    // tunic body
+    r(3, 14, 6, 1, BELT)      // belt
+
+    // ── Arms ──────────────────────────────────────────────────────
+    p(0, 11, SKIN); p(0, 12, SKIN); p(0, 13, SKIN)  // left arm
+    if (phase === 'draw') {
+      p(11, 11, SKIN); p(11, 12, SKIN)              // right arm — extended (drawing bow)
+    } else {
+      p(11, 11, SKIN); p(10, 12, SKIN); p(11, 12, SKIN)  // right arm — relaxed
+    }
+
+    // ── Pants (rows 15-16) ────────────────────────────────────────
+    r(2, 15, 4, 2, PANTS)
+    r(7, 15, 3, 2, PANTS)
+
+    // ── Boots (row 17) ────────────────────────────────────────────
+    r(1, 17, 4, 1, BOOTS)
+    r(6, 17, 4, 1, BOOTS)
+
+    // ── Bow (left side, mid-body) ─────────────────────────────────
     const bCX = ox - S * 1
-    const bCY = oy + S * 8
+    const bCY = oy + S * 12
     const bR  = S * 6
     _ctx.strokeStyle = BOW_C; _ctx.lineWidth = 2.5
     _ctx.beginPath()
