@@ -5246,17 +5246,18 @@ function tp2PickFreshKey() {
   return best
 }
 
-/** Open a single SSE connection for one tenant (called after file registration).
+/** Open a single SSE connection for one tenant — NEVER gives up.
  *
- * BURST KEY ROTATION — each key gets KEY_SILENCE_MS (18s) to produce ANY event.
- * If 18s pass with no event → close immediately, switch to the next freshest key,
- * open a new SSE right away (no delay). On an actual error/429 → same: close + switch
- * instantly. Progress events (gym-start / gym-progress) reset the 18s clock so a
- * healthy analysis that is mid-run never gets killed.
+ * Each key gets KEY_SILENCE_MS (45s) to produce ANY event. Silence → close,
+ * switch to the freshest key, retry immediately. 429/drop → same, instant switch.
+ * gym-start / gym-progress reset the clock so a live analysis is never killed.
  *
- * Max 5 attempts total across all keys. Key 0 (Tier-3) wins ties in freshness. */
-const MAX_SSE_RETRIES = 5
-const KEY_SILENCE_MS  = 18000   // 18s of silence → give up on this key, try next
+ * After every full cycle through all keys (every NUM_KEYS attempts), we pause
+ * CYCLE_COOLDOWN_MS (30s) before the next cycle so rate-limited keys can recover.
+ * A tenant is NEVER marked as error — it keeps trying until the session ends. */
+const KEY_SILENCE_MS    = 45000   // 45s silence on a key → try next
+const NUM_KEYS          = 4       // number of API keys we cycle through
+const CYCLE_COOLDOWN_MS = 30000   // 30s cooldown after exhausting all keys once
 
 function tp2OpenSSE(idx) {
   const tenant = tp2Session.tenants[idx]
@@ -5267,14 +5268,14 @@ function tp2OpenSSE(idx) {
   let   silenceTimer = null
   let   closed       = false
 
-  // Reset the 18s silence watchdog — called on every incoming event
+  // Reset the silence watchdog — called on every incoming event
   function keepAlive() {
     if (silenceTimer) clearTimeout(silenceTimer)
     silenceTimer = setTimeout(() => {
       if (!closed && tp2Session.analysisCache[tenantId]?.status === 'loading') {
         closed = true
         es.close()
-        markError(`no response for ${KEY_SILENCE_MS / 1000}s`, chosenKeyIdx)
+        markError(`silent for ${KEY_SILENCE_MS / 1000}s`, chosenKeyIdx)
       }
     }, KEY_SILENCE_MS)
   }
@@ -5284,23 +5285,23 @@ function tp2OpenSSE(idx) {
     const keyToMark = (typeof failedKey === 'number' && failedKey >= 0 && failedKey <= 3)
       ? failedKey : chosenKeyIdx
     tp2Session.keyHealth[keyToMark] = Date.now()
+    const attempts = (tp2Session.retryCount[tenantId] || 0) + 1
+    tp2Session.retryCount[tenantId] = attempts
     const healthStr = tp2Session.keyHealth.map((t, i) =>
       t ? `k${i + 1}=${Math.round((Date.now() - t) / 1000)}s ago` : `k${i + 1}=fresh`
     ).join(' ')
-    const attempts = (tp2Session.retryCount[tenantId] || 0)
-    if (attempts < MAX_SSE_RETRIES) {
-      tp2Session.retryCount[tenantId] = attempts + 1
-      const nextKey = tp2PickFreshKey()
-      console.log(`[tp2] tenant ${idx + 1} → key${keyToMark + 1} FAILED (${reason}) — switching to key${nextKey + 1} NOW | ${healthStr}`)
-      tp2Session.analysisCache[tenantId] = { status: 'loading', data: null }
-      // Immediate — no delay, burst straight to next key
-      if (tp2Session.active) tp2OpenSSE(idx)
-    } else {
-      console.warn(`[tp2] tenant ${idx + 1} exhausted all ${MAX_SSE_RETRIES} retries (${reason}) | ${healthStr}`)
-      tp2Session.analysisCache[tenantId] = { status: 'error', data: null }
-      tp2UpdateBatchProgress()
-      tp2CheckWaitingNext()
-    }
+
+    // After every full cycle through all keys, pause before retrying so keys can recover
+    const completedCycles = Math.floor(attempts / NUM_KEYS)
+    const isEndOfCycle    = attempts % NUM_KEYS === 0
+    const delay           = isEndOfCycle ? CYCLE_COOLDOWN_MS : 0
+    const nextKey         = tp2PickFreshKey()
+
+    console.log(`[tp2] tenant ${idx + 1} attempt ${attempts} → key${keyToMark + 1} FAILED (${reason}) — next: key${nextKey + 1} ${delay ? `after ${delay / 1000}s cooldown (cycle ${completedCycles} done)` : 'NOW'} | ${healthStr}`)
+
+    tp2Session.analysisCache[tenantId] = { status: 'loading', data: null }
+    // Never give up — keep retrying forever until the session ends
+    setTimeout(() => { if (tp2Session.active) tp2OpenSSE(idx) }, delay)
   }
 
   // TP2 always uses the full model — never append cheapQs() here
@@ -5310,7 +5311,7 @@ function tp2OpenSSE(idx) {
   console.log(`[tp2] tenant ${idx + 1} → key${chosenKeyIdx + 1} (health: ${tp2Session.keyHealth.map((t, i) => t ? `k${i + 1}=${Math.round((Date.now() - t) / 1000)}s` : `k${i + 1}=✓`).join(' ')})`)
   const es = new EventSource(url)
 
-  // Start the 18s silence watchdog the moment we open the connection
+  // Start the silence watchdog the moment we open the connection
   keepAlive()
 
   es.addEventListener('gym-start', () => keepAlive())   // server accepted → reset clock
