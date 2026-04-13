@@ -5061,6 +5061,7 @@ const tp2Session = {
   currentIdx:         0,
   analysisCache:      {},   // tenantId → { status:'pending'|'loading'|'ready'|'error', data }
   retryCount:         {},   // tenantId → number of retries attempted
+  keyHealth:          [0, 0, 0, 0],  // timestamp of last 429/fail per key index (0 = never failed)
   allFeedbacks:       [],   // [{tenantName,tenantIdx,confirmedFindings,rejectedFindings,annotations}]
   allTenantResults:   [],   // for Excel download
   readyQueue:         [],   // tenant indices pushed in completion order (arrival order)
@@ -5131,6 +5132,7 @@ async function startTP2() {
   tp2Session.currentIdx         = 0
   tp2Session.analysisCache      = {}
   tp2Session.retryCount         = {}
+  tp2Session.keyHealth          = [0, 0, 0, 0]  // reset key freshness each session
   tp2Session.allFeedbacks       = []
   tp2Session.allTenantResults   = []
   tp2Session.readyQueue         = []
@@ -5232,27 +5234,52 @@ function tp2AnalyzeBatch(indices) {
   })
 }
 
+/** Pick the API key index that failed least recently.
+ *  Key 0 is highest tier (Tier-3) — wins all ties so it handles most calls.
+ *  Returns 0..3 (clamped to number of keys configured on server). */
+function tp2PickFreshKey() {
+  const h = tp2Session.keyHealth   // [ts0, ts1, ts2, ts3] — smaller = failed less recently (or 0 = never)
+  let best = 0
+  for (let i = 1; i < h.length; i++) {
+    if (h[i] < h[best]) best = i   // i failed before best → i is "fresher"
+  }
+  return best
+}
+
 /** Open a single SSE connection for one tenant (called after file registration).
- *  Retries up to MAX_SSE_RETRIES times on error/timeout — each retry waits
- *  progressively longer so a rate-limited key has time to recover. */
+ *  Retries up to MAX_SSE_RETRIES times on error/timeout.
+ *  Each retry picks the FRESHEST key (least recently rate-limited) — key0 wins ties
+ *  because it has the highest API tier. Failed keys are tracked in tp2Session.keyHealth. */
 const MAX_SSE_RETRIES = 5
 function tp2OpenSSE(idx) {
   const tenant = tp2Session.tenants[idx]
   if (!tenant || !tp2Session.active) return
   const tenantId = tenant.id
 
-  function markError(reason) {
+  // Smart key selection: pick whichever key has been idle the longest.
+  // Key 0 is tier-3 (highest) so it wins ties and gets the majority of calls.
+  const chosenKeyIdx = tp2PickFreshKey()
+
+  function markError(reason, failedKey) {
+    // Record the failed key so future retries avoid it until it recovers
+    const keyToMark = (typeof failedKey === 'number' && failedKey >= 0 && failedKey <= 3)
+      ? failedKey : chosenKeyIdx
+    tp2Session.keyHealth[keyToMark] = Date.now()
+    const healthStr = tp2Session.keyHealth.map((t, i) =>
+      t ? `k${i + 1}=${Math.round((Date.now() - t) / 1000)}s ago` : `k${i + 1}=fresh`
+    ).join(' ')
     const attempts = (tp2Session.retryCount[tenantId] || 0)
     if (attempts < MAX_SSE_RETRIES) {
       tp2Session.retryCount[tenantId] = attempts + 1
-      const delay = attempts * 4000 + 3000   // 3s, 7s, 11s
-      console.log(`[tp2] tenant ${idx + 1} ${reason} — retry ${attempts + 1}/${MAX_SSE_RETRIES} in ${delay / 1000}s`)
+      const delay = attempts * 4000 + 3000   // 3s, 7s, 11s, 15s, 19s
+      const nextKey = tp2PickFreshKey()
+      console.log(`[tp2] tenant ${idx + 1} ${reason} (key${keyToMark + 1} failed) — retry ${attempts + 1}/${MAX_SSE_RETRIES} in ${delay / 1000}s using key${nextKey + 1} | ${healthStr}`)
       tp2Session.analysisCache[tenantId] = { status: 'loading', data: null }
       setTimeout(() => {
         if (tp2Session.active) tp2OpenSSE(idx)
       }, delay)
     } else {
-      console.warn(`[tp2] tenant ${idx + 1} failed after ${MAX_SSE_RETRIES} retries (${reason})`)
+      console.warn(`[tp2] tenant ${idx + 1} failed after ${MAX_SSE_RETRIES} retries (${reason}) | ${healthStr}`)
       tp2Session.analysisCache[tenantId] = { status: 'error', data: null }
       tp2UpdateBatchProgress()
       tp2CheckWaitingNext()
@@ -5260,8 +5287,9 @@ function tp2OpenSSE(idx) {
   }
 
   const url = sameOriginApi(
-    `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenantId)}${cheapQs()}`
+    `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenantId)}&keyIndex=${chosenKeyIdx}${cheapQs()}`
   )
+  console.log(`[tp2] tenant ${idx + 1} → key${chosenKeyIdx + 1} (health: ${tp2Session.keyHealth.map((t, i) => t ? `k${i + 1}=${Math.round((Date.now() - t) / 1000)}s` : `k${i + 1}=✓`).join(' ')})`)
   const es = new EventSource(url)
 
   es.addEventListener('gym-complete', e => {
@@ -5275,14 +5303,20 @@ function tp2OpenSSE(idx) {
 
   es.addEventListener('gym-error', e => {
     es.close()
-    const errMsg = (() => { try { return JSON.parse(e.data).error } catch { return 'server error' } })()
-    markError(errMsg)
+    let errMsg = 'server error'
+    let failedKeyFromServer
+    try {
+      const parsed = JSON.parse(e.data)
+      errMsg = parsed.error || errMsg
+      failedKeyFromServer = parsed.failedKeyIdx   // server reports which key was actually used
+    } catch {}
+    markError(errMsg, failedKeyFromServer)
   })
 
   es.onerror = () => {
     es.close()
     if (tp2Session.analysisCache[tenantId]?.status === 'loading') {
-      markError('connection dropped')
+      markError('connection dropped', chosenKeyIdx)
     }
   }
 }

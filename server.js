@@ -11,7 +11,7 @@ import os from 'os'
 import unzipper from 'unzipper'
 import archiver from 'archiver'
 import { analyzeTenant, gymAnalyzeTenant, beefedUpAnalyzeTenant, doubleCheckTenant } from './lib/analyzer.js'
-import { synthesizeActiveLearning, synthesizeDeepLearning, getKeyCount } from './lib/claude.js'
+import { synthesizeActiveLearning, synthesizeDeepLearning, getKeyCount, getLastGymKeyIdx } from './lib/claude.js'
 import { openaiAnalyzeTenant, isOpenAiKeyConfigured, getServerOpenAiKeyHint } from './lib/openai.js'
 import { generateReport } from './lib/reporter.js'
 import { mountIsaacRoutes } from './lib/isaac-routes.js'
@@ -1660,7 +1660,8 @@ app.get('/api/gym/file/:sessionId/:tenantId/:fileIndex', (req, res) => {
 // ═══════════════════════════════════════════════════════════
 
 app.get('/api/gym/analyze', async (req, res) => {
-  const { sessionId, tenantId } = req.query
+  const { sessionId, tenantId, keyIndex } = req.query
+  const preferredKeyIdx = (keyIndex !== undefined && !isNaN(parseInt(keyIndex, 10))) ? parseInt(keyIndex, 10) : undefined
   const session = sessions.get(sessionId)
   if (!session) return res.status(404).json({ error: 'Session not found' })
   const tenant = tenantId
@@ -1693,7 +1694,7 @@ app.get('/api/gym/analyze', async (req, res) => {
     // Gym mode uses the extended reasoning schema
     // If this session has active learning juice rules (Target Practice), inject them
     const juiceRules = session.targetJuiceRules || []
-    const result = await gymAnalyzeTenant(tenant, tenant.files, onProgress, { cheapMode: isCheapMode(req), juiceRules })
+    const result = await gymAnalyzeTenant(tenant, tenant.files, onProgress, { cheapMode: isCheapMode(req), juiceRules, preferredKeyIdx })
 
     // Attach stable IDs to findings for feedback tracking
     const findingsWithIds = (result.findings || []).map((f, i) => ({ ...f, id: `finding-${i}` }))
@@ -1719,7 +1720,8 @@ app.get('/api/gym/analyze', async (req, res) => {
     }
   } catch (err) {
     console.error('[gym/analyze]', err)
-    if (!aborted) emit('gym-error', { error: err.message })
+    // Include failedKeyIdx so the client can mark that key as rate-limited and rotate on retry
+    if (!aborted) emit('gym-error', { error: err.message, failedKeyIdx: getLastGymKeyIdx() })
   } finally {
     clearInterval(heartbeat)
     res.end()
