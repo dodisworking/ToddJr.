@@ -5255,9 +5255,8 @@ function tp2PickFreshKey() {
  * After every full cycle through all keys (every NUM_KEYS attempts), we pause
  * CYCLE_COOLDOWN_MS (30s) before the next cycle so rate-limited keys can recover.
  * A tenant is NEVER marked as error — it keeps trying until the session ends. */
-const KEY_SILENCE_MS    = 45000   // 45s silence on a key → try next
+const KEY_SILENCE_MS    = 10000   // 10s silence → key is dead, switch instantly
 const NUM_KEYS          = 4       // number of API keys we cycle through
-const CYCLE_COOLDOWN_MS = 30000   // 30s cooldown after exhausting all keys once
 
 function tp2OpenSSE(idx) {
   const tenant = tp2Session.tenants[idx]
@@ -5291,17 +5290,12 @@ function tp2OpenSSE(idx) {
       t ? `k${i + 1}=${Math.round((Date.now() - t) / 1000)}s ago` : `k${i + 1}=fresh`
     ).join(' ')
 
-    // After every full cycle through all keys, pause before retrying so keys can recover
-    const completedCycles = Math.floor(attempts / NUM_KEYS)
-    const isEndOfCycle    = attempts % NUM_KEYS === 0
-    const delay           = isEndOfCycle ? CYCLE_COOLDOWN_MS : 0
-    const nextKey         = tp2PickFreshKey()
-
-    console.log(`[tp2] tenant ${idx + 1} attempt ${attempts} → key${keyToMark + 1} FAILED (${reason}) — next: key${nextKey + 1} ${delay ? `after ${delay / 1000}s cooldown (cycle ${completedCycles} done)` : 'NOW'} | ${healthStr}`)
+    const nextKey = tp2PickFreshKey()
+    console.log(`[tp2] tenant ${idx + 1} attempt ${attempts} → key${keyToMark + 1} FAILED (${reason}) — switching to key${nextKey + 1} NOW | ${healthStr}`)
 
     tp2Session.analysisCache[tenantId] = { status: 'loading', data: null }
-    // Never give up — keep retrying forever until the session ends
-    setTimeout(() => { if (tp2Session.active) tp2OpenSSE(idx) }, delay)
+    // Never give up, never wait — blast straight to the next key
+    if (tp2Session.active) tp2OpenSSE(idx)
   }
 
   // TP2 always uses the full model — never append cheapQs() here
