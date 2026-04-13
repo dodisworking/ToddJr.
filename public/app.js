@@ -5115,7 +5115,7 @@ async function startTargetPracticeWithPicker() {
 async function startTP2() {
   if (state.tenants.length === 0) { toast('Upload files first', 'error'); return }
 
-  const setup = await showTargetSetupScreen()
+  const setup = await showTargetSetupScreen(true)  // isTP2 = true
   if (!setup) return
   const { reviewerName, loadedModel, dumbMode } = setup
 
@@ -6096,7 +6096,7 @@ async function startTargetPractice() {
  * Show the Target Practice setup screen immediately, then load models async.
  * Returns { reviewerName, loadedModel } or null if cancelled.
  */
-function showTargetSetupScreen() {
+function showTargetSetupScreen(isTP2 = false) {
   return new Promise(resolve => {
     const overlay     = document.getElementById('target-setup-overlay')
     const reviewerIn  = document.getElementById('tso-reviewer-input')
@@ -6109,6 +6109,7 @@ function showTargetSetupScreen() {
     const jlibClose   = document.getElementById('jlib-close-btn')
     const juiceCanvas = document.getElementById('tso-juicebox-canvas')
     const dumbBtn     = document.getElementById('tso-dumb-btn')
+    const dumbRow     = document.getElementById('tso-dumb-btn')?.closest('.tso-dumb-row')
 
     if (!overlay || !reviewerIn || !startBtn || !cancelBtn) {
       pixelPrompt('Who is reviewing these findings?', '🎯 START TARGET PRACTICE', 'e.g. Sarah M.')
@@ -6122,6 +6123,9 @@ function showTargetSetupScreen() {
     let selectedModel = null
     let savedModels   = []
     let dumbModeOn    = false
+
+    // TP2 always uses the good model — hide the dumb mode toggle entirely
+    if (isTP2 && dumbRow) dumbRow.style.display = 'none'
 
     function updateDumbBtn() {
       if (!dumbBtn) return
@@ -6202,15 +6206,28 @@ function showTargetSetupScreen() {
       jlibOverlay.classList.remove('hidden')
     }
 
-    juiceBtn   && juiceBtn.addEventListener('click', openLibrary)
+    // In TP2, require admin code before opening the juice library
+    async function onJuiceClick() {
+      if (isTP2) {
+        const code = await pixelPrompt('Enter admin code to add juice:', '🔒 ADMIN ACCESS', '')
+        if (code !== '123') {
+          if (code !== null) toast('Wrong code', 'error')
+          return
+        }
+      }
+      openLibrary()
+    }
+    juiceBtn   && juiceBtn.addEventListener('click', onJuiceClick)
     jlibClose  && jlibClose.addEventListener('click', () => jlibOverlay && jlibOverlay.classList.add('hidden'))
 
     function cleanup(result) {
       overlay.classList.add('hidden')
       jlibOverlay && jlibOverlay.classList.add('hidden')
+      // Restore dumb row visibility for future TP1 sessions
+      if (isTP2 && dumbRow) dumbRow.style.display = ''
       startBtn.removeEventListener('click', onStart)
       cancelBtn.removeEventListener('click', onCancel)
-      juiceBtn  && juiceBtn.removeEventListener('click', openLibrary)
+      juiceBtn  && juiceBtn.removeEventListener('click', onJuiceClick)
       document.removeEventListener('keydown', onKey)
       resolve(result)
     }
