@@ -1848,10 +1848,14 @@ app.post('/api/target/download-excel', express.json({ limit: '10mb' }), async (r
       const dest  = path.join(dir, fname)
       fs.copyFileSync(tmpPath, dest)
       const entries = readTPManifest(dir)
-      entries.push({
-        id, fname, savedAt: new Date().toISOString(),
-        reviewerName, tenantCount: tenantResults.length
-      })
+      // Overwrite any existing entry for the same sessionId (idempotent re-saves)
+      const existingIdx = entries.findIndex(e => e.sessionId === sessionId)
+      const entry = {
+        id, filename: fname, savedAt: new Date().toISOString(),
+        sessionId: sessionId || null, reviewerName, tenantCount: tenantResults.length
+      }
+      if (existingIdx >= 0) entries[existingIdx] = entry
+      else entries.push(entry)
       writeTPManifest(dir, entries)
     } catch (saveErr) {
       console.warn('[target/download-excel] cloud save failed (non-fatal):', saveErr.message)

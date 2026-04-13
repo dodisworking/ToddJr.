@@ -5661,7 +5661,23 @@ async function tp2AutoSaveJuice() {
     if (icon) icon.textContent = iconTxt
     if (text) text.textContent = msgTxt
   }
+
+  // ── Step 0: Save Excel immediately (before synthesis starts) ──────────────
+  // All tenant findings/rejections are already in memory — persist them now so
+  // the reviewer's work is never lost even if synthesis fails. The server
+  // overwrites the manifest entry if the same sessionId is saved again.
+  fetch(sameOriginApi('/api/target/download-excel'), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      tenantResults: tp2Session.allTenantResults,
+      reviewerName:  tp2Session.reviewerName,
+      juiceRules:    [],
+      sessionId:     tp2Session.sessionId
+    })
+  }).catch(() => {})  // non-blocking
+
   try {
+    // ── Step 1: Deep synthesis ─────────────────────────────────────────────
     const res = await fetch(sameOriginApi('/api/target/deep-synthesize'), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId: state.sessionId, tenantFeedbacks: tp2Session.allFeedbacks })
@@ -5671,6 +5687,7 @@ async function tp2AutoSaveJuice() {
     const rules = data.rules || []
     tp2Session.deepJuiceRules = rules
 
+    // ── Step 2: Save juice model ───────────────────────────────────────────
     const _now      = new Date()
     const date      = _now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     const time      = _now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
@@ -5689,17 +5706,6 @@ async function tp2AutoSaveJuice() {
       })
     })
     if (!saveRes.ok) throw new Error((await saveRes.json().catch(() => ({}))).error || 'Save failed')
-
-    // Auto-save Excel to Isaac storage so it's viewable in session reports
-    fetch(sameOriginApi('/api/target/download-excel'), {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tenantResults: tp2Session.allTenantResults,
-        reviewerName:  tp2Session.reviewerName,
-        juiceRules:    rules,
-        sessionId:     tp2Session.sessionId
-      })
-    }).catch(() => {})  // non-blocking, failure is non-fatal
 
     setB('done', '✅', `All clear — juice model saved as "${modelName}"`)
     sfxReady()
