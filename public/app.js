@@ -5361,7 +5361,7 @@ function tp2CheckWaitingNext() {
   }
 }
 
-/** 3:36 8-bit countdown loading screen — fires first wave (WAVE_SIZE tenants), then enters review */
+/** 4:12 8-bit countdown loading screen — fires first wave (WAVE_SIZE tenants), then enters review */
 function tp2ShowBatchLoadingScreen() {
   const waveSize = Math.min(WAVE_SIZE, tp2Session.tenants.length)
   const total    = tp2Session.tenants.length
@@ -5393,15 +5393,15 @@ function tp2ShowBatchLoadingScreen() {
   extras.innerHTML = `
     <div class="tp2-timer-box">
       <div class="tp2-timer-pixel-label">TIME REMAINING</div>
-      <div class="tp2-timer-digits" id="tp2-timer-digits">3:36</div>
+      <div class="tp2-timer-digits" id="tp2-timer-digits">4:12</div>
     </div>`
 
   // Remove any leftover tenant dots from a previous session
   const oldDots = document.getElementById('tp2-batch-dots')
   if (oldDots) oldDots.remove()
 
-  // 3:36 countdown — auto-enter review when it hits 0:00
-  const MAX_WAIT_MS = (3 * 60 + 36) * 1000
+  // 4:12 countdown — gives the main API a cooldown window; auto-enters review at 0:00
+  const MAX_WAIT_MS = (4 * 60 + 12) * 1000
   const startTime   = Date.now()
   let   msgIdx      = 0
   if (tp2Session.loadTimer) clearInterval(tp2Session.loadTimer)
