@@ -5674,8 +5674,10 @@ async function tp2AutoSaveJuice() {
     const rules = data.rules || []
     tp2Session.deepJuiceRules = rules
 
-    const date      = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    const modelName = `${tp2Session.reviewerName} — ${date}`
+    const _now      = new Date()
+    const date      = _now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    const time      = _now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+    const modelName = `${tp2Session.reviewerName} — ${date} ${time}`
     const saveRes = await fetch(sameOriginApi('/api/target/save-model'), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
