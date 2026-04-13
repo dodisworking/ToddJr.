@@ -6315,23 +6315,36 @@ function openModelDetail(modelId, modelName, onSelect) {
       if (rules.length === 0) {
         html += `<div style="font-family:var(--font-pixel);font-size:8px;color:#475569;padding:10px 0">No rules stored in this model.</div>`
       } else {
-        html += `<div><div class="mdl-section-title">RULES (${rules.length})</div>`
-        rules.forEach(r => {
-          const isAvoid = r.type === 'AVOID_FALSE_POSITIVE'
-          const typeLabel = isAvoid ? 'AVOID FALSE POS' : 'IMPROVE DETECT'
-          const typeClass = isAvoid ? 'avoid' : 'improve'
-          const conf = r.confidence ? `⬆ ${r.confidence}x` : ''
-          html += `
-          <div class="mdl-rule">
-            <div class="mdl-rule-badges">
-              <span class="mdl-rule-type ${typeClass}">${typeLabel}</span>
-              <span class="mdl-rule-checktype">${escHtml(r.checkType || '—')}</span>
-              ${conf ? `<span class="mdl-rule-conf">${conf}</span>` : ''}
-            </div>
-            <div class="mdl-rule-text">${escHtml(r.rule || '')}</div>
-            ${r.triggeredBy ? `<div class="mdl-rule-trigger">↳ ${escHtml(r.triggeredBy)}</div>` : ''}
-          </div>`
-        })
+        const avoidRules   = rules.filter(r => r.type === 'AVOID_FALSE_POSITIVE')
+        const condRules    = rules.filter(r => r.type === 'CONDITIONAL_FLAG')
+        const priorRules   = rules.filter(r => r.type === 'PRIORITIZE_CHECK')
+        const otherRules   = rules.filter(r => !['AVOID_FALSE_POSITIVE','CONDITIONAL_FLAG','PRIORITIZE_CHECK'].includes(r.type))
+
+        function renderRuleGroup(groupRules, icon, label, cls) {
+          if (!groupRules.length) return ''
+          let g = `<div class="mdl-rule-group">
+            <div class="mdl-rule-group-header ${cls}">${icon} ${label} <span class="mdl-rule-group-count">${groupRules.length}</span></div>`
+          groupRules.forEach(r => {
+            const stars = '★'.repeat(Math.min(r.confidence || 1, 3)) + '☆'.repeat(Math.max(0, 3 - (r.confidence || 1)))
+            g += `
+            <div class="mdl-rule">
+              <div class="mdl-rule-badges">
+                <span class="mdl-rule-checktype">${escHtml(r.checkType || '—')}</span>
+                <span class="mdl-rule-conf" title="Confidence">${stars}</span>
+              </div>
+              <div class="mdl-rule-text">${escHtml(r.rule || '')}</div>
+              ${r.triggeredBy ? `<div class="mdl-rule-trigger">📊 ${escHtml(r.triggeredBy)}</div>` : ''}
+            </div>`
+          })
+          g += `</div>`
+          return g
+        }
+
+        html += `<div><div class="mdl-section-title">WHAT THE AI LEARNED (${rules.length} rules)</div>`
+        html += renderRuleGroup(avoidRules, '🚫', 'STOP FALSE ALARMS', 'avoid')
+        html += renderRuleGroup(condRules,  '⚖️', 'FLAG ONLY WHEN…',   'cond')
+        html += renderRuleGroup(priorRules, '🔍', 'LOOK HARDER HERE',  'prior')
+        html += renderRuleGroup(otherRules, '📌', 'OTHER',             'other')
         html += `</div>`
       }
 

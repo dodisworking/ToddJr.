@@ -7153,6 +7153,31 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   gap: 6px;
   flex-wrap: wrap;
 }
+/* Rule groups */
+.mdl-rule-group {
+  margin-bottom: 12px;
+}
+.mdl-rule-group-header {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  letter-spacing: 0.5px;
+  padding: 5px 8px;
+  margin-bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mdl-rule-group-header.avoid  { background: #3b0a0a; color: #fca5a5; border-left: 3px solid #dc2626; }
+.mdl-rule-group-header.cond   { background: #1c1a05; color: #fde68a; border-left: 3px solid #f59e0b; }
+.mdl-rule-group-header.prior  { background: #05151a; color: #7dd3fc; border-left: 3px solid #0ea5e9; }
+.mdl-rule-group-header.other  { background: #0f1729; color: #94a3b8; border-left: 3px solid #475569; }
+.mdl-rule-group-count {
+  background: rgba(255,255,255,0.12);
+  border-radius: 2px;
+  padding: 1px 5px;
+  font-size: 7px;
+  margin-left: auto;
+}
 .mdl-rule-type {
   font-family: var(--font-pixel);
   font-size: 6px;
@@ -7164,29 +7189,33 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
 .mdl-rule-checktype {
   font-family: var(--font-pixel);
   font-size: 6px;
-  color: #7c3aed;
+  color: #a78bfa;
   background: #1e1035;
-  padding: 2px 5px;
+  padding: 2px 6px;
+  border-radius: 2px;
 }
 .mdl-rule-conf {
   font-family: var(--font-pixel);
-  font-size: 6px;
-  color: #475569;
+  font-size: 8px;
+  color: #f59e0b;
   margin-left: auto;
+  letter-spacing: 1px;
 }
 .mdl-rule-text {
   font-family: var(--font-pixel);
   font-size: 8px;
   color: #e2e8f0;
-  line-height: 1.6;
+  line-height: 1.7;
   letter-spacing: 0.3px;
+  padding: 2px 0;
 }
 .mdl-rule-trigger {
   font-family: var(--font-pixel);
   font-size: 7px;
-  color: #64748b;
-  font-style: italic;
-  padding-top: 2px;
+  color: #475569;
+  padding-top: 3px;
+  border-top: 1px solid #1e293b;
+  margin-top: 4px;
 }
 .mdl-parent {
   font-family: var(--font-pixel);
