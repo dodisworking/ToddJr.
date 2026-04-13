@@ -5235,7 +5235,7 @@ function tp2AnalyzeBatch(indices) {
 /** Open a single SSE connection for one tenant (called after file registration).
  *  Retries up to MAX_SSE_RETRIES times on error/timeout — each retry waits
  *  progressively longer so a rate-limited key has time to recover. */
-const MAX_SSE_RETRIES = 3
+const MAX_SSE_RETRIES = 5
 function tp2OpenSSE(idx) {
   const tenant = tp2Session.tenants[idx]
   if (!tenant || !tp2Session.active) return
@@ -5416,8 +5416,9 @@ function tp2EnterReview(allReady = false) {
   const _pb = document.querySelector('.gym-progress-bar')
   if (_pb) _pb.style.display = ''
 
-  // Fire remaining tenants in background as reviewer starts
-  tp2FireSecondWave()
+  // NOTE: remaining tenants are NOT fired here — they fire after the reviewer
+  // saves their FIRST tenant (tp2TryAdvance → tp2FireSecondWave). This ensures
+  // the API burst only starts when we know the reviewer is actually at their desk.
 
   if (tp2Session.readyQueue.length > 0) {
     const digitsEl = document.getElementById('tp2-timer-digits')
@@ -5507,8 +5508,9 @@ function tp2NavigateTo(idx) {
 /** Advance to next tenant. Fire the next wave when reviewedCount % WAVE_SIZE === 1
  *  (i.e. after saving the first tenant of every wave — 1, 7, 13, 19…) */
 function tp2TryAdvance() {
-  // Safety net: if second wave somehow wasn't fired yet, fire it now
-  if (!tp2Session.secondWaveFired) tp2FireSecondWave()
+  // First save = reviewer is live → fire all remaining tenants now
+  // (tp2FireSecondWave is a no-op after the first call thanks to secondWaveFired guard)
+  tp2FireSecondWave()
 
   const nextIdx = tp2Session.readyQueue[tp2Session.reviewedCount]
   if (nextIdx !== undefined) {
