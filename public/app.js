@@ -5060,12 +5060,13 @@ const tp2Session = {
   sessionId:          null,
   currentIdx:         0,
   analysisCache:      {},   // tenantId → { status:'pending'|'loading'|'ready'|'error', data }
+  retryCount:         {},   // tenantId → number of retries attempted
   allFeedbacks:       [],   // [{tenantName,tenantIdx,confirmedFindings,rejectedFindings,annotations}]
   allTenantResults:   [],   // for Excel download
   readyQueue:         [],   // tenant indices pushed in completion order (arrival order)
   reviewedCount:      0,    // pointer into readyQueue (how many reviewed so far)
   waitingForNext:     false,// reviewer is waiting for next tenant to arrive
-  secondWaveFired:    false,// true once background tenants (beyond WAVE_SIZE) are fired
+  secondWaveFired:    false,// true once ALL remaining tenants have been fired
   batchLoadingActive: false,// true while the 7-min loading screen is shown
   loadTimer:          null, // setInterval handle for countdown
   loadedModelId:      null,
@@ -5129,6 +5130,7 @@ async function startTP2() {
   tp2Session.sessionId          = 'tp2-' + Date.now()
   tp2Session.currentIdx         = 0
   tp2Session.analysisCache      = {}
+  tp2Session.retryCount         = {}
   tp2Session.allFeedbacks       = []
   tp2Session.allTenantResults   = []
   tp2Session.readyQueue         = []
@@ -5230,15 +5232,38 @@ function tp2AnalyzeBatch(indices) {
   })
 }
 
-/** Open a single SSE connection for one tenant (called after file registration) */
+/** Open a single SSE connection for one tenant (called after file registration).
+ *  Retries up to MAX_SSE_RETRIES times on error/timeout — each retry waits
+ *  progressively longer so a rate-limited key has time to recover. */
+const MAX_SSE_RETRIES = 3
 function tp2OpenSSE(idx) {
   const tenant = tp2Session.tenants[idx]
-  if (!tenant) return
+  if (!tenant || !tp2Session.active) return
   const tenantId = tenant.id
+
+  function markError(reason) {
+    const attempts = (tp2Session.retryCount[tenantId] || 0)
+    if (attempts < MAX_SSE_RETRIES) {
+      tp2Session.retryCount[tenantId] = attempts + 1
+      const delay = attempts * 4000 + 3000   // 3s, 7s, 11s
+      console.log(`[tp2] tenant ${idx + 1} ${reason} — retry ${attempts + 1}/${MAX_SSE_RETRIES} in ${delay / 1000}s`)
+      tp2Session.analysisCache[tenantId] = { status: 'loading', data: null }
+      setTimeout(() => {
+        if (tp2Session.active) tp2OpenSSE(idx)
+      }, delay)
+    } else {
+      console.warn(`[tp2] tenant ${idx + 1} failed after ${MAX_SSE_RETRIES} retries (${reason})`)
+      tp2Session.analysisCache[tenantId] = { status: 'error', data: null }
+      tp2UpdateBatchProgress()
+      tp2CheckWaitingNext()
+    }
+  }
+
   const url = sameOriginApi(
     `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenantId)}${cheapQs()}`
   )
   const es = new EventSource(url)
+
   es.addEventListener('gym-complete', e => {
     es.close()
     const d = JSON.parse(e.data)
@@ -5247,19 +5272,17 @@ function tp2OpenSSE(idx) {
     tp2UpdateBatchProgress()
     tp2CheckWaitingNext()
   })
+
   es.addEventListener('gym-error', e => {
     es.close()
-    tp2Session.analysisCache[tenantId] = { status: 'error', data: null }
-    console.warn(`[tp2] tenant ${idx + 1} error:`, JSON.parse(e.data).error)
-    tp2UpdateBatchProgress()
-    tp2CheckWaitingNext()
+    const errMsg = (() => { try { return JSON.parse(e.data).error } catch { return 'server error' } })()
+    markError(errMsg)
   })
+
   es.onerror = () => {
     es.close()
     if (tp2Session.analysisCache[tenantId]?.status === 'loading') {
-      tp2Session.analysisCache[tenantId] = { status: 'error', data: null }
-      tp2UpdateBatchProgress()
-      tp2CheckWaitingNext()
+      markError('connection dropped')
     }
   }
 }
@@ -5431,11 +5454,23 @@ function tp2FireWaveAt(startIdx) {
   }
 }
 
-/** Backward-compat alias — fires wave starting at WAVE_SIZE (wave 2) */
+/** Fire ALL tenants beyond wave 1 — called as soon as review starts */
 function tp2FireSecondWave() {
   if (tp2Session.secondWaveFired) return
   tp2Session.secondWaveFired = true
-  tp2FireWaveAt(WAVE_SIZE)
+  if (!tp2Session.active) return
+  // Collect every tenant still queued (i.e. not yet fired)
+  const remaining = []
+  for (let i = WAVE_SIZE; i < tp2Session.tenants.length; i++) {
+    const t = tp2Session.tenants[i]
+    if (t && tp2Session.analysisCache[t.id]?.status === 'queued') {
+      tp2Session.analysisCache[t.id] = { status: 'pending', data: null }
+      remaining.push(i)
+    }
+  }
+  if (remaining.length === 0) return
+  console.log(`[tp2] second wave: firing all ${remaining.length} remaining tenants (${WAVE_SIZE + 1}–${tp2Session.tenants.length})`)
+  tp2AnalyzeBatch(remaining)
 }
 
 /** Brief wait screen — shown when reviewer outpaces loading. No animation, plain message. */
@@ -5472,11 +5507,8 @@ function tp2NavigateTo(idx) {
 /** Advance to next tenant. Fire the next wave when reviewedCount % WAVE_SIZE === 1
  *  (i.e. after saving the first tenant of every wave — 1, 7, 13, 19…) */
 function tp2TryAdvance() {
-  // Wave trigger: fire next batch of WAVE_SIZE tenants at the right moment
-  if (tp2Session.reviewedCount > 0 && tp2Session.reviewedCount % WAVE_SIZE === 1) {
-    const nextWaveStart = Math.ceil(tp2Session.reviewedCount / WAVE_SIZE) * WAVE_SIZE
-    tp2FireWaveAt(nextWaveStart)
-  }
+  // Safety net: if second wave somehow wasn't fired yet, fire it now
+  if (!tp2Session.secondWaveFired) tp2FireSecondWave()
 
   const nextIdx = tp2Session.readyQueue[tp2Session.reviewedCount]
   if (nextIdx !== undefined) {
