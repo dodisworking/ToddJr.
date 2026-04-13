@@ -15,6 +15,7 @@
   let TODD_X, TODD_Y
   let TGT_X,  TGT_Y
   let TGT_R = [20, 13, 6]
+  let ROUND_SCALE = 1.0   // 1.0 = full size; shrinks each round for depth illusion
 
   // Round scaling tables (index = round-1, clamped at last entry)
   const ROUND_CFG = [
@@ -121,8 +122,8 @@
   }
 
   // ── Todd Robin Hood sprite ────────────────────────────────────
-  function drawTodd(cx, cy, phase, frame) {
-    const S   = 3
+  function drawTodd(cx, cy, phase, frame, sc) {
+    const S   = Math.max(2, Math.round((sc || 1) * 3))
     const bob = Math.floor(frame / 24) % 2 === 0 ? 0 : 1
     const ox  = cx - 6 * S
     const oy  = cy - 16 * S + bob
@@ -190,11 +191,15 @@
   }
 
   // ── Target ────────────────────────────────────────────────────
-  function drawTarget(tx, ty) {
+  function drawTarget(tx, ty, sc) {
     if (!_ctx) return
-    const r0 = TGT_R[0]
-    cls(TRUNK); rec(tx - 3, ty + r0, 6, 22)
-    cls(TRUNK); rec(tx - 14, ty + r0 + 22, 28, 4)
+    const r0  = TGT_R[0]
+    const s   = sc || 1
+    const pw  = Math.max(2, Math.round(6  * s))   // post width
+    const ph  = Math.max(8, Math.round(22 * s))   // post height
+    const bw  = Math.max(10, Math.round(28 * s))  // base width
+    cls(TRUNK); rec(tx - (pw/2|0), ty + r0, pw, ph)
+    cls(TRUNK); rec(tx - (bw/2|0), ty + r0 + ph, bw, 4)
     const ringColors = [TGT_RED, TGT_WHT, TGT_RED]
     for (let ri = 0; ri < 3; ri++) {
       cls(ringColors[ri])
@@ -334,10 +339,10 @@
       _ctx.restore()
     }
 
-    drawTarget(TGT_X, TGT_Y)
+    drawTarget(TGT_X, TGT_Y, ROUND_SCALE)
     if (A.phase === 'hit') drawFlyingArrow(TGT_X - 22, TGT_Y + 1, 7, 0.5)
     if (A.phase === 'fly') drawFlyingArrow(A.arrowX, A.arrowY, A.arrowVX, A.arrowVY)
-    drawTodd(TODD_X, TODD_Y, A.phase, A.frame)
+    drawTodd(TODD_X, TODD_Y, A.phase, A.frame, ROUND_SCALE)
 
     _ctx.fillStyle = 'rgba(148,163,184,0.45)'
     _ctx.font = '8px monospace'; _ctx.textAlign = 'center'
@@ -459,7 +464,7 @@
       _ctx.restore()
     }
 
-    drawTarget(TGT_X, TGT_Y)
+    drawTarget(TGT_X, TGT_Y, ROUND_SCALE)
 
     G.particles.forEach(p => {
       _ctx.save(); _ctx.globalAlpha = p.life / 30
@@ -486,7 +491,7 @@
     const toddPhase = G.projectiles.length > 0 ? 'fly'
                     : G.arrows > 0             ? 'draw'
                     :                            'idle'
-    drawTodd(TODD_X, TODD_Y, toddPhase, A.frame)
+    drawTodd(TODD_X, TODD_Y, toddPhase, A.frame, ROUND_SCALE)
 
     // HUD
     drawHUD()
@@ -541,9 +546,13 @@
     const cfg = roundCfg(roundNum)
     TGT_R = cfg.radii.slice()
 
-    // Target moves slightly right + up each round (looks farther away)
-    TGT_X = Math.min(W - TGT_R[0] - 8, (W - 52) + (roundNum - 1) * 6)
-    TGT_Y = Math.max(H * 0.28, H / 2 - 5 - (roundNum - 1) * 7)
+    // Depth illusion: scale everything down per round
+    ROUND_SCALE = Math.max(0.45, 1.0 - (roundNum - 1) * 0.13)
+
+    // Target moves right + UP more aggressively each round
+    // (far objects appear smaller AND higher in perspective)
+    TGT_X = Math.min(W - TGT_R[0] - 10, (W - 52) + (roundNum - 1) * 14)
+    TGT_Y = Math.max(H * 0.12, H / 2 - 5 - (roundNum - 1) * 16)
 
     G.round      = roundNum
     G.arrows     = 3
@@ -628,6 +637,7 @@
     TODD_X = 52;    TODD_Y = H - 22
     TGT_X  = W - 52; TGT_Y = H / 2 - 5
     TGT_R  = [20, 13, 6]
+    ROUND_SCALE = 1.0   // idle always full size
 
     _gameMode = false
     A.phase = 'idle'; A.timer = 0; A.frame = 0; A.hitFlash = 0

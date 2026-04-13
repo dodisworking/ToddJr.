@@ -5203,15 +5203,24 @@ function tp2StartBatch(startIdx) {
  *  no tenant waits for another's large files. */
 function tp2AnalyzeBatch(indices) {
   if (!indices.length) return
-  // Set all to 'loading' immediately so dots update
-  indices.forEach(idx => {
+  // Guard: skip tenants already in-flight or done — prevents double API calls
+  const fresh = indices.filter(idx => {
+    const tenantId = tp2Session.tenants[idx]?.id
+    if (!tenantId) return false
+    const st = tp2Session.analysisCache[tenantId]?.status
+    return !st || st === 'queued' || st === 'pending'
+  })
+  if (!fresh.length) return
+
+  // Set all fresh tenants to 'loading' immediately
+  fresh.forEach(idx => {
     const tenantId = tp2Session.tenants[idx]?.id
     if (tenantId) tp2Session.analysisCache[tenantId] = { status: 'loading', data: null }
   })
   tp2UpdateBatchProgress()
 
   // Each tenant: upload → SSE open, independently (no cross-tenant waiting)
-  indices.forEach(idx => {
+  fresh.forEach(idx => {
     const tenantId = tp2Session.tenants[idx]?.id
     if (!tenantId) return
     gymRegisterLocalFiles(tenantId)
@@ -5306,14 +5315,9 @@ function tp2ShowBatchLoadingScreen() {
     <button id="tp2-start-early-btn" class="btn-tp2-start-early hidden" type="button">▶ START NOW</button>`
   document.getElementById('tp2-start-early-btn')?.addEventListener('click', () => tp2EnterReview())
 
-  // Inject per-tenant status dots (first wave)
-  let dots = document.getElementById('tp2-batch-dots')
-  if (!dots) {
-    dots = document.createElement('div')
-    dots.id = 'tp2-batch-dots'
-    dots.className = 'tp2-batch-dots'
-    extras.after(dots)
-  }
+  // Remove any leftover tenant dots from a previous session
+  const oldDots = document.getElementById('tp2-batch-dots')
+  if (oldDots) oldDots.remove()
 
   // 3:36 countdown — auto-enter review when it hits 0:00
   const MAX_WAIT_MS = (3 * 60 + 36) * 1000
@@ -5352,27 +5356,19 @@ function tp2ShowBatchLoadingScreen() {
   tp2UpdateBatchProgress()
 }
 
-/** Update first-wave dots and progress bar. Enters review when all first-wave tenants are done. */
+/** Update progress bar. Enters review when all first-wave tenants are done. */
 function tp2UpdateBatchProgress() {
   if (!tp2Session.batchLoadingActive) return
   const waveSize = Math.min(WAVE_SIZE, tp2Session.tenants.length)
-  const dots     = document.getElementById('tp2-batch-dots')
 
   let readyCount = 0, doneCount = 0
-  const items = []
   for (let i = 0; i < waveSize; i++) {
     const tenantId = tp2Session.tenants[i].id
-    const cache    = tp2Session.analysisCache[tenantId]
-    const status   = cache?.status || 'pending'
-    if (status === 'ready')       { readyCount++; doneCount++ }
-    else if (status === 'error')  { doneCount++ }
-    const icon   = status === 'ready' ? '✅' : status === 'error' ? '❌' : '⏳'
-    const keyNum = (i % 4) + 1  // which API key handles this tenant (1–4)
-    const keyTag = `<span class="tp2-dot-key">API ${keyNum}</span>`
-    items.push(`<div class="tp2-dot-row"><span class="tp2-dot-icon">${icon}</span><span class="tp2-dot-name">${escHtml(tp2Session.tenants[i].tenantName)}</span>${keyTag}</div>`)
+    const status   = tp2Session.analysisCache[tenantId]?.status || 'pending'
+    if (status === 'ready')      { readyCount++; doneCount++ }
+    else if (status === 'error') { doneCount++ }
   }
 
-  if (dots) dots.innerHTML = items.join('')
   const fill = document.getElementById('gym-progress-fill')
   if (fill) fill.style.width = Math.round((doneCount / waveSize) * 100) + '%'
 
@@ -6875,7 +6871,7 @@ function gymShowPanel(name) {
     const label      = document.getElementById('gym-loading-label')
     if (runWrap)    runWrap.classList.toggle('hidden', isTP)
     if (targetWrap) targetWrap.classList.toggle('hidden', !isTP)
-    if (label) label.textContent = isTP ? 'Todd Jr. is on the hunt...' : 'Todd is working out...'
+    if (label) { label.textContent = isTP ? '' : 'Todd is working out...'; label.style.display = isTP ? 'none' : '' }
     const titleEl = document.getElementById('gym-title')
     if (titleEl) titleEl.textContent = isTP ? '🎯 Target Practice' : '🏋️ Gym Teacher'
     if (isTP) {
