@@ -5286,8 +5286,9 @@ function tp2OpenSSE(idx) {
     }
   }
 
+  // TP2 always uses the full model — never append cheapQs() here
   const url = sameOriginApi(
-    `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenantId)}&keyIndex=${chosenKeyIdx}${cheapQs()}`
+    `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenantId)}&keyIndex=${chosenKeyIdx}`
   )
   console.log(`[tp2] tenant ${idx + 1} → key${chosenKeyIdx + 1} (health: ${tp2Session.keyHealth.map((t, i) => t ? `k${i + 1}=${Math.round((Date.now() - t) / 1000)}s` : `k${i + 1}=✓`).join(' ')})`)
   const es = new EventSource(url)
@@ -5351,8 +5352,8 @@ function tp2ShowBatchLoadingScreen() {
   const titleEl = document.getElementById('gym-title')
   if (titleEl) titleEl.textContent = '⚡ RAPID BATCH'
   document.getElementById('gym-subtitle').textContent =
-    `Loading ${waveSize} of ${total} tenant${total !== 1 ? 's' : ''} — be right back${isCheapModeActive() ? '  🪙 DUMB MODE' : ''}`
-  document.getElementById('gym-loading-msg').textContent = isCheapModeActive() ? '🪙 DUMB MODE ACTIVE — using cheap model' : TIMER_MSGS[0]
+    `Loading ${waveSize} of ${total} tenant${total !== 1 ? 's' : ''} — be right back`
+  document.getElementById('gym-loading-msg').textContent = TIMER_MSGS[0]
   document.getElementById('gym-progress-fill').style.width = '0%'
 
   // Inject 8-bit timer block + start-early button
