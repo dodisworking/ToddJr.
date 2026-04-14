@@ -1788,12 +1788,27 @@ app.post('/api/target/synthesize', express.json({ limit: '2mb' }), async (req, r
 })
 
 // POST /api/target/deep-synthesize — end-of-session deep synthesis for TP 2.0
-app.post('/api/target/deep-synthesize', express.json({ limit: '16mb' }), async (req, res) => {
+app.post('/api/target/deep-synthesize', express.json({ limit: '32mb' }), async (req, res) => {
   try {
     const { sessionId, tenantFeedbacks = [] } = req.body
     const session = sessions.get(sessionId)
     if (!session) return res.status(404).json({ error: 'Session not found' })
     if (tenantFeedbacks.length === 0) return res.status(400).json({ error: 'No feedback provided' })
+
+    // Persist raw feedback to disk immediately — so synthesis can always be retried
+    // even if the Claude call fails or the session expires.
+    try {
+      const feedbackDir = process.env.ISAAC_SAVE_DIR
+        ? path.join(process.env.ISAAC_SAVE_DIR, 'tp2-feedback')
+        : path.join(OUTPUTS_DIR, 'tp2-feedback')
+      fs.mkdirSync(feedbackDir, { recursive: true })
+      const feedbackFile = path.join(feedbackDir, `${sessionId}.json`)
+      fs.writeFileSync(feedbackFile, JSON.stringify({ sessionId, tenantFeedbacks, savedAt: new Date().toISOString() }, null, 2))
+      console.log(`[deep-synthesize] feedback saved to disk: ${feedbackFile} (${tenantFeedbacks.length} tenants)`)
+    } catch (saveErr) {
+      console.warn('[deep-synthesize] could not persist feedback to disk:', saveErr.message)
+      // Non-fatal — still attempt synthesis
+    }
 
     const result = await synthesizeDeepLearning({ tenantFeedbacks })
     // Store rules in session so they can be loaded if user runs TP 1.0 after
@@ -1802,6 +1817,33 @@ app.post('/api/target/deep-synthesize', express.json({ limit: '16mb' }), async (
   } catch (err) {
     console.error('[target/deep-synthesize]', err)
     res.status(500).json({ error: err.message || 'Deep synthesis failed' })
+  }
+})
+
+// POST /api/target/retry-synthesis — re-run deep synthesis from persisted feedback file
+// Body: { sessionId } — reads the saved feedback JSON and retries synthesizeDeepLearning
+app.post('/api/target/retry-synthesis', express.json({ limit: '1kb' }), async (req, res) => {
+  try {
+    const { sessionId } = req.body || {}
+    if (!sessionId) return res.status(400).json({ error: 'sessionId required' })
+
+    const feedbackDir = process.env.ISAAC_SAVE_DIR
+      ? path.join(process.env.ISAAC_SAVE_DIR, 'tp2-feedback')
+      : path.join(OUTPUTS_DIR, 'tp2-feedback')
+    const feedbackFile = path.join(feedbackDir, `${sessionId}.json`)
+
+    if (!fs.existsSync(feedbackFile)) return res.status(404).json({ error: 'No saved feedback for this session' })
+
+    const saved = JSON.parse(fs.readFileSync(feedbackFile, 'utf8'))
+    const tenantFeedbacks = saved.tenantFeedbacks || []
+    if (tenantFeedbacks.length === 0) return res.status(400).json({ error: 'Saved feedback is empty' })
+
+    console.log(`[retry-synthesis] retrying for sessionId=${sessionId}, ${tenantFeedbacks.length} tenants`)
+    const result = await synthesizeDeepLearning({ tenantFeedbacks })
+    res.json({ ok: true, rules: result.rules || [], summary: result.summary || '', retried: true })
+  } catch (err) {
+    console.error('[retry-synthesis]', err)
+    res.status(500).json({ error: err.message || 'Retry synthesis failed' })
   }
 })
 

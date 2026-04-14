@@ -5878,7 +5878,44 @@ async function tp2AutoSaveJuice() {
     setB('done', '✅', `All clear — juice model saved as "${modelName}"`)
     sfxReady()
   } catch (err) {
-    setB('error', '⚠️', `Analysis failed: ${err.message}`)
+    console.error('[tp2AutoSaveJuice]', err)
+    // Show error + retry button — feedback is saved to disk so retry will work
+    if (banner) {
+      banner.className = 'tp2sc-synthesis-banner error'
+      const icon = banner.querySelector('.tp2sc-banner-icon')
+      const text = banner.querySelector('.tp2sc-banner-text')
+      if (icon) icon.textContent = '⚠️'
+      if (text) text.innerHTML = `Juice model save failed — your corrections are safe on disk.<br>
+        <button id="tp2-retry-synthesis-btn" style="margin-top:8px;padding:6px 14px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px;">🔄 Retry Synthesis</button>`
+      document.getElementById('tp2-retry-synthesis-btn')?.addEventListener('click', async () => {
+        setB('pending', '⏳', "Retrying synthesis — please don't close this page...")
+        try {
+          const rRes = await fetch(sameOriginApi('/api/target/retry-synthesis'), {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: tp2Session.sessionId })
+          })
+          const rData = await rRes.json()
+          if (!rRes.ok) throw new Error(rData.error || 'Retry failed')
+          // Save the model with the retried rules
+          const _now = new Date()
+          const date = _now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          const time = _now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+          const modelName = `${tp2Session.reviewerName} — ${date} ${time}`
+          const saveRes = await fetch(sameOriginApi('/api/target/save-model'), {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ modelName, rules: rData.rules, reviewerName: tp2Session.reviewerName, comment: '',
+              sessionId: tp2Session.sessionId, tenantCount: tp2Session.tenants.length,
+              parentModelId: tp2Session.loadedModelId, parentModelName: tp2Session.loadedModelName, deepSynthesis: true })
+          })
+          if (!saveRes.ok) throw new Error('Save failed after retry')
+          setB('done', '✅', `Recovered! Juice model saved as "${modelName}"`)
+          sfxReady()
+        } catch (retryErr) {
+          setB('error', '⚠️', `Retry also failed: ${retryErr.message} — contact support`)
+          sfxError()
+        }
+      })
+    }
     sfxError()
   }
 }
