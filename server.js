@@ -112,7 +112,7 @@ function parseFolderName(name) {
   return { property, suite, tenantName }
 }
 
-app.use(express.json({ limit: '50mb' }))
+app.use(express.json({ limit: '200mb' }))
 
 // CORS must be registered *before* /api/* routes, or browsers get no ACAO headers on cross-origin calls
 // (e.g. UI on http://127.0.0.1:3456, API on https://*.up.railway.app with LOCAL_DEV_CORS=1 on Railway).
@@ -1630,6 +1630,22 @@ app.post('/api/gym/register-files', express.json({ limit: '500mb' }), (req, res)
   res.json({ ok: true, fileCount: tenant.files.length })
 })
 
+// POST /api/target/free-tenant-files — drop PDF buffers for a tenant the reviewer just finished
+// Called by client when reviewer moves on — frees RAM without ending the session
+app.post('/api/target/free-tenant-files', (req, res) => {
+  const { sessionId, tenantId } = req.body || {}
+  if (sessionId && tenantId) {
+    const session = sessions.get(sessionId)
+    const tenant  = session?.tenants.find(t => t.id === tenantId)
+    if (tenant?.files?.length) {
+      const freed = tenant.files.reduce((n, f) => n + (f.buffer?.length || 0), 0)
+      tenant.files.forEach(f => { delete f.buffer })
+      console.log(`[mem] freed ~${Math.round(freed / 1024 / 1024)}MB for tenant ${tenantId}`)
+    }
+  }
+  res.json({ ok: true })
+})
+
 app.get('/api/gym/file/:sessionId/:tenantId/:fileIndex', (req, res) => {
   const { sessionId, tenantId, fileIndex } = req.params
   const session = sessions.get(sessionId)
@@ -2041,11 +2057,11 @@ function maxSeverity(findings) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SESSION CLEANUP — runs every 30 minutes
+// SESSION CLEANUP — runs every 10 minutes
 // ═══════════════════════════════════════════════════════════
 
 setInterval(() => {
-  const cutoff = Date.now() - 2 * 60 * 60 * 1000 // 2 hours
+  const cutoff = Date.now() - 30 * 60 * 1000 // 30 minutes
   for (const [id, session] of sessions) {
     if (session.createdAt < cutoff) {
       // isLocal sessions have no uploadDir (files were in browser RAM, never written to disk)
@@ -2057,7 +2073,7 @@ setInterval(() => {
       console.log(`[cleanup] Removed session ${id}`)
     }
   }
-}, 30 * 60 * 1000)
+}, 10 * 60 * 1000)
 
 // ═══════════════════════════════════════════════════════════
 // START

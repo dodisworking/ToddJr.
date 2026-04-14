@@ -5570,6 +5570,18 @@ function tp2TryAdvance() {
   // (tp2FireSecondWave is a no-op after the first call thanks to secondWaveFired guard)
   tp2FireSecondWave()
 
+  // Free the PDF buffers for the tenant we just finished reviewing — RAM no longer needed
+  const justReviewedIdx = tp2Session.readyQueue[tp2Session.reviewedCount - 1]
+  if (justReviewedIdx !== undefined) {
+    const prevTenant = tp2Session.tenants[justReviewedIdx]
+    if (prevTenant) {
+      fetch(sameOriginApi('/api/target/free-tenant-files'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: state.sessionId, tenantId: prevTenant.id })
+      }).catch(() => {})
+    }
+  }
+
   const nextIdx = tp2Session.readyQueue[tp2Session.reviewedCount]
   if (nextIdx !== undefined) {
     tp2NavigateTo(nextIdx)
