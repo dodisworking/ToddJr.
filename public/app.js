@@ -6320,7 +6320,7 @@ function showTargetSetupScreen(isTP2 = false) {
 
     function onExcel() {
       overlay.classList.add('hidden')
-      runStraightExcel(() => overlay.classList.remove('hidden'))
+      runStraightExcel(selectedModel || null, () => overlay.classList.remove('hidden'))
     }
     function onStart() {
       const name = reviewerIn.value.trim()
@@ -6347,20 +6347,20 @@ function showTargetSetupScreen(isTP2 = false) {
 
 /** ── Straight Excel Download ─────────────────────────────────────────────────
  * Runs all loaded tenants through analysis in waves of WAVE_SIZE (5+3+3=11),
- * shows a live countdown, then downloads a Missing Documents Excel when done.
+ * shows a 3:36 countdown per wave, then downloads a Missing Documents Excel.
  * Wave N+1 fires only after wave N fully completes — keys never overloaded.
- * Timer formula: ceil(tenants ÷ 11) × 3 min  (from real test: 162s max/tenant) */
-function runStraightExcel(onClose) {
+ * If a wave overruns 3:36 the timer shows "Sorry, give me a sec..." and waits.
+ * juiceModel: { id, name } — optional, loads rules into session before wave 1. */
+async function runStraightExcel(juiceModel, onClose) {
   if (!state.tenants || state.tenants.length === 0) {
     toast('No tenants loaded — upload folders first', 'error')
     onClose && onClose()
     return
   }
 
-  const total    = state.tenants.length
-  const waves    = Math.ceil(total / WAVE_SIZE)
-  const estSecs  = waves * 180   // 3 min per wave
-  const estLabel = `~${waves * 3} min`
+  const total  = state.tenants.length
+  const waves  = Math.ceil(total / WAVE_SIZE)
+  const WAVE_SECS = 3 * 60 + 36   // fixed 3:36 per wave — established safe ceiling
 
   // ── Build overlay ──────────────────────────────────────────
   document.getElementById('se-overlay')?.remove()
@@ -6368,19 +6368,22 @@ function runStraightExcel(onClose) {
   overlay.id = 'se-overlay'
   overlay.className = 'se-overlay'
 
-  const startM = Math.floor(estSecs / 60)
-  const startS = estSecs % 60
+  const juiceLine = juiceModel
+    ? `<div class="se-juice">🧠 Juice: ${escHtml(juiceModel.name)}</div>`
+    : ''
+
   overlay.innerHTML = `
     <div class="se-box">
       <div class="se-header">📊 STRAIGHT EXCEL</div>
-      <div class="se-meta">${total} tenant${total > 1 ? 's' : ''} · ${waves} wave${waves > 1 ? 's' : ''} of ${WAVE_SIZE} · ${estLabel}</div>
+      <div class="se-meta">${total} tenant${total > 1 ? 's' : ''} · ${waves} wave${waves > 1 ? 's' : ''} · 3:36 per wave</div>
+      ${juiceLine}
       <div class="se-progress-wrap">
         <div class="se-pbar"><div class="se-pfill" id="se-pfill" style="width:0%"></div></div>
         <div class="se-plabel" id="se-plabel">0 / ${total} analyzed</div>
       </div>
       <div class="se-timer-section">
-        <div class="se-tlabel">TIME REMAINING</div>
-        <div class="se-tdigits" id="se-tdigits">${startM}:${String(startS).padStart(2, '0')}</div>
+        <div class="se-tlabel">ESTIMATED TIME</div>
+        <div class="se-tdigits" id="se-tdigits">3:36</div>
       </div>
       <div class="se-wave-status" id="se-wstatus">⚡ Wave 1 of ${waves} — analyzing tenants 1–${Math.min(WAVE_SIZE, total)}...</div>
       <div class="se-result hidden" id="se-result"></div>
@@ -6392,20 +6395,46 @@ function runStraightExcel(onClose) {
     onClose && onClose()
   })
 
-  // ── Countdown ──────────────────────────────────────────────
-  let remaining = estSecs
-  const timerTick = setInterval(() => {
-    if (remaining <= 0) { clearInterval(timerTick); return }
-    remaining--
-    const m = Math.floor(remaining / 60)
-    const s = remaining % 60
-    const el = document.getElementById('se-tdigits')
-    if (el) el.textContent = `${m}:${String(s).padStart(2, '0')}`
-  }, 1000)
+  // ── Juice: load rules into session before wave 1 ───────────
+  if (juiceModel?.id) {
+    try {
+      const fullRes = await fetch(sameOriginApi(`/api/target/models/${juiceModel.id}`))
+      if (fullRes.ok) {
+        const fullModel = await fullRes.json()
+        await fetch(sameOriginApi('/api/target/load-model'), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: state.sessionId, rules: fullModel.rules, modelId: juiceModel.id, modelName: juiceModel.name })
+        })
+      }
+    } catch {}  // non-fatal — analysis still runs, just without juice
+  }
+
+  // ── Per-wave countdown (always 3:36, resets each wave) ────
+  let timerTick = null
+  function startWaveTimer() {
+    if (timerTick) clearInterval(timerTick)
+    let remaining = WAVE_SECS
+    let overrun   = false
+    timerTick = setInterval(() => {
+      remaining--
+      const el = document.getElementById('se-tdigits')
+      if (!el) return
+      if (remaining > 0) {
+        const m = Math.floor(remaining / 60)
+        const s = remaining % 60
+        el.textContent  = `${m}:${String(s).padStart(2, '0')}`
+        el.className    = remaining < 30 ? 'se-tdigits se-tdigits-warn' : 'se-tdigits'
+      } else if (!overrun) {
+        overrun = true
+        el.textContent = 'Sorry, give me a sec...'
+        el.className   = 'se-tdigits se-tdigits-overrun'
+      }
+    }, 1000)
+  }
 
   // ── State ──────────────────────────────────────────────────
   let   doneCnt = 0
-  const results = new Map()   // tenantIdx → gym-complete data
+  const results = new Map()
 
   function updateProgress() {
     const pct  = Math.round(doneCnt / total * 100)
@@ -6416,7 +6445,7 @@ function runStraightExcel(onClose) {
   }
 
   function onAllDone() {
-    clearInterval(timerTick)
+    if (timerTick) clearInterval(timerTick)
     const td = document.getElementById('se-tdigits')
     if (td) { td.textContent = '0:00'; td.className = 'se-tdigits se-tdigits-done' }
     document.getElementById('se-wstatus')?.classList.add('hidden')
@@ -6433,6 +6462,7 @@ function runStraightExcel(onClose) {
 
     const ws = document.getElementById('se-wstatus')
     if (ws) ws.textContent = `⚡ Wave ${waveNum} of ${waves} — analyzing tenants ${waveStart + 1}–${waveEnd}...`
+    startWaveTimer()
 
     function tenantFinished() {
       waveDone++
@@ -6470,13 +6500,13 @@ function runStraightExcel(onClose) {
     }
   }
 
-  // ── Excel generation ───────────────────────────────────────
+  // ── Excel download ─────────────────────────────────────────
   async function doDownload() {
     const tenantResults = Array.from({ length: total }, (_, i) => {
       const d = results.get(i) || { _error: true, tenantName: state.tenants[i]?.tenantName, findings: [], allClear: false }
       return {
         tenantName: d.tenantNameInDocuments || d.tenantName || state.tenants[i]?.folderName || `Tenant ${i + 1}`,
-        findings:   d.findings  || [],
+        findings:   d.findings || [],
         allClear:   !!d.allClear,
         error:      !!d._error,
       }
