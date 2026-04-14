@@ -1849,6 +1849,42 @@ function writeTPManifest(dir, entries) {
   fs.writeFileSync(path.join(dir, TP_REPORTS_MANIFEST), JSON.stringify(entries.slice(-100), null, 2))
 }
 
+// POST /api/target/straight-excel — run-and-download: no reviewer, just findings → Excel
+app.post('/api/target/straight-excel', express.json({ limit: '10mb' }), async (req, res) => {
+  try {
+    const { tenantResults = [] } = req.body
+    const { generateReport } = await import('./lib/reporter.js')
+
+    // Map client payload to generateReport's [{tenant, result}] format
+    const allFindings = tenantResults.map(r => ({
+      tenant: {
+        tenantName: r.tenantName || r.folderName || 'Unknown',
+        property:   r.property  || '',
+        suite:      r.suite     || '',
+      },
+      result: r.error ? null : {
+        findings:                r.findings  || [],
+        allClear:                !!r.allClear,
+        tenantNameInDocuments:   r.tenantName,
+      }
+    }))
+
+    const tmpPath = path.join(UPLOADS_DIR, `straight-excel-${Date.now()}.xlsx`)
+    await generateReport(allFindings, tmpPath)
+
+    const stat = fs.statSync(tmpPath)
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="Missing-Documents-${new Date().toISOString().slice(0, 10)}.xlsx"`)
+    res.setHeader('Content-Length', stat.size)
+    const stream = fs.createReadStream(tmpPath)
+    stream.pipe(res)
+    stream.on('end', () => { try { fs.unlinkSync(tmpPath) } catch {} })
+  } catch (err) {
+    console.error('[straight-excel]', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // POST /api/target/download-excel — generate, persist, and stream session Excel
 app.post('/api/target/download-excel', express.json({ limit: '10mb' }), async (req, res) => {
   try {

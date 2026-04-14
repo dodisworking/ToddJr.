@@ -6197,7 +6197,7 @@ function showTargetSetupScreen(isTP2 = false) {
     const juiceCanvas = document.getElementById('tso-juicebox-canvas')
     const dumbBtn     = document.getElementById('tso-dumb-btn')
     const dumbRow     = document.getElementById('tso-dumb-btn')?.closest('.tso-dumb-row')
-    const rltBtn      = document.getElementById('tso-rlt-btn')
+    const excelBtn    = document.getElementById('tso-excel-btn')
 
     if (!overlay || !reviewerIn || !startBtn || !cancelBtn) {
       pixelPrompt('Who is reviewing these findings?', '🎯 START TARGET PRACTICE', 'e.g. Sarah M.')
@@ -6313,14 +6313,14 @@ function showTargetSetupScreen(isTP2 = false) {
       startBtn.removeEventListener('click', onStart)
       cancelBtn.removeEventListener('click', onCancel)
       juiceBtn  && juiceBtn.removeEventListener('click', onJuiceClick)
-      rltBtn    && rltBtn.removeEventListener('click', onRlt)
+      excelBtn  && excelBtn.removeEventListener('click', onExcel)
       document.removeEventListener('keydown', onKey)
       resolve(result)
     }
 
-    function onRlt() {
+    function onExcel() {
       overlay.classList.add('hidden')
-      runRateLimitTest(() => overlay.classList.remove('hidden'))
+      runStraightExcel(() => overlay.classList.remove('hidden'))
     }
     function onStart() {
       const name = reviewerIn.value.trim()
@@ -6340,150 +6340,172 @@ function showTargetSetupScreen(isTP2 = false) {
     }
     startBtn.addEventListener('click', onStart)
     cancelBtn.addEventListener('click', onCancel)
-    rltBtn && rltBtn.addEventListener('click', onRlt)
+    excelBtn && excelBtn.addEventListener('click', onExcel)
     document.addEventListener('keydown', onKey)
   })
 }
 
-/** ── Rate Limit Test ────────────────────────────────────────────────────────
- * Fires 3 random tenants through /api/gym/analyze, measures token usage per
- * tenant, and shows a results table. No session state is created or modified. */
-function runRateLimitTest(onClose) {
+/** ── Straight Excel Download ─────────────────────────────────────────────────
+ * Runs all loaded tenants through analysis in waves of WAVE_SIZE (5+3+3=11),
+ * shows a live countdown, then downloads a Missing Documents Excel when done.
+ * Wave N+1 fires only after wave N fully completes — keys never overloaded.
+ * Timer formula: ceil(tenants ÷ 11) × 3 min  (from real test: 162s max/tenant) */
+function runStraightExcel(onClose) {
   if (!state.tenants || state.tenants.length === 0) {
     toast('No tenants loaded — upload folders first', 'error')
     onClose && onClose()
     return
   }
 
-  // Pick up to 3 random tenants
-  const shuffled = [...state.tenants].sort(() => Math.random() - 0.5)
-  const picks    = shuffled.slice(0, Math.min(3, shuffled.length))
+  const total    = state.tenants.length
+  const waves    = Math.ceil(total / WAVE_SIZE)
+  const estSecs  = waves * 180   // 3 min per wave
+  const estLabel = `~${waves * 3} min`
 
-  // Build overlay
-  const existing = document.getElementById('rlt-overlay')
-  if (existing) existing.remove()
-
+  // ── Build overlay ──────────────────────────────────────────
+  document.getElementById('se-overlay')?.remove()
   const overlay = document.createElement('div')
-  overlay.id = 'rlt-overlay'
-  overlay.className = 'rlt-overlay'
+  overlay.id = 'se-overlay'
+  overlay.className = 'se-overlay'
+
+  const startM = Math.floor(estSecs / 60)
+  const startS = estSecs % 60
   overlay.innerHTML = `
-    <div class="rlt-box">
-      <div class="rlt-header">🧪 RATE LIMIT TEST</div>
-      <div class="rlt-subtitle">${picks.length} random tenant${picks.length > 1 ? 's' : ''} · measuring real token usage per analysis</div>
-      <div class="rlt-tenant-list" id="rlt-tenant-list">
-        ${picks.map((t, i) => `
-          <div class="rlt-tenant-row">
-            <span class="rlt-tenant-name">${escHtml(t.tenantName || t.folderName || 'Tenant ' + (i + 1))}</span>
-            <span class="rlt-tenant-status" id="rlt-status-${i}">⏳ analyzing...</span>
-          </div>
-        `).join('')}
+    <div class="se-box">
+      <div class="se-header">📊 STRAIGHT EXCEL</div>
+      <div class="se-meta">${total} tenant${total > 1 ? 's' : ''} · ${waves} wave${waves > 1 ? 's' : ''} of ${WAVE_SIZE} · ${estLabel}</div>
+      <div class="se-progress-wrap">
+        <div class="se-pbar"><div class="se-pfill" id="se-pfill" style="width:0%"></div></div>
+        <div class="se-plabel" id="se-plabel">0 / ${total} analyzed</div>
       </div>
-      <div class="rlt-summary hidden" id="rlt-summary"></div>
-      <button class="rlt-close-btn hidden" id="rlt-close-btn">✕ CLOSE</button>
+      <div class="se-timer-section">
+        <div class="se-tlabel">TIME REMAINING</div>
+        <div class="se-tdigits" id="se-tdigits">${startM}:${String(startS).padStart(2, '0')}</div>
+      </div>
+      <div class="se-wave-status" id="se-wstatus">⚡ Wave 1 of ${waves} — analyzing tenants 1–${Math.min(WAVE_SIZE, total)}...</div>
+      <div class="se-result hidden" id="se-result"></div>
+      <button class="se-close-btn hidden" id="se-close-btn">✕ CLOSE</button>
     </div>`
   document.body.appendChild(overlay)
-
-  document.getElementById('rlt-close-btn')?.addEventListener('click', () => {
+  document.getElementById('se-close-btn')?.addEventListener('click', () => {
     overlay.remove()
     onClose && onClose()
   })
 
-  // Fire each tenant independently
-  const results  = {}
-  let   doneCount = 0
+  // ── Countdown ──────────────────────────────────────────────
+  let remaining = estSecs
+  const timerTick = setInterval(() => {
+    if (remaining <= 0) { clearInterval(timerTick); return }
+    remaining--
+    const m = Math.floor(remaining / 60)
+    const s = remaining % 60
+    const el = document.getElementById('se-tdigits')
+    if (el) el.textContent = `${m}:${String(s).padStart(2, '0')}`
+  }, 1000)
 
-  function checkAllDone() {
-    if (doneCount < picks.length) return
-    // Build summary
-    const done = Object.values(results).filter(r => r.status === 'done')
-    const summaryEl = document.getElementById('rlt-summary')
-    const closeBtn  = document.getElementById('rlt-close-btn')
-    if (!summaryEl) return
+  // ── State ──────────────────────────────────────────────────
+  let   doneCnt = 0
+  const results = new Map()   // tenantIdx → gym-complete data
 
-    if (done.length === 0) {
-      summaryEl.innerHTML = '<div class="rlt-summary-note">All tenants failed — check Railway logs for details.</div>'
-    } else {
-      const avg = arr => Math.round(arr.reduce((s, v) => s + v, 0) / arr.length)
-      const avgIn    = avg(done.map(r => r.inputTokens))
-      const avgOut   = avg(done.map(r => r.outputTokens))
-      const avgCache = avg(done.map(r => r.cacheReadTokens))
-      const maxIn    = Math.max(...done.map(r => r.inputTokens))
-      const avgTime  = avg(done.map(r => r.elapsed))
-      summaryEl.innerHTML = `
-        <div class="rlt-summary-title">📊 RESULTS (${done.length}/${picks.length} succeeded)</div>
-        <div class="rlt-summary-row"><span>Avg input tokens:</span><span class="rlt-val">${avgIn.toLocaleString()}</span></div>
-        <div class="rlt-summary-row"><span>Avg output tokens:</span><span class="rlt-val">${avgOut.toLocaleString()}</span></div>
-        ${avgCache > 0 ? `<div class="rlt-summary-row"><span>Avg cache read:</span><span class="rlt-val">${avgCache.toLocaleString()}</span></div>` : ''}
-        <div class="rlt-summary-row"><span>Max input tokens:</span><span class="rlt-val">${maxIn.toLocaleString()}</span></div>
-        <div class="rlt-summary-row"><span>Avg analysis time:</span><span class="rlt-val">${avgTime}s</span></div>
-        <div class="rlt-summary-note">Share these numbers to calibrate wave size 🎯</div>`
-    }
-    summaryEl.classList.remove('hidden')
-    closeBtn?.classList.remove('hidden')
+  function updateProgress() {
+    const pct  = Math.round(doneCnt / total * 100)
+    const fill = document.getElementById('se-pfill')
+    const lbl  = document.getElementById('se-plabel')
+    if (fill) fill.style.width = pct + '%'
+    if (lbl)  lbl.textContent  = `${doneCnt} / ${total} analyzed`
   }
 
-  picks.forEach((tenant, i) => {
-    const startMs = Date.now()
-    let   closed  = false
+  function onAllDone() {
+    clearInterval(timerTick)
+    const td = document.getElementById('se-tdigits')
+    if (td) { td.textContent = '0:00'; td.className = 'se-tdigits se-tdigits-done' }
+    document.getElementById('se-wstatus')?.classList.add('hidden')
+    const resEl = document.getElementById('se-result')
+    if (resEl) { resEl.textContent = '✅ All done — preparing download...'; resEl.classList.remove('hidden') }
+    doDownload()
+  }
 
-    gymRegisterLocalFiles(tenant.id)
-      .then(() => {
-        const url = sameOriginApi(
-          `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenant.id)}&keyIndex=${tp2StaticKey(i)}`
-        )
-        const es = new EventSource(url)
+  // ── Wave firing ────────────────────────────────────────────
+  function fireWave(waveStart, waveNum) {
+    const waveEnd  = Math.min(waveStart + WAVE_SIZE, total)
+    const waveSize = waveEnd - waveStart
+    let   waveDone = 0
 
-        es.addEventListener('gym-complete', e => {
-          if (closed) return
-          closed = true
-          es.close()
-          const d       = JSON.parse(e.data)
-          const elapsed = Math.round((Date.now() - startMs) / 1000)
-          const tu      = d.tokenUsage || {}
-          results[i] = { status: 'done', elapsed, inputTokens: tu.inputTokens || 0, outputTokens: tu.outputTokens || 0, cacheReadTokens: tu.cacheReadTokens || 0 }
-          const el = document.getElementById(`rlt-status-${i}`)
-          if (el) {
-            const inp   = (tu.inputTokens  || 0).toLocaleString()
-            const out   = (tu.outputTokens || 0).toLocaleString()
-            const cache = tu.cacheReadTokens > 0 ? ` · cached: ${tu.cacheReadTokens.toLocaleString()}` : ''
-            el.innerHTML = `<span class="rlt-done">✅ ${elapsed}s · in: ${inp} · out: ${out}${cache}</span>`
-          }
-          doneCount++
-          checkAllDone()
+    const ws = document.getElementById('se-wstatus')
+    if (ws) ws.textContent = `⚡ Wave ${waveNum} of ${waves} — analyzing tenants ${waveStart + 1}–${waveEnd}...`
+
+    function tenantFinished() {
+      waveDone++
+      if (waveDone < waveSize) return
+      const nextStart = waveStart + waveSize
+      if (nextStart < total) fireWave(nextStart, waveNum + 1)
+      else                   onAllDone()
+    }
+
+    for (let i = waveStart; i < waveEnd; i++) {
+      const tenant = state.tenants[i]
+      const keyIdx = tp2StaticKey(i)
+      let   closed = false
+
+      const markDone = data => {
+        if (closed) return
+        closed = true
+        results.set(i, data)
+        doneCnt++
+        updateProgress()
+        tenantFinished()
+      }
+
+      gymRegisterLocalFiles(tenant.id)
+        .then(() => {
+          const url = sameOriginApi(
+            `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenant.id)}&keyIndex=${keyIdx}`
+          )
+          const es = new EventSource(url)
+          es.addEventListener('gym-complete', e => { es.close(); markDone(JSON.parse(e.data)) })
+          es.addEventListener('gym-error',    () => { es.close(); markDone({ _error: true, tenantName: tenant.tenantName || tenant.folderName, findings: [], allClear: false }) })
+          es.onerror = ()                          => { es.close(); markDone({ _error: true, tenantName: tenant.tenantName || tenant.folderName, findings: [], allClear: false }) }
         })
+        .catch(() => markDone({ _error: true, tenantName: tenant.tenantName || tenant.folderName, findings: [], allClear: false }))
+    }
+  }
 
-        es.addEventListener('gym-error', e => {
-          if (closed) return
-          closed = true
-          es.close()
-          let msg = 'server error'
-          try { msg = JSON.parse(e.data).error || msg } catch {}
-          results[i] = { status: 'error' }
-          const el = document.getElementById(`rlt-status-${i}`)
-          if (el) el.innerHTML = `<span class="rlt-error">❌ ${escHtml(msg)}</span>`
-          doneCount++
-          checkAllDone()
-        })
+  // ── Excel generation ───────────────────────────────────────
+  async function doDownload() {
+    const tenantResults = Array.from({ length: total }, (_, i) => {
+      const d = results.get(i) || { _error: true, tenantName: state.tenants[i]?.tenantName, findings: [], allClear: false }
+      return {
+        tenantName: d.tenantNameInDocuments || d.tenantName || state.tenants[i]?.folderName || `Tenant ${i + 1}`,
+        findings:   d.findings  || [],
+        allClear:   !!d.allClear,
+        error:      !!d._error,
+      }
+    })
+    try {
+      const res = await fetch(sameOriginApi('/api/target/straight-excel'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantResults }),
+      })
+      if (!res.ok) throw new Error('Server returned ' + res.status)
+      const blob = await res.blob()
+      const bUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = bUrl
+      a.download = `Missing-Documents-${new Date().toISOString().slice(0, 10)}.xlsx`
+      document.body.appendChild(a); a.click(); a.remove()
+      URL.revokeObjectURL(bUrl)
+      const resEl = document.getElementById('se-result')
+      if (resEl) resEl.textContent = '✅ Downloaded! Check your downloads folder.'
+    } catch (err) {
+      const resEl = document.getElementById('se-result')
+      if (resEl) resEl.textContent = `❌ Download failed — ${err.message}`
+    }
+    document.getElementById('se-close-btn')?.classList.remove('hidden')
+  }
 
-        es.onerror = () => {
-          if (closed) return
-          closed = true
-          es.close()
-          results[i] = { status: 'error' }
-          const el = document.getElementById(`rlt-status-${i}`)
-          if (el) el.innerHTML = `<span class="rlt-error">❌ connection dropped</span>`
-          doneCount++
-          checkAllDone()
-        }
-      })
-      .catch(() => {
-        results[i] = { status: 'error' }
-        const el = document.getElementById(`rlt-status-${i}`)
-        if (el) el.innerHTML = `<span class="rlt-error">❌ upload failed</span>`
-        doneCount++
-        checkAllDone()
-      })
-  })
+  // Kick off wave 1
+  fireWave(0, 1)
 }
 
 /** Draw 8-bit bullseye target on a 40×52 canvas */

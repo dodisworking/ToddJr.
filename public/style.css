@@ -6875,87 +6875,71 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   text-shadow: 0 0 8px #d97706;
 }
 
-/* ── Rate Limit Test button ──────────────────────────────── */
-.tso-rlt-row { margin-top: 4px; }
-.btn-tso-rlt {
+/* ── Straight Excel button ───────────────────────────────── */
+.tso-excel-row { margin-top: 4px; }
+.btn-tso-excel {
   width: 100%;
   padding: 9px 20px;
   background: transparent;
-  border: 2px solid #1e3a5f;
-  color: #38bdf8;
+  border: 2px solid #14532d;
+  color: #4ade80;
   font-family: var(--font-pixel);
   font-size: 9px;
   letter-spacing: 0.5px;
   cursor: pointer;
   transition: background 0.1s, border-color 0.1s, color 0.1s;
 }
-.btn-tso-rlt:hover { background: #0c1e2e; border-color: #38bdf8; color: #7dd3fc; }
+.btn-tso-excel:hover { background: #052e16; border-color: #4ade80; color: #86efac; }
 
-/* ── Rate Limit Test overlay ─────────────────────────────── */
-.rlt-overlay {
+/* ── Straight Excel overlay ──────────────────────────────── */
+.se-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.85);
+  background: rgba(0,0,0,0.88);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
 }
-.rlt-box {
+.se-box {
   background: #0f172a;
-  border: 2px solid #1e3a5f;
-  padding: 24px 28px;
+  border: 2px solid #14532d;
+  padding: 26px 30px;
   min-width: 340px;
-  max-width: 520px;
+  max-width: 480px;
   width: 90%;
   font-family: var(--font-pixel);
 }
-.rlt-header {
-  font-size: 13px;
-  color: #38bdf8;
-  letter-spacing: 1px;
-  margin-bottom: 4px;
+.se-header { font-size: 13px; color: #4ade80; letter-spacing: 1px; margin-bottom: 4px; }
+.se-meta   { font-size: 8px; color: #475569; letter-spacing: 0.4px; margin-bottom: 20px; }
+.se-progress-wrap { margin-bottom: 20px; }
+.se-pbar  { height: 6px; background: #1e293b; border-radius: 3px; overflow: hidden; margin-bottom: 6px; }
+.se-pfill { height: 100%; background: #4ade80; border-radius: 3px; transition: width 0.4s ease; }
+.se-plabel { font-size: 8px; color: #64748b; letter-spacing: 0.3px; }
+.se-timer-section {
+  border: 1px solid #14532d;
+  padding: 14px 12px 10px;
+  margin-bottom: 16px;
+  text-align: center;
 }
-.rlt-subtitle {
-  font-size: 8px;
-  color: #475569;
-  letter-spacing: 0.4px;
-  margin-bottom: 18px;
-}
-.rlt-tenant-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
-.rlt-tenant-row  { display: flex; flex-direction: column; gap: 3px; }
-.rlt-tenant-name { font-size: 9px; color: #94a3b8; letter-spacing: 0.4px; }
-.rlt-tenant-status { font-size: 8px; color: #64748b; letter-spacing: 0.3px; }
-.rlt-done  { color: #34d399; }
-.rlt-error { color: #f87171; }
-.rlt-summary {
-  border-top: 1px solid #1e3a5f;
-  padding-top: 14px;
-  margin-bottom: 14px;
-}
-.rlt-summary-title { font-size: 10px; color: #38bdf8; letter-spacing: 0.6px; margin-bottom: 10px; }
-.rlt-summary-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 8px;
-  color: #64748b;
-  letter-spacing: 0.3px;
-  margin-bottom: 5px;
-}
-.rlt-val { color: #e2e8f0; }
-.rlt-summary-note { font-size: 7px; color: #334155; margin-top: 10px; letter-spacing: 0.3px; }
-.rlt-close-btn {
+.se-tlabel  { font-size: 7px; color: #475569; letter-spacing: 0.6px; margin-bottom: 8px; }
+.se-tdigits { font-size: 32px; color: #4ade80; letter-spacing: 3px; }
+.se-tdigits-done { color: #34d399; }
+.se-wave-status { font-size: 8px; color: #64748b; letter-spacing: 0.3px; margin-bottom: 10px; min-height: 14px; }
+.se-result  { font-size: 9px; color: #34d399; letter-spacing: 0.4px; margin-bottom: 14px; }
+.se-close-btn {
   width: 100%;
   padding: 9px;
   background: transparent;
-  border: 2px solid #1e3a5f;
-  color: #38bdf8;
+  border: 2px solid #14532d;
+  color: #4ade80;
   font-family: var(--font-pixel);
   font-size: 9px;
   letter-spacing: 0.5px;
   cursor: pointer;
+  transition: background 0.1s;
 }
-.rlt-close-btn:hover { background: #0c1e2e; }
+.se-close-btn:hover { background: #052e16; }
 
 /* ── Juice Library overlay ───────────────────────────────── */
 .juice-library-overlay {
