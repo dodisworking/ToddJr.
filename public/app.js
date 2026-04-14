@@ -5290,12 +5290,21 @@ function tp2OpenSSE(idx) {
       t ? `k${i + 1}=${Math.round((Date.now() - t) / 1000)}s ago` : `k${i + 1}=fresh`
     ).join(' ')
 
-    // Rate-limit → wait 60s before hammering again (server already tried all keys).
-    // Connection drop / silence → 5s is fine, likely a transient network blip.
-    const is429  = /429|rate.?limit/i.test(reason)
-    const delay  = is429 ? 60000 : 5000
+    const is429   = /429|rate.?limit/i.test(reason)
     const nextKey = tp2PickFreshKey()
-    console.log(`[tp2] tenant ${idx + 1} attempt ${attempts} → key${keyToMark + 1} FAILED (${reason}) — retry with key${nextKey + 1} in ${delay / 1000}s | ${healthStr}`)
+
+    // Smart delay: for 429s, wait exactly until the freshest key has had 30s to recover.
+    // If that key already rested 30s+ → delay is 0, retry immediately.
+    // For connection drops → fixed 3s (transient blip, no need to wait for rate limits).
+    let delay = 3000
+    if (is429) {
+      const lastFail = tp2Session.keyHealth[nextKey]
+      const rested   = lastFail > 0 ? Date.now() - lastFail : Infinity
+      const RECOVER  = 30000   // Anthropic rate-limit window ~30s
+      delay = rested >= RECOVER ? 0 : (RECOVER - rested)
+    }
+
+    console.log(`[tp2] tenant ${idx + 1} attempt ${attempts} → key${keyToMark + 1} FAILED (${reason}) — retry with key${nextKey + 1} in ${Math.round(delay / 1000)}s | ${healthStr}`)
 
     tp2Session.analysisCache[tenantId] = { status: 'loading', data: null }
     setTimeout(() => { if (tp2Session.active) tp2OpenSSE(idx) }, delay)
