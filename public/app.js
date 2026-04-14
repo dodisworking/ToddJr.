@@ -5142,7 +5142,7 @@ async function startTP2() {
   tp2Session.currentIdx         = 0
   tp2Session.analysisCache      = {}
   tp2Session.retryCount         = {}
-  tp2Session.keyHealth          = [0, 0, 0, 0]  // reset key freshness each session
+  tp2Session.keyHealth          = [0, 0, 0]     // 3 keys only: K0 Tier3, K1 Tier2, K2 Tier2
   tp2Session.allFeedbacks       = []
   tp2Session.allTenantResults   = []
   tp2Session.readyQueue         = []
@@ -5245,11 +5245,11 @@ function tp2AnalyzeBatch(indices) {
 }
 
 /** Static key assignment for initial tenant load — spreads concurrent API calls
- *  across tiers based on position within a virtual batch of 8:
- *    pos 0-3 → key 0  (Tier 3, 800K tok/min  — handles 4 PDF analyses)
- *    pos 4-5 → key 1  (Tier 2, 450K tok/min  — handles 2 PDF analyses)
- *    pos 6-7 → key 2  (Tier 2, 450K tok/min  — handles 2 PDF analyses)
- *  Cycles every 8 for sessions with more than 8 tenants.
+ *  across 3 keys matching real tier capacity (11-slot virtual batch):
+ *    pos 0-4  → key 0  (Tier 3, 800K tok/min  — 5 slots)
+ *    pos 5-7  → key 1  (Tier 2, 450K tok/min  — 3 slots)
+ *    pos 8-10 → key 2  (Tier 2, 450K tok/min  — 3 slots)
+ *  Cycles every 11 for sessions with more than 11 tenants.
  *  Only used for the INITIAL connection — retries use tp2PickFreshKey() instead. */
 function tp2StaticKey(idx) {
   // Distribute across a virtual batch of 11 matching real tier capacity:
