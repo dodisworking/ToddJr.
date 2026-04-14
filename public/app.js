@@ -5039,7 +5039,7 @@ const targetSession = {
 
 // ── Target Practice 2.0 session state ─────────────────────
 // 4 API keys × 2 tenants each = 8 per wave (hardcoded — always use all 4 keys)
-const WAVE_SIZE = 8
+const WAVE_SIZE = 11
 
 // Cycling messages shown during the loading countdown
 const TIMER_MSGS = [
@@ -5242,9 +5242,14 @@ function tp2AnalyzeBatch(indices) {
  *  Cycles every 8 for sessions with more than 8 tenants.
  *  Only used for the INITIAL connection — retries use tp2PickFreshKey() instead. */
 function tp2StaticKey(idx) {
-  const pos = idx % 8
-  if (pos < 4) return 0
-  if (pos < 6) return 1
+  // Distribute across a virtual batch of 11 matching real tier capacity:
+  //   Key 0 (Tier 3, 800K/min) → positions 0-4  (5 tenants = 620K = 78%)
+  //   Key 1 (Tier 2, 450K/min) → positions 5-7  (3 tenants = 372K = 83%)
+  //   Key 2 (Tier 2, 450K/min) → positions 8-10 (3 tenants = 372K = 83%)
+  // Works for any batch size — if only 4 remain they all fall in pos 0-3 → Key 0.
+  const pos = idx % 11
+  if (pos < 5) return 0
+  if (pos < 8) return 1
   return 2
 }
 
