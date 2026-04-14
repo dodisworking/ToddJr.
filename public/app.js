@@ -5508,9 +5508,8 @@ function tp2EnterReview(allReady = false) {
   const _pb = document.querySelector('.gym-progress-bar')
   if (_pb) _pb.style.display = ''
 
-  // NOTE: remaining tenants are NOT fired here — they fire after the reviewer
-  // saves their FIRST tenant (tp2TryAdvance → tp2FireSecondWave). This ensures
-  // the API burst only starts when we know the reviewer is actually at their desk.
+  // NOTE: remaining tenants are NOT fired here — rolling batches of WAVE_SIZE fire
+  // each time the reviewer saves the 1st tenant of a batch (reviewedCount = 1, 12, 23…).
 
   if (tp2Session.readyQueue.length > 0) {
     const digitsEl = document.getElementById('tp2-timer-digits')
@@ -5607,12 +5606,20 @@ function tp2NavigateTo(idx) {
   else tp2ShowWaitingScreen(idx)
 }
 
-/** Advance to next tenant. Fire the next wave when reviewedCount % WAVE_SIZE === 1
- *  (i.e. after saving the first tenant of every wave — 1, 7, 13, 19…) */
+/** Advance to next tenant.
+ *  Rolling pipeline: when the reviewer saves the 1st tenant of any batch
+ *  (reviewedCount = 1, 12, 23, 34…), fire the next WAVE_SIZE tenants.
+ *  This keeps each wave at exactly 5+3+3 = 11 — never overloads the keys. */
 function tp2TryAdvance() {
-  // First save = reviewer is live → fire all remaining tenants now
-  // (tp2FireSecondWave is a no-op after the first call thanks to secondWaveFired guard)
-  tp2FireSecondWave()
+  // Fire next wave when reviewer saves the first tenant of any batch
+  if (tp2Session.reviewedCount % WAVE_SIZE === 1) {
+    const nextStart = tp2Session.reviewedCount - 1 + WAVE_SIZE
+    if (nextStart < tp2Session.tenants.length) {
+      const nextEnd = Math.min(nextStart + WAVE_SIZE, tp2Session.tenants.length)
+      console.log(`[tp2] rolling wave: firing tenants ${nextStart + 1}–${nextEnd}`)
+      tp2FireWaveAt(nextStart)
+    }
+  }
 
   // Free the PDF buffers for the tenant we just finished reviewing — RAM no longer needed
   const justReviewedIdx = tp2Session.readyQueue[tp2Session.reviewedCount - 1]
@@ -7461,8 +7468,6 @@ function renderGymFindingCards() {
 }
 
 function gymSetVerdict(findingId, verdict, comment = '') {
-  // First interaction in TP2 → fire second wave if not already done
-  if (gymState.mode === 'tp2') tp2FireSecondWave()
   gymState.feedbacks[findingId] = { verdict, comment }
   const card = document.getElementById(`gym-card-${findingId}`)
   if (card) {
