@@ -5290,12 +5290,15 @@ function tp2OpenSSE(idx) {
       t ? `k${i + 1}=${Math.round((Date.now() - t) / 1000)}s ago` : `k${i + 1}=fresh`
     ).join(' ')
 
+    // Rate-limit → wait 60s before hammering again (server already tried all keys).
+    // Connection drop / silence → 5s is fine, likely a transient network blip.
+    const is429  = /429|rate.?limit/i.test(reason)
+    const delay  = is429 ? 60000 : 5000
     const nextKey = tp2PickFreshKey()
-    console.log(`[tp2] tenant ${idx + 1} attempt ${attempts} → key${keyToMark + 1} FAILED (${reason}) — switching to key${nextKey + 1} NOW | ${healthStr}`)
+    console.log(`[tp2] tenant ${idx + 1} attempt ${attempts} → key${keyToMark + 1} FAILED (${reason}) — retry with key${nextKey + 1} in ${delay / 1000}s | ${healthStr}`)
 
     tp2Session.analysisCache[tenantId] = { status: 'loading', data: null }
-    // Never give up, never wait — blast straight to the next key
-    if (tp2Session.active) tp2OpenSSE(idx)
+    setTimeout(() => { if (tp2Session.active) tp2OpenSSE(idx) }, delay)
   }
 
   // TP2 always uses the full model — never append cheapQs() here
@@ -5437,28 +5440,27 @@ function tp2ShowBatchLoadingScreen() {
   tp2UpdateBatchProgress()
 }
 
-/** Update progress bar. Enters review when all first-wave tenants are done. */
+/** Update progress bar. Enters review when all first-wave tenants are ready. */
 function tp2UpdateBatchProgress() {
   if (!tp2Session.batchLoadingActive) return
   const waveSize = Math.min(WAVE_SIZE, tp2Session.tenants.length)
   const total    = tp2Session.tenants.length
 
-  let doneCount = 0
+  let readyCount = 0
   for (let i = 0; i < waveSize; i++) {
     const tenantId = tp2Session.tenants[i].id
     const status   = tp2Session.analysisCache[tenantId]?.status || 'pending'
-    if (status === 'ready' || status === 'error') doneCount++
+    if (status === 'ready') readyCount++
   }
 
   const fill = document.getElementById('gym-progress-fill')
-  if (fill) fill.style.width = Math.round((doneCount / waveSize) * 100) + '%'
+  if (fill) fill.style.width = Math.round((readyCount / waveSize) * 100) + '%'
 
-  // Update subtitle: show X/total done
   const subEl = document.getElementById('gym-subtitle')
-  if (subEl) subEl.textContent = `${doneCount}/${total} done${isCheapModeActive() ? '  🪙 DUMB MODE' : ''}`
+  if (subEl) subEl.textContent = `${readyCount}/${total} ready`
 
-  // First wave fully done before timer — skip waiting, enter review in list order
-  if (doneCount === waveSize) tp2EnterReview(true)
+  // All wave-1 tenants ready → skip the timer, enter review immediately
+  if (readyCount === waveSize) tp2EnterReview(true)
 }
 
 /** Called by timer expiry or first-wave completion — enter review + fire second wave.
@@ -5492,6 +5494,16 @@ function tp2EnterReview(allReady = false) {
     tp2Session.waitingForNext = true
     const msg = document.getElementById('gym-loading-msg')
     if (msg) msg.textContent = '⏳ Almost there — waiting for first tenant to finish...'
+    // Fallback poll: check every 3s in case a gym-complete event was missed
+    const waitPoll = setInterval(() => {
+      if (!tp2Session.active || !tp2Session.waitingForNext) { clearInterval(waitPoll); return }
+      const ready = tp2Session.readyQueue[tp2Session.reviewedCount]
+      if (ready !== undefined) {
+        clearInterval(waitPoll)
+        tp2Session.waitingForNext = false
+        tp2NavigateTo(ready)
+      }
+    }, 3000)
   }
 }
 
@@ -6160,8 +6172,7 @@ function showTargetSetupScreen(isTP2 = false) {
     let savedModels   = []
     let dumbModeOn    = false
 
-    // TP2 always uses the good model — hide the dumb mode toggle entirely
-    if (isTP2 && dumbRow) dumbRow.style.display = 'none'
+    // dumb mode visible in all modes (needed for testing)
 
     function updateDumbBtn() {
       if (!dumbBtn) return
@@ -6259,8 +6270,6 @@ function showTargetSetupScreen(isTP2 = false) {
     function cleanup(result) {
       overlay.classList.add('hidden')
       jlibOverlay && jlibOverlay.classList.add('hidden')
-      // Restore dumb row visibility for future TP1 sessions
-      if (isTP2 && dumbRow) dumbRow.style.display = ''
       startBtn.removeEventListener('click', onStart)
       cancelBtn.removeEventListener('click', onCancel)
       juiceBtn  && juiceBtn.removeEventListener('click', onJuiceClick)
