@@ -6185,6 +6185,7 @@ function showTargetSetupScreen(isTP2 = false) {
     const juiceCanvas = document.getElementById('tso-juicebox-canvas')
     const dumbBtn     = document.getElementById('tso-dumb-btn')
     const dumbRow     = document.getElementById('tso-dumb-btn')?.closest('.tso-dumb-row')
+    const rltBtn      = document.getElementById('tso-rlt-btn')
 
     if (!overlay || !reviewerIn || !startBtn || !cancelBtn) {
       pixelPrompt('Who is reviewing these findings?', '🎯 START TARGET PRACTICE', 'e.g. Sarah M.')
@@ -6300,8 +6301,14 @@ function showTargetSetupScreen(isTP2 = false) {
       startBtn.removeEventListener('click', onStart)
       cancelBtn.removeEventListener('click', onCancel)
       juiceBtn  && juiceBtn.removeEventListener('click', onJuiceClick)
+      rltBtn    && rltBtn.removeEventListener('click', onRlt)
       document.removeEventListener('keydown', onKey)
       resolve(result)
+    }
+
+    function onRlt() {
+      overlay.classList.add('hidden')
+      runRateLimitTest(() => overlay.classList.remove('hidden'))
     }
     function onStart() {
       const name = reviewerIn.value.trim()
@@ -6321,7 +6328,149 @@ function showTargetSetupScreen(isTP2 = false) {
     }
     startBtn.addEventListener('click', onStart)
     cancelBtn.addEventListener('click', onCancel)
+    rltBtn && rltBtn.addEventListener('click', onRlt)
     document.addEventListener('keydown', onKey)
+  })
+}
+
+/** ── Rate Limit Test ────────────────────────────────────────────────────────
+ * Fires 3 random tenants through /api/gym/analyze, measures token usage per
+ * tenant, and shows a results table. No session state is created or modified. */
+function runRateLimitTest(onClose) {
+  if (!state.tenants || state.tenants.length === 0) {
+    toast('No tenants loaded — upload folders first', 'error')
+    onClose && onClose()
+    return
+  }
+
+  // Pick up to 3 random tenants
+  const shuffled = [...state.tenants].sort(() => Math.random() - 0.5)
+  const picks    = shuffled.slice(0, Math.min(3, shuffled.length))
+
+  // Build overlay
+  const existing = document.getElementById('rlt-overlay')
+  if (existing) existing.remove()
+
+  const overlay = document.createElement('div')
+  overlay.id = 'rlt-overlay'
+  overlay.className = 'rlt-overlay'
+  overlay.innerHTML = `
+    <div class="rlt-box">
+      <div class="rlt-header">🧪 RATE LIMIT TEST</div>
+      <div class="rlt-subtitle">${picks.length} random tenant${picks.length > 1 ? 's' : ''} · measuring real token usage per analysis</div>
+      <div class="rlt-tenant-list" id="rlt-tenant-list">
+        ${picks.map((t, i) => `
+          <div class="rlt-tenant-row">
+            <span class="rlt-tenant-name">${escHtml(t.tenantName || t.folderName || 'Tenant ' + (i + 1))}</span>
+            <span class="rlt-tenant-status" id="rlt-status-${i}">⏳ analyzing...</span>
+          </div>
+        `).join('')}
+      </div>
+      <div class="rlt-summary hidden" id="rlt-summary"></div>
+      <button class="rlt-close-btn hidden" id="rlt-close-btn">✕ CLOSE</button>
+    </div>`
+  document.body.appendChild(overlay)
+
+  document.getElementById('rlt-close-btn')?.addEventListener('click', () => {
+    overlay.remove()
+    onClose && onClose()
+  })
+
+  // Fire each tenant independently
+  const results  = {}
+  let   doneCount = 0
+
+  function checkAllDone() {
+    if (doneCount < picks.length) return
+    // Build summary
+    const done = Object.values(results).filter(r => r.status === 'done')
+    const summaryEl = document.getElementById('rlt-summary')
+    const closeBtn  = document.getElementById('rlt-close-btn')
+    if (!summaryEl) return
+
+    if (done.length === 0) {
+      summaryEl.innerHTML = '<div class="rlt-summary-note">All tenants failed — check Railway logs for details.</div>'
+    } else {
+      const avg = arr => Math.round(arr.reduce((s, v) => s + v, 0) / arr.length)
+      const avgIn    = avg(done.map(r => r.inputTokens))
+      const avgOut   = avg(done.map(r => r.outputTokens))
+      const avgCache = avg(done.map(r => r.cacheReadTokens))
+      const maxIn    = Math.max(...done.map(r => r.inputTokens))
+      const avgTime  = avg(done.map(r => r.elapsed))
+      summaryEl.innerHTML = `
+        <div class="rlt-summary-title">📊 RESULTS (${done.length}/${picks.length} succeeded)</div>
+        <div class="rlt-summary-row"><span>Avg input tokens:</span><span class="rlt-val">${avgIn.toLocaleString()}</span></div>
+        <div class="rlt-summary-row"><span>Avg output tokens:</span><span class="rlt-val">${avgOut.toLocaleString()}</span></div>
+        ${avgCache > 0 ? `<div class="rlt-summary-row"><span>Avg cache read:</span><span class="rlt-val">${avgCache.toLocaleString()}</span></div>` : ''}
+        <div class="rlt-summary-row"><span>Max input tokens:</span><span class="rlt-val">${maxIn.toLocaleString()}</span></div>
+        <div class="rlt-summary-row"><span>Avg analysis time:</span><span class="rlt-val">${avgTime}s</span></div>
+        <div class="rlt-summary-note">Share these numbers to calibrate wave size 🎯</div>`
+    }
+    summaryEl.classList.remove('hidden')
+    closeBtn?.classList.remove('hidden')
+  }
+
+  picks.forEach((tenant, i) => {
+    const startMs = Date.now()
+    let   closed  = false
+
+    gymRegisterLocalFiles(tenant.id)
+      .then(() => {
+        const url = sameOriginApi(
+          `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenant.id)}&keyIndex=${tp2StaticKey(i)}`
+        )
+        const es = new EventSource(url)
+
+        es.addEventListener('gym-complete', e => {
+          if (closed) return
+          closed = true
+          es.close()
+          const d       = JSON.parse(e.data)
+          const elapsed = Math.round((Date.now() - startMs) / 1000)
+          const tu      = d.tokenUsage || {}
+          results[i] = { status: 'done', elapsed, inputTokens: tu.inputTokens || 0, outputTokens: tu.outputTokens || 0, cacheReadTokens: tu.cacheReadTokens || 0 }
+          const el = document.getElementById(`rlt-status-${i}`)
+          if (el) {
+            const inp   = (tu.inputTokens  || 0).toLocaleString()
+            const out   = (tu.outputTokens || 0).toLocaleString()
+            const cache = tu.cacheReadTokens > 0 ? ` · cached: ${tu.cacheReadTokens.toLocaleString()}` : ''
+            el.innerHTML = `<span class="rlt-done">✅ ${elapsed}s · in: ${inp} · out: ${out}${cache}</span>`
+          }
+          doneCount++
+          checkAllDone()
+        })
+
+        es.addEventListener('gym-error', e => {
+          if (closed) return
+          closed = true
+          es.close()
+          let msg = 'server error'
+          try { msg = JSON.parse(e.data).error || msg } catch {}
+          results[i] = { status: 'error' }
+          const el = document.getElementById(`rlt-status-${i}`)
+          if (el) el.innerHTML = `<span class="rlt-error">❌ ${escHtml(msg)}</span>`
+          doneCount++
+          checkAllDone()
+        })
+
+        es.onerror = () => {
+          if (closed) return
+          closed = true
+          es.close()
+          results[i] = { status: 'error' }
+          const el = document.getElementById(`rlt-status-${i}`)
+          if (el) el.innerHTML = `<span class="rlt-error">❌ connection dropped</span>`
+          doneCount++
+          checkAllDone()
+        }
+      })
+      .catch(() => {
+        results[i] = { status: 'error' }
+        const el = document.getElementById(`rlt-status-${i}`)
+        if (el) el.innerHTML = `<span class="rlt-error">❌ upload failed</span>`
+        doneCount++
+        checkAllDone()
+      })
   })
 }
 

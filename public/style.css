@@ -6875,6 +6875,88 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   text-shadow: 0 0 8px #d97706;
 }
 
+/* ── Rate Limit Test button ──────────────────────────────── */
+.tso-rlt-row { margin-top: 4px; }
+.btn-tso-rlt {
+  width: 100%;
+  padding: 9px 20px;
+  background: transparent;
+  border: 2px solid #1e3a5f;
+  color: #38bdf8;
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+.btn-tso-rlt:hover { background: #0c1e2e; border-color: #38bdf8; color: #7dd3fc; }
+
+/* ── Rate Limit Test overlay ─────────────────────────────── */
+.rlt-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.rlt-box {
+  background: #0f172a;
+  border: 2px solid #1e3a5f;
+  padding: 24px 28px;
+  min-width: 340px;
+  max-width: 520px;
+  width: 90%;
+  font-family: var(--font-pixel);
+}
+.rlt-header {
+  font-size: 13px;
+  color: #38bdf8;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+.rlt-subtitle {
+  font-size: 8px;
+  color: #475569;
+  letter-spacing: 0.4px;
+  margin-bottom: 18px;
+}
+.rlt-tenant-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.rlt-tenant-row  { display: flex; flex-direction: column; gap: 3px; }
+.rlt-tenant-name { font-size: 9px; color: #94a3b8; letter-spacing: 0.4px; }
+.rlt-tenant-status { font-size: 8px; color: #64748b; letter-spacing: 0.3px; }
+.rlt-done  { color: #34d399; }
+.rlt-error { color: #f87171; }
+.rlt-summary {
+  border-top: 1px solid #1e3a5f;
+  padding-top: 14px;
+  margin-bottom: 14px;
+}
+.rlt-summary-title { font-size: 10px; color: #38bdf8; letter-spacing: 0.6px; margin-bottom: 10px; }
+.rlt-summary-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 8px;
+  color: #64748b;
+  letter-spacing: 0.3px;
+  margin-bottom: 5px;
+}
+.rlt-val { color: #e2e8f0; }
+.rlt-summary-note { font-size: 7px; color: #334155; margin-top: 10px; letter-spacing: 0.3px; }
+.rlt-close-btn {
+  width: 100%;
+  padding: 9px;
+  background: transparent;
+  border: 2px solid #1e3a5f;
+  color: #38bdf8;
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+}
+.rlt-close-btn:hover { background: #0c1e2e; }
+
 /* ── Juice Library overlay ───────────────────────────────── */
 .juice-library-overlay {
   position: fixed;

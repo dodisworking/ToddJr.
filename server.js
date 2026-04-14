@@ -1731,7 +1731,8 @@ app.get('/api/gym/analyze', async (req, res) => {
         files,
         tenantId: tenant.id,
         tenantName: tenant.tenantName,
-        folderName: tenant.folderName
+        folderName: tenant.folderName,
+        tokenUsage: result._tokenUsage || null
       })
     }
   } catch (err) {
