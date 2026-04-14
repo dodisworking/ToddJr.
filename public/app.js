@@ -5186,6 +5186,9 @@ async function startTP2() {
   gymState.mode = 'tp2'
   gymState.isTargetPractice = true
 
+  // Sort tenants heaviest-first so multi-batch tenants land on K0 (Tier 3, positions 0-4)
+  tp2Session.tenants.sort((a, b) => predictBatches(b.files) - predictBatches(a.files))
+
   // Initialize all cache entries (second-wave ones start as 'queued', not yet fired)
   tp2Session.tenants.forEach((t, i) => {
     tp2Session.analysisCache[t.id] = { status: i < WAVE_SIZE ? 'pending' : 'queued', data: null }
@@ -5286,7 +5289,7 @@ function tp2PickFreshKey() {
  * CYCLE_COOLDOWN_MS (30s) before the next cycle so rate-limited keys can recover.
  * A tenant is NEVER marked as error — it keeps trying until the session ends. */
 const KEY_SILENCE_MS    = 10000   // 10s silence → key is dead, switch instantly
-const NUM_KEYS          = 4       // number of API keys we cycle through
+const NUM_KEYS          = 3       // K0 Tier3 + K1/K2 Tier2 — no 4th key
 
 function tp2OpenSSE(idx) {
   const tenant = tp2Session.tenants[idx]
@@ -6548,7 +6551,10 @@ async function runStraightExcel(juiceModel, dumbMode, onClose) {
   const KEY_CAPACITY = { 0: 5, 1: 3, 2: 3 }
   const activePerKey = { 0: 0, 1: 0, 2: 0 }
   const keyQueues    = { 0: [], 1: [], 2: [] }
-  for (let i = 0; i < total; i++) keyQueues[tp2StaticKey(i)].push(i)
+  // Sort heaviest tenants first so multi-batch ones land on K0 (Tier 3, positions 0-4)
+  const sortedByBatch = Array.from({ length: total }, (_, i) => i)
+    .sort((a, b) => predictBatches(state.tenants[b].files) - predictBatches(state.tenants[a].files))
+  for (let pos = 0; pos < sortedByBatch.length; pos++) keyQueues[tp2StaticKey(pos)].push(sortedByBatch[pos])
 
   console.log(`[SE] ▶ slot pool — K0:${keyQueues[0].length} K1:${keyQueues[1].length} K2:${keyQueues[2].length} tenants, dumbMode=${dumbMode}`)
 
