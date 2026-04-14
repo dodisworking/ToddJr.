@@ -5320,9 +5320,12 @@ function tp2OpenSSE(idx) {
   // Start the silence watchdog the moment we open the connection
   keepAlive()
 
-  es.addEventListener('gym-start', () => keepAlive())   // server accepted → reset clock
-
-  es.addEventListener('gym-progress', () => keepAlive()) // analysis running → reset clock
+  // Analysis is live and billing — kill the timer permanently, never interrupt it
+  function lockIn() {
+    if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null }
+  }
+  es.addEventListener('gym-start',    lockIn)   // call accepted → lock in, no more timeouts
+  es.addEventListener('gym-progress', lockIn)   // still running → same, stay locked
 
   es.addEventListener('gym-complete', e => {
     closed = true
