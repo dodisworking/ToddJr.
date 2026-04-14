@@ -5234,9 +5234,24 @@ function tp2AnalyzeBatch(indices) {
   })
 }
 
+/** Static key assignment for initial tenant load — spreads concurrent API calls
+ *  across tiers based on position within a virtual batch of 8:
+ *    pos 0-3 → key 0  (Tier 3, 800K tok/min  — handles 4 PDF analyses)
+ *    pos 4-5 → key 1  (Tier 2, 450K tok/min  — handles 2 PDF analyses)
+ *    pos 6-7 → key 2  (Tier 2, 450K tok/min  — handles 2 PDF analyses)
+ *  Cycles every 8 for sessions with more than 8 tenants.
+ *  Only used for the INITIAL connection — retries use tp2PickFreshKey() instead. */
+function tp2StaticKey(idx) {
+  const pos = idx % 8
+  if (pos < 4) return 0
+  if (pos < 6) return 1
+  return 2
+}
+
 /** Pick the API key index that failed least recently.
  *  Key 0 is highest tier (Tier-3) — wins all ties so it handles most calls.
- *  Returns 0..3 (clamped to number of keys configured on server). */
+ *  Returns 0..3 (clamped to number of keys configured on server).
+ *  Used only for RETRIES — initial connections use tp2StaticKey(idx). */
 function tp2PickFreshKey() {
   const h = tp2Session.keyHealth   // [ts0, ts1, ts2, ts3] — smaller = failed less recently (or 0 = never)
   let best = 0
@@ -5263,7 +5278,9 @@ function tp2OpenSSE(idx) {
   if (!tenant || !tp2Session.active) return
   const tenantId = tenant.id
 
-  const chosenKeyIdx = tp2PickFreshKey()
+  // Static assignment: distribute tenants evenly across tiers from the start.
+  // Retries (inside markError) use tp2PickFreshKey() to pick the healthiest key.
+  const chosenKeyIdx = tp2StaticKey(idx)
   let   silenceTimer = null
   let   closed       = false
 
@@ -5314,7 +5331,7 @@ function tp2OpenSSE(idx) {
   const url = sameOriginApi(
     `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenantId)}&keyIndex=${chosenKeyIdx}`
   )
-  console.log(`[tp2] tenant ${idx + 1} → key${chosenKeyIdx + 1} (health: ${tp2Session.keyHealth.map((t, i) => t ? `k${i + 1}=${Math.round((Date.now() - t) / 1000)}s` : `k${i + 1}=✓`).join(' ')})`)
+  console.log(`[tp2] tenant ${idx + 1} → key${chosenKeyIdx + 1} (static pos=${idx % 8}) health: ${tp2Session.keyHealth.map((t, i) => t ? `k${i + 1}=${Math.round((Date.now() - t) / 1000)}s` : `k${i + 1}=✓`).join(' ')}`)
   const es = new EventSource(url)
 
   // Start the silence watchdog the moment we open the connection
@@ -5376,7 +5393,7 @@ function tp2CheckWaitingNext() {
   }
 }
 
-/** 4:12 8-bit countdown loading screen — fires first wave (WAVE_SIZE tenants), then enters review */
+/** 3:36 8-bit countdown loading screen — fires first wave (WAVE_SIZE tenants), then enters review */
 function tp2ShowBatchLoadingScreen() {
   const waveSize = Math.min(WAVE_SIZE, tp2Session.tenants.length)
   const total    = tp2Session.tenants.length
@@ -5408,15 +5425,15 @@ function tp2ShowBatchLoadingScreen() {
   extras.innerHTML = `
     <div class="tp2-timer-box">
       <div class="tp2-timer-pixel-label">TIME REMAINING</div>
-      <div class="tp2-timer-digits" id="tp2-timer-digits">4:12</div>
+      <div class="tp2-timer-digits" id="tp2-timer-digits">3:36</div>
     </div>`
 
   // Remove any leftover tenant dots from a previous session
   const oldDots = document.getElementById('tp2-batch-dots')
   if (oldDots) oldDots.remove()
 
-  // 4:12 countdown — gives the main API a cooldown window; auto-enters review at 0:00
-  const MAX_WAIT_MS = (4 * 60 + 12) * 1000
+  // 3:36 countdown — rate limits reset every ~60s so 3 full resets fit before timer expires; auto-enters review at 0:00
+  const MAX_WAIT_MS = (3 * 60 + 36) * 1000
   const startTime   = Date.now()
   let   msgIdx      = 0
   if (tp2Session.loadTimer) clearInterval(tp2Session.loadTimer)
