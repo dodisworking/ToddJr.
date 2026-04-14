@@ -4852,6 +4852,12 @@ btnGlobalHome?.addEventListener('click', async () => {
     const ok = await pixelConfirm('A hunt is running.\nGo home anyway? (Hunt keeps going in background)', '⌂ GO HOME?')
     if (!ok) return
   }
+  // Kill any active Straight Excel session (closes all SSEs so server stops billing)
+  if (_seAbort) {
+    _seAbort()
+    document.getElementById('se-overlay')?.remove()
+    _seAbort = null
+  }
   // Just navigate home — session stays intact, user can resume via Game 01
   if (state.eventSource) { state.eventSource.close(); state.eventSource = null }
   sfxStopBgLoop()
@@ -5040,6 +5046,10 @@ const targetSession = {
 // ── Target Practice 2.0 session state ─────────────────────
 // 4 API keys × 2 tenants each = 8 per wave (hardcoded — always use all 4 keys)
 const WAVE_SIZE = 11
+
+// Module-level Straight Excel abort handle — set when a runStraightExcel is active,
+// cleared when it finishes or is aborted. Lets btnGlobalHome kill a running SE session.
+let _seAbort = null
 
 // Cycling messages shown during the loading countdown
 const TIMER_MSGS = [
@@ -6320,7 +6330,7 @@ function showTargetSetupScreen(isTP2 = false) {
 
     function onExcel() {
       overlay.classList.add('hidden')
-      runStraightExcel(selectedModel || null, () => overlay.classList.remove('hidden'))
+      runStraightExcel(selectedModel || null, dumbModeOn, () => overlay.classList.remove('hidden'))
     }
     function onStart() {
       const name = reviewerIn.value.trim()
@@ -6351,7 +6361,7 @@ function showTargetSetupScreen(isTP2 = false) {
  * Wave N+1 fires only after wave N fully completes — keys never overloaded.
  * If a wave overruns 3:36 the timer shows "Sorry, give me a sec..." and waits.
  * juiceModel: { id, name } — optional, loads rules into session before wave 1. */
-async function runStraightExcel(juiceModel, onClose) {
+async function runStraightExcel(juiceModel, dumbMode, onClose) {
   if (!state.tenants || state.tenants.length === 0) {
     toast('No tenants loaded — upload folders first', 'error')
     onClose && onClose()
@@ -6360,7 +6370,72 @@ async function runStraightExcel(juiceModel, onClose) {
 
   const total  = state.tenants.length
   const waves  = Math.ceil(total / WAVE_SIZE)
-  const WAVE_SECS = 3 * 60 + 36   // fixed 3:36 per wave — established safe ceiling
+  const WAVE_SECS      = 3 * 60 + 36       // fixed 3:36 per wave — established safe ceiling
+  const TENANT_TIMEOUT = 4 * 60 * 1000     // 4-minute per-tenant watchdog
+
+  console.log(`[SE] ▶ start — ${total} tenant(s), ${waves} wave(s), dumbMode=${dumbMode}, juice=${juiceModel?.name || 'none'}`)
+
+  // ── Kill switch — closed SSEs prevent EventSource auto-reconnect billing ──
+  let seAborted = false
+  const activeSSEs = new Set()
+  let timerTick = null
+  let elapsedTick = null   // ticks the per-tenant elapsed counters
+
+  function doAbort() {
+    seAborted = true
+    if (timerTick)   { clearInterval(timerTick);   timerTick   = null }
+    if (elapsedTick) { clearInterval(elapsedTick); elapsedTick = null }
+    activeSSEs.forEach(es => { try { es.close() } catch {} })
+    activeSSEs.clear()
+  }
+  _seAbort = doAbort  // expose for btnGlobalHome
+
+  // ── Per-tenant log entries (visible in overlay) ────────────
+  // status: 'waiting' | 'registering' | 'open' | 'analyzing' | 'done' | 'error' | 'timeout'
+  const tenantLog = Array.from({ length: total }, (_, i) => ({
+    name:    state.tenants[i]?.tenantName || state.tenants[i]?.folderName || `#${i + 1}`,
+    key:     tp2StaticKey(i),
+    status:  'waiting',
+    startMs: 0,
+    elapsed: 0,
+    wave:    Math.floor(i / WAVE_SIZE) + 1,
+    note:    '',   // live progress message from server (e.g. "batch 2 of 3")
+  }))
+
+  function renderLog() {
+    const el = document.getElementById('se-log')
+    if (!el) return
+    el.innerHTML = tenantLog.map((t, i) => {
+      const icon = { waiting:'⏳', registering:'📂', open:'📡', analyzing:'⚡', done:'✅', error:'❌', timeout:'⏱️' }[t.status] || '?'
+      const sec  = t.startMs ? Math.round((Date.now() - t.startMs) / 1000) : null
+      const timeStr = t.status === 'done' || t.status === 'error' || t.status === 'timeout'
+        ? `<span style="color:#6b7280">${t.elapsed}s</span>`
+        : sec !== null ? `<span style="color:#facc15">${sec}s…</span>` : ''
+      const keyBadge = `<span style="color:#94a3b8;font-size:10px">K${t.key}</span>`
+      const nameStr  = `<span style="color:#e2e8f0;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block">${escHtml(t.name)}</span>`
+      // Show batch progress note (e.g. "batch 2 of 3") if present and still analyzing
+      const noteStr  = t.note && t.status === 'analyzing'
+        ? `<span style="color:#f97316;font-size:10px">[${escHtml(t.note.replace(/sending /i,'').replace(/ to claude.*/i,''))}]</span>`
+        : ''
+      return `<div style="display:flex;gap:5px;align-items:center;padding:1px 0">${icon} ${keyBadge} ${nameStr} ${timeStr} ${noteStr}</div>`
+    }).join('')
+  }
+
+  function logSet(i, status) {
+    const t = tenantLog[i]
+    if (!t) return
+    const prev = t.status
+    t.status = status
+    if ((prev === 'waiting' || prev === 'registering') && (status === 'open' || status === 'analyzing')) {
+      t.startMs = Date.now()
+    }
+    if (status === 'done' || status === 'error' || status === 'timeout') {
+      t.elapsed = t.startMs ? Math.round((Date.now() - t.startMs) / 1000) : 0
+      const label = status === 'done' ? '✅ done' : status === 'timeout' ? '⏱ timeout' : '❌ error'
+      console.log(`[SE] tenant ${i + 1}/${total} "${t.name}" K${t.key} → ${label} in ${t.elapsed}s`)
+    }
+    renderLog()
+  }
 
   // ── Build overlay ──────────────────────────────────────────
   document.getElementById('se-overlay')?.remove()
@@ -6371,29 +6446,43 @@ async function runStraightExcel(juiceModel, onClose) {
   const juiceLine = juiceModel
     ? `<div class="se-juice">🧠 Juice: ${escHtml(juiceModel.name)}</div>`
     : ''
+  const dumbLine = dumbMode
+    ? `<div class="se-juice" style="color:#facc15">🪙 Dumb mode (Haiku)</div>`
+    : ''
 
   overlay.innerHTML = `
     <div class="se-box">
       <div class="se-header">📊 STRAIGHT EXCEL</div>
-      <div class="se-meta">${total} tenant${total > 1 ? 's' : ''} · ${waves} wave${waves > 1 ? 's' : ''} · 3:36 per wave</div>
-      ${juiceLine}
+      <div class="se-meta">${total} tenant${total > 1 ? 's' : ''} · 11 slots (K0×5 + K1×3 + K2×3)</div>
+      ${juiceLine}${dumbLine}
       <div class="se-progress-wrap">
         <div class="se-pbar"><div class="se-pfill" id="se-pfill" style="width:0%"></div></div>
         <div class="se-plabel" id="se-plabel">0 / ${total} analyzed</div>
       </div>
       <div class="se-timer-section">
-        <div class="se-tlabel">ESTIMATED TIME</div>
-        <div class="se-tdigits" id="se-tdigits">3:36</div>
+        <div class="se-tlabel">ELAPSED</div>
+        <div class="se-tdigits" id="se-tdigits">0:00</div>
       </div>
       <div class="se-wave-status" id="se-wstatus">⚡ Wave 1 of ${waves} — analyzing tenants 1–${Math.min(WAVE_SIZE, total)}...</div>
+      <div id="se-log" style="margin-top:8px;font-size:11px;font-family:monospace;max-height:160px;overflow-y:auto;border-top:1px solid #334155;padding-top:6px"></div>
       <div class="se-result hidden" id="se-result"></div>
       <button class="se-close-btn hidden" id="se-close-btn">✕ CLOSE</button>
     </div>`
   document.body.appendChild(overlay)
+  renderLog()  // show initial waiting state
+
   document.getElementById('se-close-btn')?.addEventListener('click', () => {
+    doAbort()
+    _seAbort = null
     overlay.remove()
     onClose && onClose()
   })
+
+  // Tick elapsed seconds for currently-analyzing tenants
+  elapsedTick = setInterval(() => {
+    const anyActive = tenantLog.some(t => t.startMs && t.status === 'analyzing')
+    if (anyActive) renderLog()
+  }, 1000)
 
   // ── Juice: load rules into session before wave 1 ───────────
   if (juiceModel?.id) {
@@ -6405,100 +6494,161 @@ async function runStraightExcel(juiceModel, onClose) {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sessionId: state.sessionId, rules: fullModel.rules, modelId: juiceModel.id, modelName: juiceModel.name })
         })
+        console.log(`[SE] juice loaded: ${juiceModel.name}`)
       }
-    } catch {}  // non-fatal — analysis still runs, just without juice
+    } catch (e) { console.warn('[SE] juice load failed (non-fatal):', e.message) }
   }
 
-  // ── Per-wave countdown (always 3:36, resets each wave) ────
-  let timerTick = null
-  function startWaveTimer() {
-    if (timerTick) clearInterval(timerTick)
-    let remaining = WAVE_SECS
-    let overrun   = false
-    timerTick = setInterval(() => {
-      remaining--
-      const el = document.getElementById('se-tdigits')
-      if (!el) return
-      if (remaining > 0) {
-        const m = Math.floor(remaining / 60)
-        const s = remaining % 60
-        el.textContent  = `${m}:${String(s).padStart(2, '0')}`
-        el.className    = remaining < 30 ? 'se-tdigits se-tdigits-warn' : 'se-tdigits'
-      } else if (!overrun) {
-        overrun = true
-        el.textContent = 'Sorry, give me a sec...'
-        el.className   = 'se-tdigits se-tdigits-overrun'
-      }
-    }, 1000)
-  }
+  // ── Elapsed timer (counts up — honest, no fake countdown) ────────────────
+  let elapsedSecs = 0
+  const _seStartMs = Date.now()
+  timerTick = setInterval(() => {
+    elapsedSecs++
+    const el = document.getElementById('se-tdigits')
+    if (!el) return
+    const m = Math.floor(elapsedSecs / 60)
+    const s = elapsedSecs % 60
+    el.textContent = `${m}:${String(s).padStart(2, '0')}`
+    el.className   = 'se-tdigits'
+  }, 1000)
 
   // ── State ──────────────────────────────────────────────────
   let   doneCnt = 0
   const results = new Map()
 
   function updateProgress() {
-    const pct  = Math.round(doneCnt / total * 100)
-    const fill = document.getElementById('se-pfill')
-    const lbl  = document.getElementById('se-plabel')
+    const active = tenantLog.filter(t => t.status === 'analyzing' || t.status === 'open' || t.status === 'registering').length
+    const pct    = Math.round(doneCnt / total * 100)
+    const fill   = document.getElementById('se-pfill')
+    const lbl    = document.getElementById('se-plabel')
+    const ws     = document.getElementById('se-wstatus')
     if (fill) fill.style.width = pct + '%'
     if (lbl)  lbl.textContent  = `${doneCnt} / ${total} analyzed`
+    if (ws)   ws.textContent   = active > 0 ? `⚡ ${active} active · ${doneCnt} / ${total} done` : `⏳ Starting...`
   }
 
   function onAllDone() {
-    if (timerTick) clearInterval(timerTick)
+    const totalSecs = Math.round((Date.now() - _seStartMs) / 1000)
+    console.log(`[SE] ✅ all ${total} tenants done in ${totalSecs}s — generating Excel`)
+    doAbort()
+    _seAbort = null
     const td = document.getElementById('se-tdigits')
-    if (td) { td.textContent = '0:00'; td.className = 'se-tdigits se-tdigits-done' }
+    if (td) td.className = 'se-tdigits se-tdigits-done'
     document.getElementById('se-wstatus')?.classList.add('hidden')
     const resEl = document.getElementById('se-result')
     if (resEl) { resEl.textContent = '✅ All done — preparing download...'; resEl.classList.remove('hidden') }
     doDownload()
   }
 
-  // ── Wave firing ────────────────────────────────────────────
-  function fireWave(waveStart, waveNum) {
-    const waveEnd  = Math.min(waveStart + WAVE_SIZE, total)
-    const waveSize = waveEnd - waveStart
-    let   waveDone = 0
+  // ── Slot pool ──────────────────────────────────────────────────────────────
+  // K0: 5 slots (T3, 800K/min)   K1: 3 slots (T2, 450K/min)   K2: 3 slots (T2, 450K/min)
+  // When a tenant finishes it immediately frees its slot and the next queued
+  // tenant on that key fires. Multi-batch tenants hold their slot longer but
+  // never block other keys or other tenants on different keys from advancing.
+  const KEY_CAPACITY = { 0: 5, 1: 3, 2: 3 }
+  const activePerKey = { 0: 0, 1: 0, 2: 0 }
+  const keyQueues    = { 0: [], 1: [], 2: [] }
+  for (let i = 0; i < total; i++) keyQueues[tp2StaticKey(i)].push(i)
 
-    const ws = document.getElementById('se-wstatus')
-    if (ws) ws.textContent = `⚡ Wave ${waveNum} of ${waves} — analyzing tenants ${waveStart + 1}–${waveEnd}...`
-    startWaveTimer()
+  console.log(`[SE] ▶ slot pool — K0:${keyQueues[0].length} K1:${keyQueues[1].length} K2:${keyQueues[2].length} tenants, dumbMode=${dumbMode}`)
 
-    function tenantFinished() {
-      waveDone++
-      if (waveDone < waveSize) return
-      const nextStart = waveStart + waveSize
-      if (nextStart < total) fireWave(nextStart, waveNum + 1)
-      else                   onAllDone()
-    }
-
-    for (let i = waveStart; i < waveEnd; i++) {
-      const tenant = state.tenants[i]
-      const keyIdx = tp2StaticKey(i)
-      let   closed = false
-
-      const markDone = data => {
-        if (closed) return
-        closed = true
-        results.set(i, data)
-        doneCnt++
-        updateProgress()
-        tenantFinished()
-      }
-
-      gymRegisterLocalFiles(tenant.id)
-        .then(() => {
-          const url = sameOriginApi(
-            `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenant.id)}&keyIndex=${keyIdx}`
-          )
-          const es = new EventSource(url)
-          es.addEventListener('gym-complete', e => { es.close(); markDone(JSON.parse(e.data)) })
-          es.addEventListener('gym-error',    () => { es.close(); markDone({ _error: true, tenantName: tenant.tenantName || tenant.folderName, findings: [], allClear: false }) })
-          es.onerror = ()                          => { es.close(); markDone({ _error: true, tenantName: tenant.tenantName || tenant.folderName, findings: [], allClear: false }) }
-        })
-        .catch(() => markDone({ _error: true, tenantName: tenant.tenantName || tenant.folderName, findings: [], allClear: false }))
+  function tryFireFromKey(keyIdx) {
+    while (!seAborted && activePerKey[keyIdx] < KEY_CAPACITY[keyIdx] && keyQueues[keyIdx].length > 0) {
+      const i = keyQueues[keyIdx].shift()
+      activePerKey[keyIdx]++
+      fireTenant(i, keyIdx)
     }
   }
+
+  function fireTenant(i, keyIdx) {
+    const tenant = state.tenants[i]
+    let   closed = false
+
+    const markDone = data => {
+      if (closed) return
+      closed = true
+      activePerKey[keyIdx]--
+      results.set(i, data)
+      doneCnt++
+      updateProgress()
+      if (doneCnt === total) onAllDone()
+      else tryFireFromKey(keyIdx)  // immediately fill the freed slot
+    }
+
+    if (seAborted) { activePerKey[keyIdx]--; markDone({ _error: true, tenantName: tenant.tenantName || tenant.folderName, findings: [], allClear: false }); return }
+
+    logSet(i, 'registering')
+    console.log(`[SE] tenant ${i + 1}/${total} "${tenant.tenantName || tenant.folderName}" → K${keyIdx}${dumbMode ? ' [Haiku]' : ' [Sonnet]'}`)
+    updateProgress()
+
+    gymRegisterLocalFiles(tenant.id)
+      .then(() => {
+        if (seAborted) { logSet(i, 'error'); markDone({ _error: true, tenantName: tenant.tenantName || tenant.folderName, findings: [], allClear: false }); return }
+
+        logSet(i, 'open')
+        const cheapParam = dumbMode ? '&cheap=1' : ''
+        const url = sameOriginApi(
+          `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenant.id)}&keyIndex=${keyIdx}${cheapParam}`
+        )
+        const es = new EventSource(url)
+        activeSSEs.add(es)
+
+        // Silence watchdog — resets on every gym-progress event so multi-batch
+        // tenants (legitimately 7+ min) never get killed mid-analysis.
+        // Only fires if the server goes completely silent for 5 minutes.
+        let watchdog = null
+        function resetWatchdog() {
+          if (watchdog) clearTimeout(watchdog)
+          watchdog = setTimeout(() => {
+            es.close(); activeSSEs.delete(es)
+            logSet(i, 'timeout')
+            console.error(`[SE] ⏱ WATCHDOG — tenant ${i + 1} "${tenant.tenantName || tenant.folderName}" silent 5 min`)
+            markDone({ _error: true, tenantName: tenant.tenantName || tenant.folderName, findings: [], allClear: false })
+          }, 5 * 60 * 1000)
+        }
+        resetWatchdog()
+
+        const cleanupES = () => { if (watchdog) clearTimeout(watchdog); es.close(); activeSSEs.delete(es) }
+
+        es.addEventListener('gym-start', () => {
+          logSet(i, 'analyzing'); resetWatchdog()
+          console.log(`[SE] tenant ${i + 1} "${tenant.tenantName || tenant.folderName}" Claude started`)
+        })
+        es.addEventListener('gym-progress', e => {
+          resetWatchdog()
+          try {
+            const { message } = JSON.parse(e.data)
+            if (message) {
+              tenantLog[i].note = message; renderLog()
+              if (/batch \d+ of \d+/i.test(message))
+                console.log(`[SE] tenant ${i + 1} "${tenant.tenantName || tenant.folderName}" — ${message}`)
+            }
+          } catch {}
+        })
+        es.addEventListener('gym-complete', e => { cleanupES(); logSet(i, 'done'); markDone(JSON.parse(e.data)) })
+        es.addEventListener('gym-error', e => {
+          cleanupES(); logSet(i, 'error')
+          const msg = (() => { try { return JSON.parse(e.data)?.error || '' } catch { return '' } })()
+          console.error(`[SE] tenant ${i + 1} gym-error:`, msg)
+          markDone({ _error: true, tenantName: tenant.tenantName || tenant.folderName, findings: [], allClear: false })
+        })
+        es.onerror = () => {
+          cleanupES(); logSet(i, 'error')
+          console.error(`[SE] tenant ${i + 1} "${tenant.tenantName || tenant.folderName}" SSE dropped`)
+          markDone({ _error: true, tenantName: tenant.tenantName || tenant.folderName, findings: [], allClear: false })
+        }
+      })
+      .catch(e => {
+        logSet(i, 'error')
+        console.error(`[SE] tenant ${i + 1} register failed:`, e.message)
+        markDone({ _error: true, tenantName: tenant.tenantName || tenant.folderName, findings: [], allClear: false })
+      })
+  }
+
+  // Fill all slots immediately — slot pool is self-driving from here
+  tryFireFromKey(0)
+  tryFireFromKey(1)
+  tryFireFromKey(2)
 
   // ── Excel download ─────────────────────────────────────────
   async function doDownload() {
@@ -6511,7 +6661,20 @@ async function runStraightExcel(juiceModel, onClose) {
         error:      !!d._error,
       }
     })
+
+    const resEl   = document.getElementById('se-result')
+    const closeBtn = document.getElementById('se-close-btn')
+
+    // Helper: trigger a file download from a blob URL
+    function triggerDownload(bUrl) {
+      const fname = `Missing-Documents-${new Date().toISOString().slice(0, 10)}.xlsx`
+      const a = document.createElement('a')
+      a.href = bUrl; a.download = fname
+      document.body.appendChild(a); a.click(); a.remove()
+    }
+
     try {
+      if (resEl) { resEl.textContent = '⏳ Building Excel...'; resEl.classList.remove('hidden') }
       const res = await fetch(sameOriginApi('/api/target/straight-excel'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -6520,22 +6683,45 @@ async function runStraightExcel(juiceModel, onClose) {
       if (!res.ok) throw new Error('Server returned ' + res.status)
       const blob = await res.blob()
       const bUrl = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = bUrl
-      a.download = `Missing-Documents-${new Date().toISOString().slice(0, 10)}.xlsx`
-      document.body.appendChild(a); a.click(); a.remove()
-      URL.revokeObjectURL(bUrl)
-      const resEl = document.getElementById('se-result')
-      if (resEl) resEl.textContent = '✅ Downloaded! Check your downloads folder.'
+
+      // Auto-download attempt
+      triggerDownload(bUrl)
+      console.log('[SE] Excel blob ready, auto-download triggered')
+
+      // Always show a manual button — browser may block auto-download
+      if (resEl) {
+        resEl.innerHTML = `
+          ✅ Analysis complete!
+          <button id="se-dl-btn" style="
+            display:block;width:100%;margin-top:10px;padding:10px 0;
+            background:#22c55e;color:#fff;border:none;border-radius:6px;
+            font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.5px
+          ">📥 DOWNLOAD EXCEL</button>
+          <div style="font-size:11px;color:#94a3b8;margin-top:4px">
+            If it didn't appear in downloads, click above
+          </div>`
+        resEl.classList.remove('hidden')
+        document.getElementById('se-dl-btn')?.addEventListener('click', () => triggerDownload(bUrl))
+      }
+
     } catch (err) {
-      const resEl = document.getElementById('se-result')
-      if (resEl) resEl.textContent = `❌ Download failed — ${err.message}`
+      console.error('[SE] doDownload failed:', err)
+      if (resEl) {
+        resEl.innerHTML = `
+          ❌ Download failed — ${escHtml(err.message)}
+          <button id="se-retry-btn" style="
+            display:block;width:100%;margin-top:10px;padding:10px 0;
+            background:#ef4444;color:#fff;border:none;border-radius:6px;
+            font-size:14px;font-weight:700;cursor:pointer
+          ">🔄 RETRY DOWNLOAD</button>`
+        resEl.classList.remove('hidden')
+        document.getElementById('se-retry-btn')?.addEventListener('click', doDownload)
+      }
     }
-    document.getElementById('se-close-btn')?.classList.remove('hidden')
+
+    if (closeBtn) closeBtn.classList.remove('hidden')
   }
 
-  // Kick off wave 1
-  fireWave(0, 1)
 }
 
 /** Draw 8-bit bullseye target on a 40×52 canvas */
