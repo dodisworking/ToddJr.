@@ -9011,11 +9011,11 @@ function mtShowButtons(...ids) {
 
 function mtUpdateHeader() {
   const tenant = mtState.tenants[mtState.currentIdx]
-  // Update the simple review panel header
-  const counter = document.getElementById('mt-rev-counter')
-  const nameEl  = document.getElementById('mt-rev-name')
-  const attempt = document.getElementById('mt-rev-attempt')
-  const rules   = document.getElementById('mt-rev-rules')
+  // Update mt-header-bar elements (inside gym-panel-workout)
+  const counter = document.getElementById('mt-tenant-counter')
+  const nameEl  = document.getElementById('mt-tenant-name')
+  const attempt = document.getElementById('mt-attempt-badge')
+  const rules   = document.getElementById('mt-rules-badge')
   if (counter) counter.textContent = `${mtState.currentIdx + 1} / ${mtState.tenants.length}`
   if (nameEl)  nameEl.textContent  = tenant?.tenantName || ''
   if (attempt) attempt.textContent = `Attempt ${mtState.attempt}`
@@ -9380,10 +9380,19 @@ async function mtCheckAnswer() {
  * Called after blind run or rerun completes.
  */
 function mtShowReviewPanel(data) {
-  gymShowPanel('mt-review')
-  mtUpdateHeader()
+  // Use the full workout panel — gives MT the PDF viewer + same card layout as TP2 for free.
+  // gymLaunchWorkout populates gymState.findings/files, calls renderGymFindingCards(),
+  // loads PDFs, and shows gym-panel-workout.
+  gymLaunchWorkout(data)
 
-  // Hide verdict + notes until teacher is called; clear previous notes
+  // MT-specific overrides on top of gymLaunchWorkout
+  document.getElementById('mt-header-bar')?.classList.remove('hidden')
+  document.getElementById('gym-skip-btn')?.classList.add('hidden')
+
+  // Hide all TP2 bottom-bar buttons; show MT buttons instead
+  _mtActivateBottomBar()
+
+  // Reset verdict section
   document.getElementById('mt-rev-verdict')?.classList.add('hidden')
   document.getElementById('mt-rev-notes-wrap')?.classList.add('hidden')
   const notesEl = document.getElementById('mt-rev-notes')
@@ -9391,111 +9400,29 @@ function mtShowReviewPanel(data) {
   const scoreBadge = document.getElementById('mt-rev-score-badge')
   if (scoreBadge) { scoreBadge.textContent = ''; scoreBadge.className = 'mt-rev-score-badge' }
 
-  const findingsEl = document.getElementById('mt-rev-findings')
-  if (!findingsEl) return
-
-  const findings = data.findings || []
-  if (findings.length === 0) {
-    findingsEl.innerHTML = '<div class="mt-rev-finding-empty">✨ Model found no issues in this folder.</div>'
-  } else {
-    // Render using the exact same gym-finding-card template as TP2
-    findingsEl.innerHTML = findings.map((f, i) => {
-      const sevClass  = (f.severity || 'low').toLowerCase()
-      const confClass = { HIGH: 'conf-high', MEDIUM: 'conf-med', LOW: 'conf-low' }[f.confidence] || 'conf-med'
-      const checked   = Array.isArray(f.checkedAndEliminated) && f.checkedAndEliminated.length
-        ? f.checkedAndEliminated.map(c => `<li>${escHtml(c)}</li>`).join('')
-        : ''
-      const fid = f.id || `mt-f-${i}`
-
-      return `
-      <div class="gym-finding-card" id="mt-card-${fid}" data-fid="${fid}" data-fidx="${i}">
-        <div class="gym-card-top">
-          <span class="gym-card-check">${escHtml(CHECK_LABELS[f.checkType] || f.checkType || 'CHECK')}</span>
-          <span class="sev-pill sev-${sevClass}">${escHtml(f.severity || 'LOW')}</span>
-          ${f.confidence ? `<span class="gym-conf-badge ${confClass}">${escHtml(f.confidence)}</span>` : ''}
-        </div>
-
-        <div class="gym-excel-row">
-          <span class="gym-excel-label">Missing Document</span>
-          <span class="gym-excel-value gym-card-doc">${escHtml(f.missingDocument || 'N/A')}</span>
-        </div>
-
-        <div class="gym-excel-row">
-          <span class="gym-excel-label">Comment / Status</span>
-          <span class="gym-excel-value clamped gym-clamp-val">${escHtml(f.comment || '')}</span>
-        </div>
-
-        <div class="gym-excel-row">
-          <span class="gym-excel-label">Evidence</span>
-          <span class="gym-excel-value clamped gym-clamp-val gym-evidence-val">${escHtml(f.evidence || '')}</span>
-        </div>
-
-        ${f.howIFoundThis ? `<div class="gym-how-found">💡 ${escHtml(f.howIFoundThis)}</div>` : ''}
-
-        <div class="gym-card-actions">
-          <button class="gym-verdict-btn gym-verdict-correct" data-fid="${fid}">✅ Correct</button>
-          <button class="gym-verdict-btn gym-verdict-wrong"   data-fid="${fid}">❌ Wrong</button>
-        </div>
-        <div class="gym-card-comment" id="mt-comment-${fid}"></div>
-
-        <button class="gym-expand-btn" id="mt-exp-${fid}" data-fid="${fid}">▼ Show Todd's reasoning</button>
-        <div class="gym-reasoning-block hidden" id="mt-rb-${fid}">
-          ${f.triggerQuote ? `
-          <div class="gym-rb-section">
-            <div class="gym-rb-label">🔍 What triggered this finding</div>
-            <div class="gym-rb-quote">${escHtml(f.triggerQuote)}</div>
-          </div>` : ''}
-          ${f.reasoning ? `
-          <div class="gym-rb-section">
-            <div class="gym-rb-label">🧠 How Todd reasoned through it</div>
-            <div class="gym-rb-text">${escHtml(f.reasoning)}</div>
-          </div>` : ''}
-          ${checked ? `
-          <div class="gym-rb-section">
-            <div class="gym-rb-label">✔️ What Todd checked & eliminated</div>
-            <ul class="gym-rb-list">${checked}</ul>
-          </div>` : ''}
-        </div>
-      </div>`
-    }).join('')
-
-    // Wire ✅ Correct / ❌ Wrong — same visual as TP2, stored on card class for mtLearnFromThis
-    findingsEl.querySelectorAll('.gym-verdict-correct').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation()
-        const card = document.getElementById(`mt-card-${btn.dataset.fid}`)
-        if (card) { card.className = 'gym-finding-card verdict-correct' }
-        btn.classList.add('active')
-        btn.closest('.gym-card-actions')?.querySelector('.gym-verdict-wrong')?.classList.remove('active')
-      })
-    })
-    findingsEl.querySelectorAll('.gym-verdict-wrong').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation()
-        const card = document.getElementById(`mt-card-${btn.dataset.fid}`)
-        if (card) { card.className = 'gym-finding-card verdict-wrong' }
-        btn.classList.add('active')
-        btn.closest('.gym-card-actions')?.querySelector('.gym-verdict-correct')?.classList.remove('active')
-      })
-    })
-
-    // Wire expand/collapse reasoning
-    findingsEl.querySelectorAll('.gym-expand-btn').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation()
-        const rb       = document.getElementById(`mt-rb-${btn.dataset.fid}`)
-        const expanded = rb?.classList.toggle('hidden') === false
-        btn.textContent = expanded ? '▲ Hide reasoning' : '▼ Show Todd\'s reasoning'
-      })
-    })
-
-    // Expand clamped values on click
-    findingsEl.querySelectorAll('.gym-clamp-val').forEach(el => {
-      el.addEventListener('click', e => { e.stopPropagation(); el.classList.toggle('expanded') })
-    })
-  }
-
+  mtUpdateHeader()
   mtShowButtons('gym-mt-check-btn', 'gym-mt-next-btn')
+}
+
+/** Hide TP2 bottom buttons and show the MT set. */
+function _mtActivateBottomBar() {
+  ;['gym-review-notes-btn','gym-save-isaac-btn','gym-ex-save-next-btn',
+    'gym-target-save-btn','gym-tp2-save-btn','gym-submit-btn'].forEach(id => {
+    document.getElementById(id)?.classList.add('hidden')
+  })
+  const statusEl = document.getElementById('gym-review-status')
+  if (statusEl) statusEl.style.display = 'none'
+}
+
+/** Restore TP2 bottom buttons (called when leaving MT mode). */
+function _mtDeactivateBottomBar() {
+  ;['gym-review-notes-btn','gym-save-isaac-btn','gym-submit-btn'].forEach(id => {
+    document.getElementById(id)?.classList.remove('hidden')
+  })
+  const statusEl = document.getElementById('gym-review-status')
+  if (statusEl) statusEl.style.display = ''
+  mtHideAllButtons()
+  document.getElementById('mt-header-bar')?.classList.add('hidden')
 }
 
 /**
@@ -9562,25 +9489,19 @@ function _mtReadVerdictConfirmations(bodyEl) {
 }
 
 /**
- * Read ✅/❌ states from the gym-finding-card verdict classes in mt-rev-findings.
- * Cards with class verdict-correct = approved; verdict-wrong = rejected (false positive).
+ * Read ✅/❌ states from gymState.feedbacks (set by the TP2-style verdict buttons
+ * that are now wired in renderGymFindingCards — same as TP2 workout panel).
  */
 function _mtReadManualFindingVerdicts() {
-  const findingsEl = document.getElementById('mt-rev-findings')
-  if (!findingsEl) return { manualApproved: [], manualRejected: [] }
-
   const manualApproved = []
   const manualRejected = []
-
-  findingsEl.querySelectorAll('.gym-finding-card[data-fidx]').forEach(card => {
-    const idx = parseInt(card.dataset.fidx, 10)
-    const f   = mtState.currentFindings[idx]
-    if (!f) return
+  gymState.findings.forEach(f => {
+    const fb    = gymState.feedbacks[f.id]
+    if (!fb) return
     const label = f.missingDocument || f.checkType || ''
-    if (card.classList.contains('verdict-correct')) manualApproved.push(label)
-    if (card.classList.contains('verdict-wrong'))   manualRejected.push(label)
+    if (fb.verdict === 'correct') manualApproved.push(label)
+    if (fb.verdict === 'wrong')   manualRejected.push(label)
   })
-
   return { manualApproved, manualRejected }
 }
 
@@ -9939,8 +9860,7 @@ function mtSessionComplete() {
     }).catch(() => {})
   }
 
-  document.getElementById('mt-header-bar')?.classList.add('hidden')
-  mtHideAllButtons()
+  _mtDeactivateBottomBar()
   gymReset()
   goTo('home')
 }

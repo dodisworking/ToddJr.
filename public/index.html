@@ -675,62 +675,9 @@
     </div>
 
     <!-- PANEL: Master Trainer (dedicated training experience — no PDF viewer) -->
-    <div id="gym-panel-mt-review" class="gym-panel gym-panel-mt-review hidden">
-
-      <!-- Header: progress + tenant + attempt + rules -->
-      <div class="mt-rev-header">
-        <div class="mt-rev-header-left">
-          <span class="mt-rev-label">🧪 MASTER TRAINER</span>
-          <span class="mt-rev-counter" id="mt-rev-counter">1 / 17</span>
-          <span class="mt-rev-name" id="mt-rev-name"></span>
-        </div>
-        <div class="mt-rev-header-right">
-          <span class="mt-rev-attempt" id="mt-rev-attempt">Attempt 1</span>
-          <span class="mt-rev-rules" id="mt-rev-rules">0 rules</span>
-        </div>
-      </div>
-
-      <!-- Scrollable body: findings + verdict -->
-      <div class="mt-rev-body">
-
-        <!-- What the model found -->
-        <div class="mt-rev-section">
-          <div class="mt-rev-section-label">WHAT THE MODEL FOUND</div>
-          <div id="mt-rev-findings" class="mt-rev-findings">
-            <!-- populated by mtShowReviewPanel() -->
-          </div>
-        </div>
-
-        <!-- Teacher verdict (hidden until teacher is called) -->
-        <div id="mt-rev-verdict" class="mt-rev-verdict hidden">
-          <div class="mt-rev-verdict-header">
-            <span class="mt-rev-section-label">TEACHER'S VERDICT</span>
-            <span id="mt-rev-score-badge" class="mt-rev-score-badge"></span>
-          </div>
-          <div id="mt-rev-verdict-body" class="mt-rev-verdict-body">
-            <!-- caught / missed / false positives populated by mtRenderVerdict() -->
-          </div>
-          <div id="mt-rev-verdict-analysis" class="mt-rev-verdict-analysis hidden"></div>
-
-          <!-- Manual trainer notes — shown after verdict, fed into synthesis -->
-          <div class="mt-rev-notes-wrap" id="mt-rev-notes-wrap">
-            <label class="mt-rev-notes-label" for="mt-rev-notes">✏️ YOUR NOTES <span class="mt-rev-notes-hint">(optional — tell the teacher what it missed & why)</span></label>
-            <textarea id="mt-rev-notes" class="mt-rev-notes" rows="3" placeholder="e.g. It should have noticed the guaranty was only a signature page, not the full exhibit..."></textarea>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- Footer: MT action buttons live here (NOT in the workout panel) -->
-      <div class="mt-rev-footer">
-        <button type="button" id="gym-mt-check-btn"  class="btn-gym-mt-check hidden">📞 Call Teacher</button>
-        <button type="button" id="gym-mt-learn-btn"  class="btn-gym-mt-learn hidden">🧑‍🏫 Have Teacher Teach</button>
-        <button type="button" id="gym-mt-rerun-btn"  class="btn-gym-mt-rerun hidden">▶ Rerun With Rules</button>
-        <button type="button" id="gym-mt-next-btn"   class="btn-gym-mt-next  hidden">⏩ Next Tenant</button>
-        <button type="button" id="gym-mt-save-btn"   class="btn-gym-mt-save  hidden">💾 Save Refined Juice</button>
-      </div>
-
-    </div>
+    <!-- gym-panel-mt-review is kept as a shell so gymShowPanel('mt-review') doesn't break
+         All content has moved into gym-panel-workout (left col + bottom bar) -->
+    <div id="gym-panel-mt-review" class="gym-panel gym-panel-mt-review hidden"></div>
 
     <!-- PANEL: Workout (two columns) -->
     <div id="gym-panel-workout" class="gym-panel gym-panel-workout hidden">
@@ -766,6 +713,20 @@
           </div>
           <div class="gym-annotations-scroll" id="gym-annotations-scroll">
             <p class="gym-anno-empty" id="gym-anno-empty">No annotations yet. Use "Flag Area" to highlight something Todd missed.</p>
+          </div>
+
+          <!-- MT Teacher Verdict — hidden unless MT mode + teacher called -->
+          <div id="mt-rev-verdict" class="mt-rev-verdict hidden" style="margin-top:12px">
+            <div class="mt-rev-verdict-header">
+              <span class="mt-rev-section-label">TEACHER'S VERDICT</span>
+              <span id="mt-rev-score-badge" class="mt-rev-score-badge"></span>
+            </div>
+            <div id="mt-rev-verdict-body" class="mt-rev-verdict-body"></div>
+            <div id="mt-rev-verdict-analysis" class="mt-rev-verdict-analysis hidden"></div>
+            <div class="mt-rev-notes-wrap hidden" id="mt-rev-notes-wrap">
+              <label class="mt-rev-notes-label" for="mt-rev-notes">✏️ YOUR NOTES <span class="mt-rev-notes-hint">(optional — tell the teacher what it missed &amp; why)</span></label>
+              <textarea id="mt-rev-notes" class="mt-rev-notes" rows="3" placeholder="e.g. It should have noticed the guaranty was only a signature page, not the full exhibit..."></textarea>
+            </div>
           </div>
         </div>
 
@@ -811,6 +772,13 @@
       <div class="gym-bottom-bar">
         <span class="gym-review-status" id="gym-review-status">0 of 0 reviewed</span>
         <div class="gym-bottom-actions">
+          <!-- MT mode buttons — hidden unless Master Trainer active -->
+          <button type="button" id="gym-mt-check-btn"  class="btn-gym-mt-check  hidden">📞 Call Teacher</button>
+          <button type="button" id="gym-mt-learn-btn"  class="btn-gym-mt-learn  hidden">🧑‍🏫 Have Teacher Teach</button>
+          <button type="button" id="gym-mt-rerun-btn"  class="btn-gym-mt-rerun  hidden">▶ Rerun With Rules</button>
+          <button type="button" id="gym-mt-next-btn"   class="btn-gym-mt-next   hidden">⏩ Next Tenant</button>
+          <button type="button" id="gym-mt-save-btn"   class="btn-gym-mt-save   hidden">💾 Save Refined Juice</button>
+          <!-- TP2 / regular gym buttons -->
           <button type="button" id="gym-review-notes-btn" class="btn-gym-secondary">📋 Review notes</button>
           <button type="button" id="gym-save-isaac-btn" class="btn-gym-isaac">💾 Save for Isaac</button>
           <button type="button" id="gym-ex-save-next-btn" class="btn-gym-ex-save hidden">💾 Save & Next Tenant ›</button>
