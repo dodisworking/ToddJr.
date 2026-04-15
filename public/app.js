@@ -8994,7 +8994,8 @@ const mtState = {
   currentFindings: [],
   currentRules:    [],
   lastComparison:  null,
-  trainedTenants:  []
+  trainedTenants:  [],
+  startingJuice:   null        // { id, name, rules } — optional juice model loaded at session start
 }
 
 function mtHideAllButtons() {
@@ -9009,15 +9010,12 @@ function mtShowButtons(...ids) {
 }
 
 function mtUpdateHeader() {
-  const bar = document.getElementById('mt-header-bar')
-  if (!bar) return
-  if (!mtState.active) { bar.classList.add('hidden'); return }
-  bar.classList.remove('hidden')
   const tenant = mtState.tenants[mtState.currentIdx]
-  const counter = document.getElementById('mt-tenant-counter')
-  const nameEl  = document.getElementById('mt-tenant-name')
-  const attempt = document.getElementById('mt-attempt-badge')
-  const rules   = document.getElementById('mt-rules-badge')
+  // Update the simple review panel header
+  const counter = document.getElementById('mt-rev-counter')
+  const nameEl  = document.getElementById('mt-rev-name')
+  const attempt = document.getElementById('mt-rev-attempt')
+  const rules   = document.getElementById('mt-rev-rules')
   if (counter) counter.textContent = `${mtState.currentIdx + 1} / ${mtState.tenants.length}`
   if (nameEl)  nameEl.textContent  = tenant?.tenantName || ''
   if (attempt) attempt.textContent = `Attempt ${mtState.attempt}`
@@ -9034,11 +9032,77 @@ function mtOpenUploadOverlay() {
   // Reset to fresh state
   zone?.classList.remove('hidden')
   progress?.classList.add('hidden')
+  // Reset juice selection
+  mtState.startingJuice = null
+  const juiceStatusEl = document.getElementById('mt-juice-status')
+  if (juiceStatusEl) juiceStatusEl.innerHTML = '⚡ Fresh start (no juice)'
+  // Wire juice load button
+  const juiceLoadBtn = document.getElementById('mt-juice-load-btn')
+  if (juiceLoadBtn) {
+    juiceLoadBtn.onclick = () => mtOpenJuiceForUpload()
+  }
   const fill  = document.getElementById('mt-upload-prog-fill')
   const label = document.getElementById('mt-upload-prog-label')
   if (fill)  fill.style.width = '0%'
   if (label) label.textContent = 'Reading files...'
   overlay.classList.remove('hidden')
+}
+
+/**
+ * Open the juice library overlay in the context of the MT upload screen.
+ * On model selection, stores rules in mtState.startingJuice and updates the status label.
+ */
+async function mtOpenJuiceForUpload() {
+  const jlibOverlay = document.getElementById('juice-library-overlay')
+  const jlibList    = document.getElementById('jlib-list')
+  const jlibClose   = document.getElementById('jlib-close-btn')
+  if (!jlibOverlay || !jlibList) return
+
+  let models = []
+  try { models = await fetch(sameOriginApi('/api/target/models')).then(r => r.ok ? r.json() : []) } catch {}
+
+  if (!models.length) {
+    jlibList.innerHTML = '<div class="jlib-empty">No juice models saved yet.<br>Complete a session and save juice to build your library.</div>'
+  } else {
+    jlibList.innerHTML = models.map(m => {
+      const meta = [m.reviewerName, m.tenantCount ? `${m.tenantCount} tenants` : ''].filter(Boolean).map(escHtml).join(' · ')
+      return `<div class="jlib-card" data-id="${m.id}">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+          <span class="jlib-card-name">🧠 ${escHtml(m.name)}</span>
+        </div>
+        ${meta ? `<div class="jlib-card-meta">${meta}</div>` : ''}
+        <div style="margin-top:6px">
+          <button class="jlib-use-btn" data-id="${m.id}" data-name="${escHtml(m.name)}" style="font-family:var(--font-pixel);font-size:7px;background:#14532d;border:1px solid #16a34a;color:#86efac;padding:4px 10px;cursor:pointer;letter-spacing:0.4px">USE ▶</button>
+        </div>
+      </div>`
+    }).join('')
+    jlibList.querySelectorAll('.jlib-use-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const modelId   = btn.dataset.id
+        const modelName = btn.dataset.name
+        jlibOverlay.classList.add('hidden')
+        // Fetch full model to get rules
+        try {
+          const full = await fetch(sameOriginApi(`/api/target/models/${modelId}`)).then(r => r.ok ? r.json() : null)
+          if (full) {
+            mtState.startingJuice = full
+            const juiceStatusEl = document.getElementById('mt-juice-status')
+            if (juiceStatusEl) juiceStatusEl.innerHTML = `🧠 <b>${escHtml(modelName)}</b> (${(full.rules||[]).length} rules)`
+          }
+        } catch { toast('Could not load model', 'error') }
+      })
+    })
+  }
+
+  // Override the close button to just close the overlay (not mess with other contexts)
+  if (jlibClose) {
+    const oldHandler = jlibClose.onclick
+    jlibClose.onclick = () => {
+      jlibOverlay.classList.add('hidden')
+      jlibClose.onclick = oldHandler
+    }
+  }
+  jlibOverlay.classList.remove('hidden')
 }
 
 /**
@@ -9170,11 +9234,17 @@ async function mtBeginTraining() {
     toast('No tenants to train on', 'error')
     return
   }
+  // Apply starting juice if trainer selected a model before uploading
+  if (mtState.startingJuice?.rules?.length) {
+    mtState.currentRules = [...mtState.startingJuice.rules]
+    toast(`🧠 Starting with ${mtState.currentRules.length} juice rules from "${mtState.startingJuice.name}"`, 'success')
+  } else {
+    mtState.currentRules = []
+  }
 
   mtState.active          = true
   mtState.currentIdx      = 0
   mtState.attempt         = 0
-  mtState.currentRules    = []
   mtState.lastComparison  = null
   mtState.trainedTenants  = []
   mtState.currentFindings = []
@@ -9241,15 +9311,14 @@ async function mtRunTenant(idx) {
     const d = JSON.parse(e.data)
     document.getElementById('gym-progress-fill').style.width = '100%'
     mtState.currentFindings = d.findings || []
-    gymLaunchWorkout(d)
-    mtUpdateHeader()
-    mtShowButtons('gym-mt-check-btn', 'gym-mt-next-btn')
+    mtShowReviewPanel(d)
     sfxReady()
   })
   es.addEventListener('gym-error', e => {
     es.close(); state.eventSource = null
     const d = JSON.parse(e.data)
     toast('Analysis error: ' + (d.error || 'Unknown'), 'error')
+    gymShowPanel('mt-review')
     mtShowButtons('gym-mt-next-btn')
   })
   es.onerror = () => {}
@@ -9271,7 +9340,13 @@ async function mtCheckAnswer() {
     if (!res.ok) throw new Error(data.error || 'Compare failed')
 
     mtState.lastComparison = data
-    mtRenderCompareOverlay(data, tenant.tenantName)
+    mtRenderVerdict(data)
+    const score = data.score ?? 0
+    if (score >= 100) {
+      mtShowButtons('gym-mt-save-btn', 'gym-mt-next-btn')
+    } else {
+      mtShowButtons('gym-mt-learn-btn', 'gym-mt-next-btn')
+    }
   } catch (err) {
     toast('Teacher check failed: ' + err.message, 'error')
     if (btn) { btn.disabled = false; btn.textContent = '📞 Call Teacher' }
@@ -9539,8 +9614,8 @@ async function mtLearnFromThis() {
   const btn = document.getElementById('gym-mt-learn-btn')
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Teaching...' }
 
-  // Read trainer confirmations from the overlay verdict body
-  const bodyEl = document.getElementById('mt-compare-body')
+  // Read trainer confirmations from the inline verdict body
+  const bodyEl = document.getElementById('mt-rev-verdict-body')
   const { confirmedMissed, confirmedFPs, deniedCaught } = bodyEl
     ? _mtReadVerdictConfirmations(bodyEl)
     : { confirmedMissed: [], confirmedFPs: [], deniedCaught: [] }
@@ -9549,11 +9624,8 @@ async function mtLearnFromThis() {
   const missedToTeach = confirmedMissed.length > 0 ? confirmedMissed : (comp.missed || [])
   const fpsToTeach    = confirmedFPs.length    > 0 ? confirmedFPs    : (comp.falsePositives || [])
 
-  // Notes from overlay textarea (or the mt-rev-notes fallback)
-  const trainerNotes = (
-    document.getElementById('mt-overlay-notes')?.value ||
-    document.getElementById('mt-rev-notes')?.value || ''
-  ).trim()
+  // Notes from the inline textarea
+  const trainerNotes = (document.getElementById('mt-rev-notes')?.value || '').trim()
 
   try {
     const res = await fetch(sameOriginApi('/api/mt/synthesize'), {
@@ -9572,8 +9644,6 @@ async function mtLearnFromThis() {
 
     mtState.currentRules = data.rules || []
     mtUpdateHeader()
-
-    document.getElementById('mt-compare-overlay')?.classList.add('hidden')
 
     const rc = mtState.currentRules.length
     toast(`🧠 ${rc} rule${rc !== 1 ? 's' : ''} — ready to rerun`, 'success')
@@ -9633,15 +9703,14 @@ async function mtRerun() {
     const d = JSON.parse(e.data)
     document.getElementById('gym-progress-fill').style.width = '100%'
     mtState.currentFindings = d.findings || []
-    gymLaunchWorkout(d)
-    mtUpdateHeader()
-    mtShowButtons('gym-mt-check-btn', 'gym-mt-next-btn')
+    mtShowReviewPanel(d)
     sfxReady()
   })
   es.addEventListener('gym-error', e => {
     es.close(); state.eventSource = null
     const d = JSON.parse(e.data)
     toast('Rerun error: ' + (d.error || 'Unknown'), 'error')
+    gymShowPanel('mt-review')
     mtShowButtons('gym-mt-check-btn', 'gym-mt-next-btn')
   })
   es.onerror = () => {}

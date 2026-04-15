@@ -721,7 +721,14 @@
 
       </div>
 
-      <!-- (MT action buttons live in the workout panel bottom bar — IDs must be unique) -->
+      <!-- Footer: MT action buttons live here (NOT in the workout panel) -->
+      <div class="mt-rev-footer">
+        <button type="button" id="gym-mt-check-btn"  class="btn-gym-mt-check hidden">📞 Call Teacher</button>
+        <button type="button" id="gym-mt-learn-btn"  class="btn-gym-mt-learn hidden">🧑‍🏫 Have Teacher Teach</button>
+        <button type="button" id="gym-mt-rerun-btn"  class="btn-gym-mt-rerun hidden">▶ Rerun With Rules</button>
+        <button type="button" id="gym-mt-next-btn"   class="btn-gym-mt-next  hidden">⏩ Next Tenant</button>
+        <button type="button" id="gym-mt-save-btn"   class="btn-gym-mt-save  hidden">💾 Save Refined Juice</button>
+      </div>
 
     </div>
 
@@ -809,11 +816,6 @@
           <button type="button" id="gym-ex-save-next-btn" class="btn-gym-ex-save hidden">💾 Save & Next Tenant ›</button>
           <button type="button" id="gym-target-save-btn" class="btn-gym-target-save hidden">💾 Save Report &amp; Next →</button>
           <button type="button" id="gym-tp2-save-btn" class="btn-gym-tp2-save hidden">✅ Save &amp; Next →</button>
-          <button type="button" id="gym-mt-check-btn" class="btn-gym-mt-check hidden">📞 Call Teacher</button>
-          <button type="button" id="gym-mt-learn-btn" class="btn-gym-mt-learn hidden">🧑‍🏫 Have Teacher Teach</button>
-          <button type="button" id="gym-mt-rerun-btn" class="btn-gym-mt-rerun hidden">▶ Rerun With Rules</button>
-          <button type="button" id="gym-mt-next-btn" class="btn-gym-mt-next hidden">⏩ Next Tenant</button>
-          <button type="button" id="gym-mt-save-btn" class="btn-gym-mt-save hidden">💾 Save Refined Juice</button>
           <button id="gym-submit-btn" class="btn-gym-submit">💪 Analysis Workout</button>
         </div>
       </div>
@@ -1332,6 +1334,12 @@
           <button type="button" class="mt-upload-btn" id="mt-upload-btn">Choose Folders</button>
           <input type="file" id="mt-file-input" webkitdirectory multiple style="display:none" />
         </div>
+      </div>
+
+      <!-- Optional: start training from a saved juice model -->
+      <div class="mt-upload-juice-row" id="mt-upload-juice-row">
+        <button type="button" class="mt-upload-juice-btn" id="mt-juice-load-btn">🧠 Load Starting Juice</button>
+        <span class="mt-upload-juice-status" id="mt-juice-status">⚡ Fresh start (no juice)</span>
       </div>
 
       <div class="mt-upload-progress hidden" id="mt-upload-progress">
