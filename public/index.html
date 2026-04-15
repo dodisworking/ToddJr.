@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=69" />
+  <link rel="stylesheet" href="style.css?v=70" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
@@ -674,21 +674,60 @@
       </div>
     </div>
 
-    <!-- PANEL: Workout (two columns) -->
-    <div id="gym-panel-workout" class="gym-panel gym-panel-workout hidden">
+    <!-- PANEL: Master Trainer (dedicated training experience — no PDF viewer) -->
+    <div id="gym-panel-mt-review" class="gym-panel gym-panel-mt-review hidden">
 
-      <!-- Master Trainer header bar (hidden unless MT active) -->
-      <div id="mt-header-bar" class="mt-header-bar hidden">
-        <div class="mt-header-left">
-          <span class="mt-header-label">🧪 MASTER TRAINER</span>
-          <span class="mt-tenant-counter" id="mt-tenant-counter">1 / 17</span>
-          <span class="mt-tenant-name" id="mt-tenant-name"></span>
+      <!-- Header: progress + tenant + attempt + rules -->
+      <div class="mt-rev-header">
+        <div class="mt-rev-header-left">
+          <span class="mt-rev-label">🧪 MASTER TRAINER</span>
+          <span class="mt-rev-counter" id="mt-rev-counter">1 / 17</span>
+          <span class="mt-rev-name" id="mt-rev-name"></span>
         </div>
-        <div class="mt-header-right">
-          <span class="mt-attempt-badge" id="mt-attempt-badge">Attempt 1</span>
-          <span class="mt-rules-badge" id="mt-rules-badge">0 rules</span>
+        <div class="mt-rev-header-right">
+          <span class="mt-rev-attempt" id="mt-rev-attempt">Attempt 1</span>
+          <span class="mt-rev-rules" id="mt-rev-rules">0 rules</span>
         </div>
       </div>
+
+      <!-- Scrollable body: findings + verdict -->
+      <div class="mt-rev-body">
+
+        <!-- What the model found -->
+        <div class="mt-rev-section">
+          <div class="mt-rev-section-label">WHAT THE MODEL FOUND</div>
+          <div id="mt-rev-findings" class="mt-rev-findings">
+            <!-- populated by mtShowReviewPanel() -->
+          </div>
+        </div>
+
+        <!-- Teacher verdict (hidden until teacher is called) -->
+        <div id="mt-rev-verdict" class="mt-rev-verdict hidden">
+          <div class="mt-rev-verdict-header">
+            <span class="mt-rev-section-label">TEACHER'S VERDICT</span>
+            <span id="mt-rev-score-badge" class="mt-rev-score-badge"></span>
+          </div>
+          <div id="mt-rev-verdict-body" class="mt-rev-verdict-body">
+            <!-- caught / missed / false positives populated by mtRenderVerdict() -->
+          </div>
+          <div id="mt-rev-verdict-analysis" class="mt-rev-verdict-analysis hidden"></div>
+        </div>
+
+      </div>
+
+      <!-- Action buttons -->
+      <div class="mt-rev-footer">
+        <button type="button" id="gym-mt-check-btn" class="btn-gym-mt-check hidden">📞 Call Teacher</button>
+        <button type="button" id="gym-mt-learn-btn" class="btn-gym-mt-learn hidden">🧑‍🏫 Have Teacher Teach</button>
+        <button type="button" id="gym-mt-rerun-btn" class="btn-gym-mt-rerun hidden">▶ Rerun With Rules</button>
+        <button type="button" id="gym-mt-next-btn" class="btn-gym-mt-next hidden">⏩ Next Tenant</button>
+        <button type="button" id="gym-mt-save-btn" class="btn-gym-mt-save hidden">💾 Save Refined Juice</button>
+      </div>
+
+    </div>
+
+    <!-- PANEL: Workout (two columns) -->
+    <div id="gym-panel-workout" class="gym-panel gym-panel-workout hidden">
 
       <!-- Two-column layout -->
       <div class="gym-cols">
@@ -758,11 +797,6 @@
           <button type="button" id="gym-ex-save-next-btn" class="btn-gym-ex-save hidden">💾 Save & Next Tenant ›</button>
           <button type="button" id="gym-target-save-btn" class="btn-gym-target-save hidden">💾 Save Report &amp; Next →</button>
           <button type="button" id="gym-tp2-save-btn" class="btn-gym-tp2-save hidden">✅ Save &amp; Next →</button>
-          <button type="button" id="gym-mt-check-btn" class="btn-gym-mt-check hidden">🔍 Check Answer</button>
-          <button type="button" id="gym-mt-learn-btn" class="btn-gym-mt-learn hidden">🧠 Learn From This</button>
-          <button type="button" id="gym-mt-rerun-btn" class="btn-gym-mt-rerun hidden">▶ Rerun With Juice</button>
-          <button type="button" id="gym-mt-next-btn" class="btn-gym-mt-next hidden">⏩ Next Tenant</button>
-          <button type="button" id="gym-mt-save-btn" class="btn-gym-mt-save hidden">✅ Save Refined Juice</button>
           <button id="gym-submit-btn" class="btn-gym-submit">💪 Analysis Workout</button>
         </div>
       </div>
@@ -1322,7 +1356,7 @@
   <script src="drlab-flasks.js?v=6"></script>
   <script src="sbs-boxing.js?v=3"></script>
   <script src="target-game.js?v=4"></script>
-  <script src="app.js?v=101"></script>
+  <script src="app.js?v=102"></script>
   <script src="game-mode.js?v=4"></script>
   <script src="rr-app.js?v=1"></script>
 </body>

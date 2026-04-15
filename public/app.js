@@ -7521,6 +7521,7 @@ function gymShowPanel(name) {
   document.getElementById('gym-panel-results').classList.toggle('hidden', name !== 'results')
   document.getElementById('target-session-complete')?.classList.toggle('hidden', name !== 'target-complete')
   document.getElementById('tp2-session-complete')?.classList.toggle('hidden', name !== 'tp2-complete')
+  document.getElementById('gym-panel-mt-review')?.classList.toggle('hidden', name !== 'mt-review')
 
   if (name === 'loading') {
     const isTP = !!gymState.isTargetPractice
@@ -9008,17 +9009,11 @@ function mtShowButtons(...ids) {
 }
 
 function mtUpdateHeader() {
-  const bar = document.getElementById('mt-header-bar')
-  if (!bar) return
-  if (!mtState.active) { bar.classList.add('hidden'); return }
-  bar.classList.remove('hidden')
-
   const tenant = mtState.tenants[mtState.currentIdx]
-  const counter = document.getElementById('mt-tenant-counter')
-  const nameEl  = document.getElementById('mt-tenant-name')
-  const attempt = document.getElementById('mt-attempt-badge')
-  const rules   = document.getElementById('mt-rules-badge')
-
+  const counter = document.getElementById('mt-rev-counter')
+  const nameEl  = document.getElementById('mt-rev-name')
+  const attempt = document.getElementById('mt-rev-attempt')
+  const rules   = document.getElementById('mt-rev-rules')
   if (counter) counter.textContent = `${mtState.currentIdx + 1} / ${mtState.tenants.length}`
   if (nameEl)  nameEl.textContent  = tenant?.tenantName || ''
   if (attempt) attempt.textContent = `Attempt ${mtState.attempt}`
@@ -9195,9 +9190,10 @@ async function mtRunTenant(idx) {
 
   gymReset()
   gymShowPanel('loading')
-  mtUpdateHeader()
   mtHideAllButtons()
 
+  const titleEl = document.getElementById('gym-title')
+  if (titleEl) titleEl.textContent = '🧪 Master Trainer'
   document.getElementById('gym-subtitle').textContent = `Training: ${tenant.tenantName}`
   document.getElementById('gym-progress-fill').style.width = '0%'
   document.getElementById('gym-loading-msg').textContent = 'Running blind analysis...'
@@ -9240,9 +9236,7 @@ async function mtRunTenant(idx) {
     const d = JSON.parse(e.data)
     document.getElementById('gym-progress-fill').style.width = '100%'
     mtState.currentFindings = d.findings || []
-    gymLaunchWorkout(d)
-    mtUpdateHeader()
-    mtShowButtons('gym-mt-check-btn', 'gym-mt-next-btn')
+    mtShowReviewPanel(d)
     sfxReady()
   })
   es.addEventListener('gym-error', e => {
@@ -9259,7 +9253,7 @@ async function mtCheckAnswer() {
   if (!tenant) return
 
   const btn = document.getElementById('gym-mt-check-btn')
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Checking...' }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Asking teacher...' }
 
   try {
     const res = await fetch(sameOriginApi('/api/mt/compare'), {
@@ -9270,109 +9264,135 @@ async function mtCheckAnswer() {
     if (!res.ok) throw new Error(data.error || 'Compare failed')
 
     mtState.lastComparison = data
-    mtRenderCompareOverlay(data, tenant.tenantName)
+    mtRenderVerdict(data)
+
+    // Show appropriate buttons based on score
+    if (data.score >= 100) {
+      mtShowButtons('gym-mt-save-btn', 'gym-mt-next-btn')
+      const saveBtn = document.getElementById('gym-mt-save-btn')
+      if (saveBtn) saveBtn.disabled = false
+    } else {
+      mtShowButtons('gym-mt-learn-btn', 'gym-mt-next-btn')
+    }
   } catch (err) {
-    toast('Check failed: ' + err.message, 'error')
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🔍 Check Answer' }
+    toast('Teacher check failed: ' + err.message, 'error')
+    if (btn) { btn.disabled = false; btn.textContent = '📞 Call Teacher' }
   }
 }
 
-function mtRenderCompareOverlay(data, tenantName) {
-  const overlay    = document.getElementById('mt-compare-overlay')
-  const titleEl    = document.getElementById('mt-compare-title')
-  const scoreBadge = document.getElementById('mt-score-badge')
-  const bodyEl     = document.getElementById('mt-compare-body')
-  const analysisEl = document.getElementById('mt-compare-analysis')
-  if (!overlay) return
+/**
+ * Render the simple findings list in the MT review panel.
+ * Called after blind run or rerun completes.
+ */
+function mtShowReviewPanel(data) {
+  gymShowPanel('mt-review')
+  mtUpdateHeader()
 
-  titleEl.textContent  = `ANSWER CHECK — ${tenantName}`
-  const score          = data.score ?? 0
-  scoreBadge.textContent = `${score}/100`
-  scoreBadge.className   = 'mt-score-badge ' + (score === 100 ? 'score-perfect' : score >= 50 ? 'score-good' : 'score-bad')
+  // Hide verdict until teacher is called
+  document.getElementById('mt-rev-verdict')?.classList.add('hidden')
+  const scoreBadge = document.getElementById('mt-rev-score-badge')
+  if (scoreBadge) { scoreBadge.textContent = ''; scoreBadge.className = 'mt-rev-score-badge' }
+
+  const findingsEl = document.getElementById('mt-rev-findings')
+  if (!findingsEl) return
+
+  const findings = data.findings || []
+  if (findings.length === 0) {
+    findingsEl.innerHTML = '<div class="mt-rev-finding-empty">✨ Model found no issues in this folder.</div>'
+  } else {
+    findingsEl.innerHTML = findings.map(f => {
+      const sev = (f.severity || 'LOW').toUpperCase()
+      const sevClass = sev === 'HIGH' ? 'mt-sev-high' : sev === 'MEDIUM' ? 'mt-sev-med' : 'mt-sev-low'
+      return `<div class="mt-rev-finding-row">
+        <div class="mt-rev-finding-meta">
+          <span class="mt-rev-finding-type">${escHtml(f.checkType || '')}</span>
+          <span class="mt-rev-finding-sev ${sevClass}">${escHtml(sev)}</span>
+        </div>
+        <div class="mt-rev-finding-doc">${escHtml(f.missingDocument || f.checkType || '')}</div>
+        ${f.comment ? `<div class="mt-rev-finding-comment">${escHtml(f.comment)}</div>` : ''}
+      </div>`
+    }).join('')
+  }
+
+  mtShowButtons('gym-mt-check-btn', 'gym-mt-next-btn')
+}
+
+/**
+ * Render the teacher's verdict inline in the MT review panel.
+ * Called after /api/mt/compare responds.
+ */
+function mtRenderVerdict(data) {
+  const verdictEl  = document.getElementById('mt-rev-verdict')
+  const bodyEl     = document.getElementById('mt-rev-verdict-body')
+  const analysisEl = document.getElementById('mt-rev-verdict-analysis')
+  const scoreBadge = document.getElementById('mt-rev-score-badge')
+  if (!verdictEl) return
+
+  const score  = data.score ?? 0
+  const caught = data.caught         || []
+  const missed = data.missed         || []
+  const fps    = data.falsePositives || []
+
+  if (scoreBadge) {
+    scoreBadge.textContent = `${score}/100`
+    scoreBadge.className   = 'mt-rev-score-badge ' + (score >= 100 ? 'score-perfect' : score >= 50 ? 'score-good' : 'score-bad')
+  }
 
   let html = ''
-
-  if (data.caught?.length > 0) {
-    html += `<div class="mt-compare-section-title caught">✅ CAUGHT (${data.caught.length})</div>`
-    html += data.caught.map(item => `
-      <div class="mt-compare-item caught">
-        <span class="mt-item-icon">✅</span>
-        <span class="mt-item-text">${escHtml(item)}</span>
-      </div>`).join('')
+  if (caught.length > 0) {
+    html += `<div class="mt-vg mt-vg-caught">
+      <div class="mt-vg-label">✅ CAUGHT (${caught.length})</div>
+      ${caught.map(s => `<div class="mt-vi mt-vi-caught">• ${escHtml(s)}</div>`).join('')}
+    </div>`
   }
-
-  if (data.missed?.length > 0) {
-    html += `<div class="mt-compare-section-title missed">❌ MISSED (${data.missed.length})</div>`
-    html += data.missed.map(item => `
-      <div class="mt-compare-item missed">
-        <span class="mt-item-icon">❌</span>
-        <span class="mt-item-text">${escHtml(item)}</span>
-      </div>`).join('')
+  if (missed.length > 0) {
+    html += `<div class="mt-vg mt-vg-missed">
+      <div class="mt-vg-label">❌ MISSED (${missed.length})</div>
+      ${missed.map(s => `<div class="mt-vi mt-vi-missed">• ${escHtml(s)}</div>`).join('')}
+    </div>`
   }
-
-  if (data.falsePositives?.length > 0) {
-    html += `<div class="mt-compare-section-title fp">🚫 FALSE POSITIVES (${data.falsePositives.length})</div>`
-    html += data.falsePositives.map(f => `
-      <div class="mt-compare-item fp">
-        <span class="mt-item-icon">🚫</span>
-        <div class="mt-item-text">
-          <div>${escHtml(f.missingDocument || '')}</div>
-          ${f.reason ? `<div class="mt-item-reason">${escHtml(f.reason)}</div>` : ''}
-        </div>
-      </div>`).join('')
+  if (fps.length > 0) {
+    html += `<div class="mt-vg mt-vg-fp">
+      <div class="mt-vg-label">🚫 FALSE POSITIVES (${fps.length})</div>
+      ${fps.map(f => `<div class="mt-vi mt-vi-fp">• ${escHtml(typeof f === 'string' ? f : (f.missingDocument || ''))}</div>`).join('')}
+    </div>`
   }
-
   if (!html) {
-    html = '<div style="padding:16px;text-align:center;color:#64748b;font-size:12px;">No findings to compare.</div>'
+    html = score >= 100
+      ? '<div class="mt-vi-perfect">🎯 Perfect — all required documents found!</div>'
+      : '<div class="mt-vi-empty">Verdict unclear.</div>'
+  }
+  if (bodyEl) bodyEl.innerHTML = html
+
+  if (analysisEl && data.analysis) {
+    analysisEl.innerHTML = `<div class="mt-vg-label">🧠 WHY</div><div class="mt-analysis-text">${escHtml(data.analysis)}</div>`
+    analysisEl.classList.remove('hidden')
+  } else if (analysisEl) {
+    analysisEl.classList.add('hidden')
   }
 
-  bodyEl.innerHTML = html
-  analysisEl.innerHTML = `
-    <div class="mt-compare-analysis-label">🧠 ANALYSIS</div>
-    <div>${escHtml(data.analysis || 'No analysis available.')}</div>`
-
-  const learnBtn = document.getElementById('mt-learn-overlay-btn')
-  const hasErrors = (data.missed?.length > 0) || (data.falsePositives?.length > 0)
-  if (learnBtn) {
-    learnBtn.style.display = hasErrors ? '' : 'none'
-    const closeBtn = document.getElementById('mt-close-secondary-btn')
-    if (closeBtn && !hasErrors) closeBtn.textContent = '✅ Perfect — Close'
-  }
-
-  overlay.classList.remove('hidden')
-  mtUpdateWorkoutButtons(score)
-}
-
-function mtUpdateWorkoutButtons(score) {
-  if (score === 100) {
-    mtShowButtons('gym-mt-check-btn', 'gym-mt-save-btn', 'gym-mt-next-btn')
-    const saveBtn = document.getElementById('gym-mt-save-btn')
-    if (saveBtn) saveBtn.disabled = false
-  } else {
-    mtShowButtons('gym-mt-check-btn', 'gym-mt-learn-btn', 'gym-mt-next-btn')
-  }
+  verdictEl.classList.remove('hidden')
+  // Scroll verdict into view
+  verdictEl.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 async function mtLearnFromThis() {
   const comp   = mtState.lastComparison
   const tenant = mtState.tenants[mtState.currentIdx]
-  if (!comp || !tenant) { toast('Run Check Answer first', 'error'); return }
+  if (!comp || !tenant) { toast('Call Teacher first', 'error'); return }
 
-  const btn        = document.getElementById('gym-mt-learn-btn')
-  const overlayBtn = document.getElementById('mt-learn-overlay-btn')
-  if (btn)        { btn.disabled = true;        btn.textContent = '⏳ Learning...' }
-  if (overlayBtn) { overlayBtn.disabled = true;  overlayBtn.textContent = '⏳ Learning...' }
+  const btn = document.getElementById('gym-mt-learn-btn')
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Teaching...' }
 
   try {
     const res = await fetch(sameOriginApi('/api/mt/synthesize'), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        tenantName:    tenant.tenantName,
-        missed:        comp.missed         || [],
+        tenantName:     tenant.tenantName,
+        missed:         comp.missed         || [],
         falsePositives: comp.falsePositives || [],
-        analysis:      comp.analysis       || '',
-        currentRules:  mtState.currentRules
+        analysis:       comp.analysis       || '',
+        currentRules:   mtState.currentRules
       })
     })
     const data = await res.json()
@@ -9382,16 +9402,12 @@ async function mtLearnFromThis() {
     mtUpdateHeader()
 
     const rc = mtState.currentRules.length
-    toast(`🧠 ${rc} rule${rc !== 1 ? 's' : ''} generated — click Rerun to test`, 'success')
+    toast(`🧠 ${rc} rule${rc !== 1 ? 's' : ''} — ready to rerun`, 'success')
     sfxReady()
-
-    document.getElementById('mt-compare-overlay')?.classList.add('hidden')
-    mtShowButtons('gym-mt-check-btn', 'gym-mt-learn-btn', 'gym-mt-rerun-btn', 'gym-mt-next-btn')
+    mtShowButtons('gym-mt-rerun-btn', 'gym-mt-next-btn')
   } catch (err) {
-    toast('Learn failed: ' + err.message, 'error')
-  } finally {
-    if (btn)        { btn.disabled = false;        btn.textContent = '🧠 Learn From This' }
-    if (overlayBtn) { overlayBtn.disabled = false;  overlayBtn.textContent = '🧠 Learn From This' }
+    toast('Teaching failed: ' + err.message, 'error')
+    if (btn) { btn.disabled = false; btn.textContent = '🧑‍🏫 Have Teacher Teach' }
   }
 }
 
@@ -9405,9 +9421,10 @@ async function mtRerun() {
 
   gymReset()
   gymShowPanel('loading')
-  mtUpdateHeader()
   mtHideAllButtons()
 
+  const titleEl2 = document.getElementById('gym-title')
+  if (titleEl2) titleEl2.textContent = '🧪 Master Trainer'
   document.getElementById('gym-subtitle').textContent = `Rerun (Attempt ${mtState.attempt}): ${tenant.tenantName}`
   document.getElementById('gym-progress-fill').style.width = '0%'
   document.getElementById('gym-loading-msg').textContent = `Running with ${mtState.currentRules.length} juice rules...`
@@ -9441,9 +9458,7 @@ async function mtRerun() {
     const d = JSON.parse(e.data)
     document.getElementById('gym-progress-fill').style.width = '100%'
     mtState.currentFindings = d.findings || []
-    gymLaunchWorkout(d)
-    mtUpdateHeader()
-    mtShowButtons('gym-mt-check-btn', 'gym-mt-learn-btn', 'gym-mt-next-btn')
+    mtShowReviewPanel(d)
     sfxReady()
   })
   es.addEventListener('gym-error', e => {
@@ -9596,11 +9611,3 @@ document.getElementById('gym-mt-learn-btn')?.addEventListener('click', mtLearnFr
 document.getElementById('gym-mt-rerun-btn')?.addEventListener('click', mtRerun)
 document.getElementById('gym-mt-next-btn')?.addEventListener('click', mtNextTenant)
 document.getElementById('gym-mt-save-btn')?.addEventListener('click', mtSaveRefined)
-document.getElementById('mt-compare-close')?.addEventListener('click', () =>
-  document.getElementById('mt-compare-overlay')?.classList.add('hidden'))
-document.getElementById('mt-close-secondary-btn')?.addEventListener('click', () =>
-  document.getElementById('mt-compare-overlay')?.classList.add('hidden'))
-document.getElementById('mt-learn-overlay-btn')?.addEventListener('click', () => {
-  document.getElementById('mt-compare-overlay')?.classList.add('hidden')
-  mtLearnFromThis()
-})

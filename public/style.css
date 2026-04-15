@@ -8319,3 +8319,230 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   color: #a78bfa;
   letter-spacing: 0.5px;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   MASTER TRAINER — new dedicated review panel
+═══════════════════════════════════════════════════════════ */
+
+/* Panel fills gym screen (same as workout panel) */
+.gym-panel-mt-review {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 70px);  /* subtract topbar */
+  overflow: hidden;
+}
+
+/* ── Header bar ───────────────────────────────────────────── */
+.mt-rev-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: linear-gradient(90deg, #1a0533, #0f172a);
+  border-bottom: 2px solid #7c3aed;
+  flex-shrink: 0;
+}
+.mt-rev-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.mt-rev-label {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: #a78bfa;
+  letter-spacing: 1px;
+}
+.mt-rev-counter {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: #22c55e;
+  background: rgba(34,197,94,0.12);
+  border: 1px solid rgba(34,197,94,0.3);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.mt-rev-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+.mt-rev-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mt-rev-attempt {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #f59e0b;
+  background: rgba(245,158,11,0.1);
+  border: 1px solid rgba(245,158,11,0.3);
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+.mt-rev-rules {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #a78bfa;
+  background: rgba(167,139,250,0.1);
+  border: 1px solid rgba(167,139,250,0.3);
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+/* ── Scrollable body ─────────────────────────────────────── */
+.mt-rev-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ── Section labels ──────────────────────────────────────── */
+.mt-rev-section-label {
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  color: #64748b;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+
+/* ── Findings list ───────────────────────────────────────── */
+.mt-rev-findings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mt-rev-finding-empty {
+  text-align: center;
+  color: #64748b;
+  font-size: 13px;
+  padding: 24px;
+  border: 1px dashed #1e3a5f;
+  border-radius: 8px;
+}
+.mt-rev-finding-row {
+  background: #0f172a;
+  border: 1px solid #1e3a5f;
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mt-rev-finding-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mt-rev-finding-type {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #64748b;
+  letter-spacing: 0.5px;
+}
+.mt-rev-finding-sev {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.mt-sev-high  { background: rgba(239,68,68,0.15);  color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
+.mt-sev-med   { background: rgba(245,158,11,0.15); color: #f59e0b; border: 1px solid rgba(245,158,11,0.3); }
+.mt-sev-low   { background: rgba(100,116,139,0.15); color: #94a3b8; border: 1px solid rgba(100,116,139,0.3); }
+.mt-rev-finding-doc {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+.mt-rev-finding-comment {
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+/* ── Teacher verdict ─────────────────────────────────────── */
+.mt-rev-verdict {
+  background: #0a0f1e;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mt-rev-verdict-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.mt-rev-score-badge {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  padding: 3px 10px;
+  border-radius: 4px;
+}
+.mt-rev-verdict-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mt-rev-verdict-analysis {
+  padding: 10px 12px;
+  background: rgba(167,139,250,0.06);
+  border-radius: 6px;
+  border: 1px solid rgba(167,139,250,0.15);
+}
+.mt-vg { display: flex; flex-direction: column; gap: 4px; }
+.mt-vg-label {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+.mt-vg-caught .mt-vg-label { color: #22c55e; }
+.mt-vg-missed .mt-vg-label { color: #ef4444; }
+.mt-vg-fp    .mt-vg-label  { color: #f59e0b; }
+.mt-vg-label[class*="WHY"] { color: #a78bfa; }
+.mt-vi {
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 4px 0 4px 8px;
+}
+.mt-vi-caught { color: #86efac; }
+.mt-vi-missed { color: #fca5a5; }
+.mt-vi-fp     { color: #fde68a; }
+.mt-vi-perfect {
+  color: #22c55e;
+  font-weight: 600;
+  font-size: 13px;
+  text-align: center;
+  padding: 8px;
+}
+.mt-vi-empty {
+  color: #64748b;
+  font-size: 12px;
+  text-align: center;
+  padding: 8px;
+}
+.mt-analysis-text {
+  font-size: 11px;
+  color: #94a3b8;
+  line-height: 1.6;
+  margin-top: 4px;
+}
+
+/* ── Footer buttons ──────────────────────────────────────── */
+.mt-rev-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid #1e3a5f;
+  background: #0f172a;
+  flex-shrink: 0;
+}
