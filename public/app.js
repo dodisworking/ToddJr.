@@ -8984,6 +8984,7 @@ updateSpeakerIcon()
 // ═══════════════════════════════════════════════════════════
 
 const mtState = {
+  localFiles:     new Map(),   // isolated from state.localFiles
   active:          false,
   sessionId:       null,
   tenants:         [],
@@ -9024,16 +9025,154 @@ function mtUpdateHeader() {
   if (rules)   rules.textContent   = `${mtState.currentRules.length} rule${mtState.currentRules.length !== 1 ? 's' : ''}`
 }
 
-async function mtStartTraining() {
-  if (!state.tenants || state.tenants.length === 0) {
-    toast('Upload your Mistake training folders first, then click Master Trainer', 'error')
-    goTo('upload')
+// ── MT isolated upload overlay ────────────────────────────────────────────────
+
+function mtOpenUploadOverlay() {
+  const overlay  = document.getElementById('mt-upload-overlay')
+  const zone     = document.getElementById('mt-upload-zone')
+  const progress = document.getElementById('mt-upload-progress')
+  if (!overlay) return
+  // Reset to fresh state
+  zone?.classList.remove('hidden')
+  progress?.classList.add('hidden')
+  const fill  = document.getElementById('mt-upload-prog-fill')
+  const label = document.getElementById('mt-upload-prog-label')
+  if (fill)  fill.style.width = '0%'
+  if (label) label.textContent = 'Reading files...'
+  overlay.classList.remove('hidden')
+}
+
+/**
+ * MT-specific local extract — mirrors startLocalExtract but:
+ * - Stores files in mtState.localFiles (NOT state.localFiles)
+ * - Stores tenants in mtState.tenants  (NOT state.tenants)
+ * - Uses a fresh mtState.sessionId
+ * - Never navigates to the loading screen
+ * - Calls mtBeginTraining() when done
+ */
+async function mtStartLocalExtract(files) {
+  const overlay  = document.getElementById('mt-upload-overlay')
+  const zone     = document.getElementById('mt-upload-zone')
+  const progress = document.getElementById('mt-upload-progress')
+  const fill     = document.getElementById('mt-upload-prog-fill')
+  const label    = document.getElementById('mt-upload-prog-label')
+
+  function setMtProg(pct, msg) {
+    if (fill)  fill.style.width = pct + '%'
+    if (label) label.textContent = msg
+  }
+
+  zone?.classList.add('hidden')
+  progress?.classList.remove('hidden')
+  setMtProg(0, 'Reading files...')
+
+  const allFiles = Array.from(files)
+  if (allFiles.length === 0) {
+    zone?.classList.remove('hidden')
+    progress?.classList.add('hidden')
+    toast('No files found.', 'error')
+    return
+  }
+
+  // Fresh isolated state
+  mtState.localFiles = new Map()
+  mtState.sessionId  = crypto.randomUUID()
+
+  try {
+    const rawEntries = []
+    for (const file of allFiles) {
+      const rawPath = (file.relativePath || file.webkitRelativePath || file.name).replace(/\\/g, '/')
+      const buffer  = await file.arrayBuffer()
+      rawEntries.push({ relativePath: rawPath, name: file.name, buffer, size: buffer.byteLength })
+    }
+    setMtProg(30, 'Grouping tenants...')
+
+    if (rawEntries.length === 0) throw new Error('No files found')
+
+    const allParsedParts   = rawEntries.map(e => e.relativePath.split('/'))
+    const pathFiles        = allParsedParts.filter(p => p.length >= 2)
+    const uniqueTopLevel   = new Set(pathFiles.map(p => p[0]))
+    const hasWrapperFolder = uniqueTopLevel.size === 1 && pathFiles.some(p => p.length >= 3)
+    const tenantDepth      = hasWrapperFolder ? 1 : 0
+
+    const tenantMap = new Map()
+    for (let i = 0; i < rawEntries.length; i++) {
+      const entry  = rawEntries[i]
+      const parts  = allParsedParts[i]
+      mtState.localFiles.set(entry.relativePath, { name: entry.name, buffer: entry.buffer, size: entry.size })
+      if (parts.length >= 2) {
+        const tf = parts[tenantDepth] || parts[0]
+        if (!tenantMap.has(tf)) tenantMap.set(tf, { folderName: tf, fileKeys: [] })
+        tenantMap.get(tf).fileKeys.push(entry.relativePath)
+      }
+    }
+    setMtProg(60, 'Parsing tenant names...')
+
+    const PDF_MAX_BYTES = 32 * 1024 * 1024
+    const tenants = []
+    for (const [folderName, data] of tenantMap) {
+      const fileObjects    = data.fileKeys.map(k => { const f = mtState.localFiles.get(k); return { relativePath: k, name: f.name, size: f.size } })
+      const oversizedFiles = fileObjects.filter(f => f.name.toLowerCase().endsWith('.pdf') && f.size > PDF_MAX_BYTES).map(f => f.name)
+      const parsed         = parseFolderNameClient(folderName)
+      tenants.push({
+        id: crypto.randomUUID(), folderName,
+        property: parsed.property, suite: parsed.suite, tenantName: parsed.tenantName,
+        fileCount: fileObjects.length,
+        files: fileObjects.map(f => ({ name: f.name, sizeBytes: f.size, relativePath: f.relativePath })),
+        oversizedFiles
+      })
+    }
+    tenants.sort((a, b) => { const c = a.property.localeCompare(b.property); return c !== 0 ? c : String(a.suite).localeCompare(String(b.suite), undefined, { numeric: true }) })
+    setMtProg(80, 'Registering session...')
+
+    const regRes = await fetch(sameOriginApi('/api/session/register'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: mtState.sessionId, tenants: tenants.map(t => ({ id: t.id, folderName: t.folderName, property: t.property, suite: t.suite, tenantName: t.tenantName, fileCount: t.fileCount })) })
+    })
+    if (!regRes.ok) { const e = await regRes.json().catch(() => ({})); throw new Error(e.error || 'Session register failed') }
+
+    setMtProg(100, `Found ${tenants.length} tenant${tenants.length !== 1 ? 's' : ''}`)
+    mtState.tenants = tenants
+    setTimeout(() => { overlay?.classList.add('hidden'); mtBeginTraining() }, 600)
+
+  } catch (err) {
+    sfxError()
+    toast(err.message || 'Could not read files', 'error')
+    zone?.classList.remove('hidden')
+    progress?.classList.add('hidden')
+    setMtProg(0, 'Reading files...')
+  }
+}
+
+/**
+ * MT-specific register-files — uses mtState.localFiles / mtState.tenants / mtState.sessionId
+ * instead of the shared state. Called in mtRunTenant and mtRerun.
+ */
+async function mtGymRegisterLocalFiles(tenantId) {
+  if (!mtState.localFiles || mtState.localFiles.size === 0) return
+  const tenant = mtState.tenants.find(t => t.id === tenantId)
+  if (!tenant) return
+  const files = (tenant.files || []).map(f => {
+    const local = mtState.localFiles.get(f.relativePath)
+    if (!local) return null
+    return { name: f.name, base64: arrayBufferToBase64(local.buffer), size: local.size }
+  }).filter(Boolean)
+  if (files.length === 0) return
+  try {
+    await fetch(sameOriginApi('/api/gym/register-files'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: mtState.sessionId, tenantId, files })
+    })
+  } catch (e) { console.warn('[mt] register-files failed:', e.message) }
+}
+
+async function mtBeginTraining() {
+  if (!mtState.tenants || mtState.tenants.length === 0) {
+    toast('No tenants to train on', 'error')
     return
   }
 
   mtState.active          = true
-  mtState.sessionId       = state.sessionId
-  mtState.tenants         = [...state.tenants]
   mtState.currentIdx      = 0
   mtState.attempt         = 0
   mtState.currentRules    = []
@@ -9078,7 +9217,7 @@ async function mtRunTenant(idx) {
     }
   } catch {}
 
-  await gymRegisterLocalFiles(tenant.id)
+  await mtGymRegisterLocalFiles(tenant.id)
 
   const url = sameOriginApi(
     `/api/gym/analyze?sessionId=${encodeURIComponent(mtState.sessionId)}&tenantId=${encodeURIComponent(tenant.id)}${cheapQs()}`
@@ -9280,7 +9419,7 @@ async function mtRerun() {
     })
   } catch {}
 
-  await gymRegisterLocalFiles(tenant.id)
+  await mtGymRegisterLocalFiles(tenant.id)
 
   const url = sameOriginApi(
     `/api/gym/analyze?sessionId=${encodeURIComponent(mtState.sessionId)}&tenantId=${encodeURIComponent(tenant.id)}${cheapQs()}`
@@ -9405,7 +9544,53 @@ function mtSessionComplete() {
 }
 
 // ── Master Trainer event wiring ───────────────────────────
-document.getElementById('btn-master-trainer')?.addEventListener('click', mtStartTraining)
+document.getElementById('btn-master-trainer')?.addEventListener('click', mtOpenUploadOverlay)
+
+// MT upload overlay — close button
+document.getElementById('mt-upload-close')?.addEventListener('click', () => {
+  document.getElementById('mt-upload-overlay')?.classList.add('hidden')
+})
+
+// MT upload overlay — "Choose Folders" button
+document.getElementById('mt-upload-btn')?.addEventListener('click', () => {
+  document.getElementById('mt-file-input')?.click()
+})
+document.getElementById('mt-file-input')?.addEventListener('change', e => {
+  if (e.target.files?.length) mtStartLocalExtract(e.target.files)
+  e.target.value = ''
+})
+
+// MT upload overlay — drag-drop zone
+;(function() {
+  const zone = document.getElementById('mt-upload-zone')
+  if (!zone) return
+
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('mt-zone-drag') })
+  zone.addEventListener('dragleave', e => { if (!zone.contains(e.relatedTarget)) zone.classList.remove('mt-zone-drag') })
+  zone.addEventListener('drop', async e => {
+    e.preventDefault()
+    zone.classList.remove('mt-zone-drag')
+    const items = Array.from(e.dataTransfer.items || [])
+    const entries = items.map(i => i.webkitGetAsEntry ? i.webkitGetAsEntry() : null).filter(Boolean)
+    const dirEntries = entries.filter(en => en.isDirectory)
+    const fileEntries = entries.filter(en => en.isFile)
+
+    if (dirEntries.length > 0) {
+      const all = []
+      for (const de of dirEntries) {
+        const { files } = await collectFilesFromDirEntry(de)
+        all.push(...files)
+      }
+      if (all.length > 0) { mtStartLocalExtract(all); return }
+    }
+    if (fileEntries.length > 0) {
+      const fileList = await Promise.all(fileEntries.map(en => new Promise((res, rej) => en.file(res, rej))))
+      if (fileList.length > 0) { mtStartLocalExtract(fileList); return }
+    }
+    // Fallback: DataTransfer.files
+    if (e.dataTransfer.files?.length) mtStartLocalExtract(e.dataTransfer.files)
+  })
+})()
 document.getElementById('gym-mt-check-btn')?.addEventListener('click', mtCheckAnswer)
 document.getElementById('gym-mt-learn-btn')?.addEventListener('click', mtLearnFromThis)
 document.getElementById('gym-mt-rerun-btn')?.addEventListener('click', mtRerun)

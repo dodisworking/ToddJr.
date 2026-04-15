@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=68" />
+  <link rel="stylesheet" href="style.css?v=69" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
@@ -1264,6 +1264,35 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════
+       MASTER TRAINER — isolated upload overlay
+       This overlay is entirely separate from the main upload / loading screens.
+       Files dropped here go into mtState.localFiles only — state.tenants is never touched.
+  ═══════════════════════════════════════════════════════ -->
+  <div id="mt-upload-overlay" class="mt-upload-overlay hidden">
+    <div class="mt-upload-box">
+      <button type="button" class="mt-upload-close" id="mt-upload-close" title="Cancel">✕</button>
+      <div class="mt-upload-title">🧪 MASTER TRAINER</div>
+      <div class="mt-upload-sub">Drop the 17 mistake folders to start training</div>
+
+      <div class="mt-upload-zone" id="mt-upload-zone">
+        <div class="mt-upload-zone-inner">
+          <div class="mt-upload-icon">📂</div>
+          <p class="mt-upload-hint">Drag your mistake folders here</p>
+          <button type="button" class="mt-upload-btn" id="mt-upload-btn">Choose Folders</button>
+          <input type="file" id="mt-file-input" webkitdirectory multiple style="display:none" />
+        </div>
+      </div>
+
+      <div class="mt-upload-progress hidden" id="mt-upload-progress">
+        <div class="mt-upload-prog-track">
+          <div class="mt-upload-prog-fill" id="mt-upload-prog-fill"></div>
+        </div>
+        <div class="mt-upload-prog-label" id="mt-upload-prog-label">Reading files...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
        MASTER TRAINER — comparison result overlay
   ═══════════════════════════════════════════════════════ -->
   <div id="mt-compare-overlay" class="mt-compare-overlay hidden">
@@ -1293,7 +1322,7 @@
   <script src="drlab-flasks.js?v=6"></script>
   <script src="sbs-boxing.js?v=3"></script>
   <script src="target-game.js?v=4"></script>
-  <script src="app.js?v=100"></script>
+  <script src="app.js?v=101"></script>
   <script src="game-mode.js?v=4"></script>
   <script src="rr-app.js?v=1"></script>
 </body>

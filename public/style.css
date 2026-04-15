@@ -8206,3 +8206,116 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   cursor: pointer;
 }
 .btn-mt-close-secondary:hover { color: #f1f5f9; }
+
+/* ═══════════════════════════════════════════════════════════
+   MASTER TRAINER — isolated upload overlay
+═══════════════════════════════════════════════════════════ */
+.mt-upload-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(0,0,0,0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mt-upload-box {
+  position: relative;
+  background: #111827;
+  border: 2px solid #7c3aed;
+  border-radius: 14px;
+  padding: 32px 36px 28px;
+  width: min(520px, 90vw);
+  box-shadow: 0 0 60px rgba(124,58,237,0.35);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.mt-upload-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+}
+.mt-upload-close:hover { color: #f1f5f9; }
+.mt-upload-title {
+  font-family: var(--font-pixel);
+  font-size: 13px;
+  color: #a78bfa;
+  letter-spacing: 1px;
+}
+.mt-upload-sub {
+  font-size: 13px;
+  color: #94a3b8;
+  text-align: center;
+}
+.mt-upload-zone {
+  width: 100%;
+  border: 2px dashed #334155;
+  border-radius: 10px;
+  padding: 32px 20px;
+  transition: border-color 0.2s, background 0.2s;
+  cursor: default;
+}
+.mt-upload-zone.mt-zone-drag {
+  border-color: #7c3aed;
+  background: rgba(124,58,237,0.08);
+}
+.mt-upload-zone-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.mt-upload-icon { font-size: 36px; }
+.mt-upload-hint {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0;
+}
+.mt-upload-btn {
+  padding: 8px 20px;
+  background: #7c3aed;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.mt-upload-btn:hover { opacity: 0.85; }
+.mt-upload-progress {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0 4px;
+}
+.mt-upload-prog-track {
+  width: 100%;
+  height: 8px;
+  background: #1e293b;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.mt-upload-prog-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #7c3aed, #a78bfa);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+.mt-upload-prog-label {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #a78bfa;
+  letter-spacing: 0.5px;
+}
