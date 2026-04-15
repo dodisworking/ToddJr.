@@ -2660,7 +2660,7 @@ function showOversizeWarnings(tenants) {
   )
   if (all.length === 0) { warn.classList.add('hidden'); return }
   warn.classList.remove('hidden')
-  warn.innerHTML = `<strong>⚠️ ${all.length} file${all.length !== 1 ? 's' : ''} exceed 32MB — will use text extraction (may miss scanned content):</strong>` +
+  warn.innerHTML = `<strong>⚠️ ${all.length} file${all.length !== 1 ? 's' : ''} exceed 32MB — will be split into page-range chunks for full visual scan:</strong>` +
     all.map(f => `• ${f}`).join('<br/>')
 }
 
@@ -3633,7 +3633,7 @@ async function startHunt(testTenantId = null) {
     (t.oversizedFiles || []).map(f => `• ${t.tenantName}: ${f}`)
   )
   if (oversized.length > 0) {
-    const msg = `${oversized.length} file${oversized.length !== 1 ? 's' : ''} exceed 32MB.\nText extraction only — scanned pages may be missed.\n\n${oversized.join('\n')}\n\nContinue anyway?`
+    const msg = `${oversized.length} file${oversized.length !== 1 ? 's' : ''} exceed 32MB and will be split into page-range chunks.\nClaude will visually scan every page across multiple batches.\n\n${oversized.join('\n')}\n\nContinue?`
     if (!await pixelConfirm(msg, '⚠ LARGE FILES')) return
   }
 
