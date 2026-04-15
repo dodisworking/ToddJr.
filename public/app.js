@@ -9317,9 +9317,19 @@ async function mtRunTenant(idx) {
   es.addEventListener('gym-error', e => {
     es.close(); state.eventSource = null
     const d = JSON.parse(e.data)
-    toast('Analysis error: ' + (d.error || 'Unknown'), 'error')
-    gymShowPanel('mt-review')
+    // Show a proper error card in the panel so user isn't staring at a blank screen
+    mtShowReviewPanel({
+      findings: [{
+        checkType: 'ERROR', severity: 'HIGH',
+        missingDocument: 'Analysis failed',
+        comment: d.error || 'The analysis encountered an error. Try the next tenant or retry.',
+        evidence: ''
+      }],
+      allClear: false
+    })
+    // Override to show only Next (no Call Teacher when analysis failed)
     mtShowButtons('gym-mt-next-btn')
+    toast('Analysis error — see finding card for details', 'error')
   })
   es.onerror = () => {}
 }
@@ -9379,6 +9389,8 @@ function mtShowReviewPanel(data) {
     findingsEl.innerHTML = findings.map(f => {
       const sev = (f.severity || 'LOW').toUpperCase()
       const sevClass = sev === 'HIGH' ? 'mt-sev-high' : sev === 'MEDIUM' ? 'mt-sev-med' : 'mt-sev-low'
+      // Show where finding was found — prefer howIFoundThis (plain English), fall back to evidence
+      const sourceText = f.howIFoundThis || f.evidence || ''
       return `<div class="mt-rev-finding-row">
         <div class="mt-rev-finding-meta">
           <span class="mt-rev-finding-type">${escHtml(f.checkType || '')}</span>
@@ -9386,6 +9398,7 @@ function mtShowReviewPanel(data) {
         </div>
         <div class="mt-rev-finding-doc">${escHtml(f.missingDocument || f.checkType || '')}</div>
         ${f.comment ? `<div class="mt-rev-finding-comment">${escHtml(f.comment)}</div>` : ''}
+        ${sourceText ? `<div class="mt-rev-finding-evidence">📍 ${escHtml(sourceText)}</div>` : ''}
       </div>`
     }).join('')
   }
@@ -9709,9 +9722,17 @@ async function mtRerun() {
   es.addEventListener('gym-error', e => {
     es.close(); state.eventSource = null
     const d = JSON.parse(e.data)
-    toast('Rerun error: ' + (d.error || 'Unknown'), 'error')
-    gymShowPanel('mt-review')
+    mtShowReviewPanel({
+      findings: [{
+        checkType: 'ERROR', severity: 'HIGH',
+        missingDocument: 'Rerun failed',
+        comment: d.error || 'The rerun encountered an error. Try again or move to the next tenant.',
+        evidence: ''
+      }],
+      allClear: false
+    })
     mtShowButtons('gym-mt-check-btn', 'gym-mt-next-btn')
+    toast('Rerun error — see finding card for details', 'error')
   })
   es.onerror = () => {}
 }
