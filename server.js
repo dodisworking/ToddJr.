@@ -2358,7 +2358,7 @@ app.post('/api/mt/compare', express.json({ limit: '500kb' }), async (req, res) =
 // POST /api/mt/synthesize — generate juice rules from comparison errors
 app.post('/api/mt/synthesize', express.json({ limit: '500kb' }), async (req, res) => {
   try {
-    const { tenantName, missed = [], falsePositives = [], analysis = '', trainerNotes = '', currentRules = [] } = req.body
+    const { tenantName, missed = [], falsePositives = [], caught = [], analysis = '', trainerNotes = '', currentRules = [] } = req.body
 
     // Combine AI analysis with any manual trainer notes
     const fullAnalysis = [analysis, trainerNotes ? `\nTRAINER'S OWN NOTES: ${trainerNotes}` : ''].filter(Boolean).join('')
@@ -2379,9 +2379,17 @@ app.post('/api/mt/synthesize', express.json({ limit: '500kb' }), async (req, res
       reviewerNote:    `False positive — model incorrectly flagged this. ${fullAnalysis.slice(0, 300)}`
     }))
 
+    // Pass confirmed (correctly caught) findings so synthesis doesn't write rules that suppress them
+    const confirmedFindings = caught.map(c => ({
+      checkType:       'CONFIRMED',
+      missingDocument: typeof c === 'string' ? c : (c.missingDocument || c.description || c),
+      evidence:        '',
+      comment:         'Model found this correctly — do NOT create rules that would suppress or narrow this finding type.'
+    }))
+
     const result = await synthesizeActiveLearning({
       rejectedFindings,
-      confirmedFindings: [],
+      confirmedFindings,
       annotations,
       currentRules
     })

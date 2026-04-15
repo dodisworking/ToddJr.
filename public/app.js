@@ -9700,6 +9700,7 @@ async function mtLearnFromThis() {
         tenantName:     tenant.tenantName,
         missed:         missedToTeach,
         falsePositives: fpsToTeach,
+        caught:         comp.caught || [],   // tell synthesis what was already working — don't suppress these
         analysis:       comp.analysis || '',
         trainerNotes,
         currentRules:   mtState.currentRules
