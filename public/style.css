@@ -8592,3 +8592,73 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   box-shadow: 0 0 0 2px rgba(124,58,237,0.2);
 }
 .mt-rev-notes::placeholder { color: #475569; }
+
+/* ── MT verdict item confirm/deny row ────────────────────── */
+.mt-vi-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s;
+}
+/* Confirmed: teacher was right */
+.mt-vi-row[data-state="confirmed"] {
+  background: rgba(34,197,94,0.08);
+  border-color: rgba(34,197,94,0.25);
+}
+/* Denied: teacher was wrong */
+.mt-vi-row[data-state="denied"] {
+  background: rgba(239,68,68,0.06);
+  border-color: rgba(239,68,68,0.2);
+  opacity: 0.55;
+}
+.mt-vi-row[data-state="denied"] .mt-vi-text {
+  text-decoration: line-through;
+  color: #64748b;
+}
+.mt-vi-text { flex: 1; font-size: 12px; line-height: 1.5; }
+.mt-vi-caught { color: #86efac; }
+.mt-vi-missed { color: #fca5a5; }
+.mt-vi-fp     { color: #fde68a; }
+
+.mt-vi-confirm-btns {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+.mt-vi-btn {
+  font-family: var(--font-pixel);
+  font-size: 6px;
+  padding: 3px 7px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+.mt-vi-btn-yes {
+  background: rgba(34,197,94,0.1);
+  color: #22c55e;
+  border-color: rgba(34,197,94,0.25);
+}
+.mt-vi-btn-yes:hover { background: rgba(34,197,94,0.22); }
+.mt-vi-row[data-state="confirmed"] .mt-vi-btn-yes {
+  background: #15803d;
+  color: #fff;
+  border-color: #22c55e;
+}
+.mt-vi-btn-no {
+  background: rgba(239,68,68,0.1);
+  color: #ef4444;
+  border-color: rgba(239,68,68,0.25);
+}
+.mt-vi-btn-no:hover { background: rgba(239,68,68,0.22); }
+.mt-vi-row[data-state="denied"] .mt-vi-btn-no {
+  background: #991b1b;
+  color: #fff;
+  border-color: #ef4444;
+}

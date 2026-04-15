@@ -9324,6 +9324,70 @@ function mtShowReviewPanel(data) {
  * Render the teacher's verdict inline in the MT review panel.
  * Called after /api/mt/compare responds.
  */
+/**
+ * Build an individual verdict item row with ✅ Correct / ❌ Wrong confirm buttons.
+ * data-group = "caught" | "missed" | "fp"
+ * data-state  = "unset" | "confirmed" | "denied"
+ * Clicking ✅ marks the teacher correct; ❌ marks the teacher wrong.
+ */
+function _mtVerdictItem(text, group, idx) {
+  return `
+    <div class="mt-vi-row" data-group="${group}" data-idx="${idx}" data-state="unset">
+      <span class="mt-vi-text mt-vi-${group}">• ${escHtml(text)}</span>
+      <span class="mt-vi-confirm-btns">
+        <button type="button" class="mt-vi-btn mt-vi-btn-yes" title="Teacher is correct">✓ Correct</button>
+        <button type="button" class="mt-vi-btn mt-vi-btn-no"  title="Teacher is wrong">✗ Wrong</button>
+      </span>
+    </div>`
+}
+
+/**
+ * Wire the confirm/deny buttons in the rendered verdict body.
+ * Toggling ✅ sets data-state="confirmed", ❌ sets "denied", clicking again resets to "unset".
+ */
+function _mtWireVerdictButtons(bodyEl) {
+  bodyEl.querySelectorAll('.mt-vi-btn-yes, .mt-vi-btn-no').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const row   = btn.closest('.mt-vi-row')
+      const isYes = btn.classList.contains('mt-vi-btn-yes')
+      const cur   = row.dataset.state
+      // Toggle: click same button again → back to unset
+      const next  = (isYes && cur === 'confirmed') || (!isYes && cur === 'denied') ? 'unset'
+                  : isYes ? 'confirmed' : 'denied'
+      row.dataset.state = next
+    })
+  })
+}
+
+/**
+ * Read confirmed/denied state from the verdict DOM.
+ * Returns { confirmedMissed, confirmedFPs, deniedCaught }
+ * so mtLearnFromThis can pass only trainer-verified errors to synthesis.
+ */
+function _mtReadVerdictConfirmations(bodyEl) {
+  const confirmedMissed = []
+  const confirmedFPs    = []
+  const deniedCaught    = []
+
+  bodyEl.querySelectorAll('.mt-vi-row').forEach(row => {
+    const { group, state } = row.dataset
+    const text = row.querySelector('.mt-vi-text')?.textContent?.replace(/^•\s*/, '').trim() || ''
+    if (!text) return
+    if (state === 'confirmed') {
+      if (group === 'missed') confirmedMissed.push(text)
+      if (group === 'fp')     confirmedFPs.push(text)
+    }
+    if (state === 'denied' && group === 'caught') deniedCaught.push(text)
+  })
+
+  return { confirmedMissed, confirmedFPs, deniedCaught }
+}
+
+/**
+ * Render the teacher's verdict inline in the MT review panel.
+ * Each item has ✅ Correct / ❌ Wrong buttons so the trainer can verify.
+ * Called after /api/mt/compare responds.
+ */
 function mtRenderVerdict(data) {
   const verdictEl  = document.getElementById('mt-rev-verdict')
   const bodyEl     = document.getElementById('mt-rev-verdict-body')
@@ -9345,19 +9409,19 @@ function mtRenderVerdict(data) {
   if (caught.length > 0) {
     html += `<div class="mt-vg mt-vg-caught">
       <div class="mt-vg-label">✅ CAUGHT (${caught.length})</div>
-      ${caught.map(s => `<div class="mt-vi mt-vi-caught">• ${escHtml(s)}</div>`).join('')}
+      ${caught.map((s, i) => _mtVerdictItem(s, 'caught', i)).join('')}
     </div>`
   }
   if (missed.length > 0) {
     html += `<div class="mt-vg mt-vg-missed">
       <div class="mt-vg-label">❌ MISSED (${missed.length})</div>
-      ${missed.map(s => `<div class="mt-vi mt-vi-missed">• ${escHtml(s)}</div>`).join('')}
+      ${missed.map((s, i) => _mtVerdictItem(s, 'missed', i)).join('')}
     </div>`
   }
   if (fps.length > 0) {
     html += `<div class="mt-vg mt-vg-fp">
       <div class="mt-vg-label">🚫 FALSE POSITIVES (${fps.length})</div>
-      ${fps.map(f => `<div class="mt-vi mt-vi-fp">• ${escHtml(typeof f === 'string' ? f : (f.missingDocument || ''))}</div>`).join('')}
+      ${fps.map((f, i) => _mtVerdictItem(typeof f === 'string' ? f : (f.missingDocument || ''), 'fp', i)).join('')}
     </div>`
   }
   if (!html) {
@@ -9365,7 +9429,10 @@ function mtRenderVerdict(data) {
       ? '<div class="mt-vi-perfect">🎯 Perfect — all required documents found!</div>'
       : '<div class="mt-vi-empty">Verdict unclear.</div>'
   }
-  if (bodyEl) bodyEl.innerHTML = html
+  if (bodyEl) {
+    bodyEl.innerHTML = html
+    _mtWireVerdictButtons(bodyEl)
+  }
 
   if (analysisEl && data.analysis) {
     analysisEl.innerHTML = `<div class="mt-vg-label">🧠 WHY</div><div class="mt-analysis-text">${escHtml(data.analysis)}</div>`
@@ -9375,7 +9442,7 @@ function mtRenderVerdict(data) {
   }
 
   verdictEl.classList.remove('hidden')
-  // Show manual notes field (only useful when there are errors to explain)
+  // Show manual notes field
   const notesWrap = document.getElementById('mt-rev-notes-wrap')
   if (notesWrap) notesWrap.classList.remove('hidden')
   // Scroll verdict into view
@@ -9390,7 +9457,17 @@ async function mtLearnFromThis() {
   const btn = document.getElementById('gym-mt-learn-btn')
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Teaching...' }
 
-  // Pick up any manual notes the trainer typed
+  // Read trainer confirmations from verdict DOM
+  const bodyEl = document.getElementById('mt-rev-verdict-body')
+  const { confirmedMissed, confirmedFPs, deniedCaught } = bodyEl
+    ? _mtReadVerdictConfirmations(bodyEl)
+    : { confirmedMissed: [], confirmedFPs: [], deniedCaught: [] }
+
+  // If trainer confirmed specific items, use those; otherwise fall back to all missed/fps
+  const missedToTeach = confirmedMissed.length > 0 ? confirmedMissed : (comp.missed || [])
+  const fpsToTeach    = confirmedFPs.length    > 0 ? confirmedFPs    : (comp.falsePositives || [])
+
+  // Manual notes the trainer typed
   const trainerNotes = (document.getElementById('mt-rev-notes')?.value || '').trim()
 
   try {
@@ -9398,9 +9475,9 @@ async function mtLearnFromThis() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         tenantName:     tenant.tenantName,
-        missed:         comp.missed         || [],
-        falsePositives: comp.falsePositives || [],
-        analysis:       comp.analysis       || '',
+        missed:         missedToTeach,
+        falsePositives: fpsToTeach,
+        analysis:       comp.analysis || '',
         trainerNotes,
         currentRules:   mtState.currentRules
       })
