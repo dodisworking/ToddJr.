@@ -743,7 +743,8 @@ html, body {
 }
 .hunt-cta-actions .btn-drtoddhunt,
 .hunt-cta-actions .btn-workout,
-.hunt-cta-actions .btn-target-launch {
+.hunt-cta-actions .btn-target-launch,
+.hunt-cta-actions .btn-master-trainer {
   width: 100%;
   box-sizing: border-box;
 }
@@ -7903,3 +7904,305 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   flex-shrink: 0;
   margin-left: 6px;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   MASTER TRAINER — button, header bar, comparison overlay
+═══════════════════════════════════════════════════════════ */
+
+/* Home screen button */
+.btn-master-trainer {
+  margin-top: 0;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #064e3b, #059669);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-pixel);
+  font-size: 8px;
+  font-weight: 400;
+  cursor: pointer;
+  transition: transform 0.15s, opacity 0.2s, box-shadow 0.15s;
+  letter-spacing: 0.5px;
+  line-height: 1.5;
+  box-shadow: 0 4px 16px rgba(5, 150, 105, 0.35), 0 0 0 2px rgba(5, 150, 105, 0.12);
+}
+.btn-master-trainer:hover {
+  opacity: 0.95;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(5, 150, 105, 0.5), 0 0 0 2px rgba(5, 150, 105, 0.22);
+}
+.btn-master-trainer:active { transform: translateY(0); }
+
+/* MT header bar inside gym workout panel */
+.mt-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: linear-gradient(90deg, rgba(5,150,105,0.15), rgba(5,150,105,0.05));
+  border-bottom: 1px solid rgba(5,150,105,0.3);
+  gap: 12px;
+  flex-shrink: 0;
+}
+.mt-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mt-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mt-header-label {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #34d399;
+  letter-spacing: 0.5px;
+}
+.mt-tenant-counter {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #6ee7b7;
+  background: rgba(5,150,105,0.2);
+  padding: 3px 7px;
+  border-radius: 3px;
+}
+.mt-tenant-name {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  color: #f1f5f9;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mt-attempt-badge {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #fbbf24;
+  background: rgba(251,191,36,0.15);
+  padding: 3px 7px;
+  border-radius: 3px;
+}
+.mt-rules-badge {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #a78bfa;
+  background: rgba(167,139,250,0.15);
+  padding: 3px 7px;
+  border-radius: 3px;
+}
+
+/* MT action buttons in the gym bottom bar */
+.btn-gym-mt-check {
+  padding: 8px 14px;
+  background: #1e40af;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-gym-mt-check:hover { opacity: 0.85; }
+
+.btn-gym-mt-learn {
+  padding: 8px 14px;
+  background: #7c3aed;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-gym-mt-learn:hover { opacity: 0.85; }
+
+.btn-gym-mt-rerun {
+  padding: 8px 14px;
+  background: #0369a1;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-gym-mt-rerun:hover { opacity: 0.85; }
+
+.btn-gym-mt-next {
+  padding: 8px 14px;
+  background: #374151;
+  color: #d1d5db;
+  border: none;
+  border-radius: 6px;
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-gym-mt-next:hover { opacity: 0.85; }
+
+.btn-gym-mt-save {
+  padding: 8px 14px;
+  background: #065f46;
+  color: #6ee7b7;
+  border: 1px solid #059669;
+  border-radius: 6px;
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  cursor: pointer;
+  transition: all 0.15s;
+  box-shadow: 0 0 10px rgba(5,150,105,0.4);
+}
+.btn-gym-mt-save:hover { background: #059669; color: #fff; }
+.btn-gym-mt-save:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+
+/* MT Comparison Overlay */
+.mt-compare-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.mt-compare-box {
+  background: #0f172a;
+  border: 1px solid #1e3a5f;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 640px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 48px rgba(0,0,0,0.6);
+}
+.mt-compare-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: #111827;
+  border-bottom: 1px solid #1e3a5f;
+  flex-shrink: 0;
+}
+.mt-compare-title {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: #34d399;
+  flex: 1;
+}
+.mt-score-badge {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: #1e293b;
+  color: #f1f5f9;
+}
+.mt-score-badge.score-perfect  { background: #065f46; color: #6ee7b7; }
+.mt-score-badge.score-good     { background: #92400e; color: #fde68a; }
+.mt-score-badge.score-bad      { background: #7f1d1d; color: #fca5a5; }
+.mt-compare-close {
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  line-height: 1;
+}
+.mt-compare-close:hover { color: #f1f5f9; }
+.mt-compare-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mt-compare-section-title {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  letter-spacing: 0.5px;
+  padding: 6px 0 4px;
+  border-bottom: 1px solid #1e3a5f;
+  margin-bottom: 4px;
+}
+.mt-compare-section-title.caught { color: #34d399; }
+.mt-compare-section-title.missed { color: #f87171; }
+.mt-compare-section-title.fp     { color: #fbbf24; }
+
+.mt-compare-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #cbd5e1;
+}
+.mt-compare-item.caught { background: rgba(5,150,105,0.1); border-left: 3px solid #059669; }
+.mt-compare-item.missed { background: rgba(239,68,68,0.1);  border-left: 3px solid #ef4444; }
+.mt-compare-item.fp     { background: rgba(251,191,36,0.08); border-left: 3px solid #f59e0b; }
+.mt-item-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+.mt-item-text { flex: 1; }
+.mt-item-reason { font-size: 11px; color: #64748b; margin-top: 4px; }
+
+.mt-compare-analysis {
+  padding: 12px 18px;
+  background: rgba(167,139,250,0.06);
+  border-top: 1px solid #1e3a5f;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+.mt-compare-analysis-label {
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  color: #a78bfa;
+  margin-bottom: 6px;
+}
+.mt-compare-footer {
+  display: flex;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid #1e3a5f;
+  background: #111827;
+  flex-shrink: 0;
+}
+.btn-gym-mt-learn-overlay {
+  flex: 1;
+  padding: 10px 16px;
+  background: #7c3aed;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-gym-mt-learn-overlay:hover { opacity: 0.85; }
+.btn-mt-close-secondary {
+  padding: 10px 16px;
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  font-family: var(--font-pixel);
+  font-size: 7px;
+  cursor: pointer;
+}
+.btn-mt-close-secondary:hover { color: #f1f5f9; }

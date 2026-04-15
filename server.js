@@ -11,7 +11,7 @@ import os from 'os'
 import unzipper from 'unzipper'
 import archiver from 'archiver'
 import { analyzeTenant, gymAnalyzeTenant, beefedUpAnalyzeTenant, doubleCheckTenant } from './lib/analyzer.js'
-import { synthesizeActiveLearning, synthesizeDeepLearning, getKeyCount, getLastGymKeyIdx } from './lib/claude.js'
+import { synthesizeActiveLearning, synthesizeDeepLearning, compareToCheatSheet, getKeyCount, getLastGymKeyIdx } from './lib/claude.js'
 import { openaiAnalyzeTenant, isOpenAiKeyConfigured, getServerOpenAiKeyHint } from './lib/openai.js'
 import { generateReport } from './lib/reporter.js'
 import { mountIsaacRoutes } from './lib/isaac-routes.js'
@@ -1871,6 +1871,98 @@ app.post('/api/target/reset-juice', express.json({ limit: '1kb' }), (req, res) =
   res.json({ ok: true })
 })
 
+// ── Juice Model persistence ────────────────────────────────
+const JUICE_MODELS_SUBDIR = 'juice-models'
+function resolveJuiceModelsDir() {
+  const base = process.env.ISAAC_SAVE_DIR
+    ? path.join(process.env.ISAAC_SAVE_DIR, JUICE_MODELS_SUBDIR)
+    : path.join(OUTPUTS_DIR, JUICE_MODELS_SUBDIR)
+  fs.mkdirSync(base, { recursive: true })
+  return base
+}
+function readJuiceIndex(dir) {
+  try { return JSON.parse(fs.readFileSync(path.join(dir, 'models-index.json'), 'utf8')) } catch { return [] }
+}
+function writeJuiceIndex(dir, entries) {
+  fs.writeFileSync(path.join(dir, 'models-index.json'), JSON.stringify(entries, null, 2))
+}
+
+// POST /api/target/save-model
+app.post('/api/target/save-model', express.json({ limit: '2mb' }), (req, res) => {
+  try {
+    const { rules = [], reviewerName = '', comment = '', correctionsByTenant = [],
+            sessionId, tenantCount = 0, uploadSessionId, parentModelId = null,
+            parentModelName = null, deepSynthesis = false, modelName } = req.body
+    const dir = resolveJuiceModelsDir()
+    const id  = randomUUID()
+    const now = new Date().toISOString()
+    const _now = new Date()
+    const date = _now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    const time = _now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+    const name = modelName || `${reviewerName || 'Model'} — ${date} ${time}`
+
+    const totalCorrections = correctionsByTenant.reduce((s, n) => s + n, 0)
+    const errorReduction   = tenantCount > 0 ? Math.round((totalCorrections / Math.max(tenantCount * 3, 1)) * 100) : 0
+
+    const meta = { id, name, reviewerName, comment, tenantCount, savedAt: now,
+                   deepSynthesis: !!deepSynthesis, correctionsByTenant, errorReduction,
+                   parentModelId, parentModelName, sessionId, uploadSessionId, ruleCount: rules.length }
+    const full = { ...meta, rules }
+
+    fs.writeFileSync(path.join(dir, `${id}.json`), JSON.stringify(full, null, 2))
+
+    const idx = readJuiceIndex(dir)
+    idx.push(meta)
+    writeJuiceIndex(dir, idx)
+
+    console.log(`[save-model] saved: ${name} (${rules.length} rules, id=${id})`)
+    res.json({ ok: true, id, name, errorReduction })
+  } catch (err) {
+    console.error('[save-model]', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/target/models — list all saved juice models (no rules, lightweight)
+app.get('/api/target/models', (_req, res) => {
+  try {
+    const dir = resolveJuiceModelsDir()
+    const idx = readJuiceIndex(dir)
+    res.json(idx.slice().reverse())  // newest first
+  } catch (err) {
+    console.error('[get-models]', err)
+    res.json([])
+  }
+})
+
+// GET /api/target/models/:id — full model with rules
+app.get('/api/target/models/:id', (req, res) => {
+  try {
+    const dir  = resolveJuiceModelsDir()
+    const file = path.join(dir, `${req.params.id}.json`)
+    if (!fs.existsSync(file)) return res.status(404).json({ error: 'Model not found' })
+    res.json(JSON.parse(fs.readFileSync(file, 'utf8')))
+  } catch (err) {
+    console.error('[get-model-id]', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// DELETE /api/target/models/:id
+app.delete('/api/target/models/:id', (req, res) => {
+  try {
+    const dir  = resolveJuiceModelsDir()
+    const file = path.join(dir, `${req.params.id}.json`)
+    if (fs.existsSync(file)) fs.unlinkSync(file)
+    const idx  = readJuiceIndex(dir).filter(m => m.id !== req.params.id)
+    writeJuiceIndex(dir, idx)
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[delete-model]', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ── Target Practice session report storage ─────────────────
 const TP_REPORTS_SUBDIR  = 'target-session-reports'
 const TP_REPORTS_MANIFEST = 'tp-manifest.json'
@@ -2153,6 +2245,147 @@ setInterval(() => {
     }
   }
 }, 10 * 60 * 1000)
+
+// ═══════════════════════════════════════════════════════════
+// MASTER TRAINER — self-correcting training loop
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Correct answers for the 17 known-mistake tenant folders.
+ * Keyed by exact folder name. shouldFind = what the model MUST flag.
+ * Parsed from Cheat Sheet.numbers.
+ */
+const MT_CHEAT_SHEET = {
+  'Bank of America': {
+    shouldFind: ['Rent Commencement Date Agreement dated 9/25/25 is not executed by Tenant.']
+  },
+  'China Dragon': {
+    shouldFind: ['Document extending Term beyond 5/31/2025.']
+  },
+  'Mirage Hair ': {
+    shouldFind: ['Document extending Term from original End Date (calculated as 1/31/20) to 10/31/23.']
+  },
+  'Monterey Bay Homes': {
+    shouldFind: [
+      'Amendment No. 3 dated 8/13/20 is not executed.',
+      'Amendment No. 4 dated 7/27/21 is not executed.'
+    ]
+  },
+  'Pho Tastic': {
+    shouldFind: [
+      'First page of Exhibit E to Lease dated 5/2025.',
+      'Exhibit F (Guaranty of Lease) to Lease dated 5/2025.'
+    ]
+  },
+  'Pigtails & Crewcuts': {
+    shouldFind: ['Document extending Term beyond 4/2023.']
+  },
+  'Signworld': {
+    shouldFind: [
+      'Amendment No. 1, if any. (Only Lease and Amendment No. 3 were received.)',
+      'Amendment No. 2, if any. (Only Lease and Amendment No. 3 were received.)'
+    ]
+  },
+  'Sol Palms MedSpa': {
+    shouldFind: ['Full copy of Guaranty to Lease dated 12/2025. (Only signature page received.)']
+  },
+  'Stretch Zone': {
+    shouldFind: ['Document extending Term beyond 12/31/25.']
+  },
+  'Thai E-San': {
+    shouldFind: ['Document extending Term beyond 1/2024.']
+  },
+  'Wells Fargo': {
+    shouldFind: ['Document extending Term beyond 11/30/25.']
+  },
+  'Ground Central': {
+    shouldFind: ['Guaranty of License is not executed.']
+  },
+  'MASONS TENNISMART (BSMT, LOBBY)': {
+    shouldFind: [
+      'First Rent Abatement Agreement dated 5/2020, referenced in Third Amendment dated 1/18/23. (Internal email received — agreement itself is still missing.)'
+    ]
+  },
+  'Evercore': {
+    shouldFind: ['Guaranty of Lease (Exhibit E of Lease dated 7/1/18) is not executed.']
+  },
+  'BlakeTodd': {
+    shouldFind: ['Exhibit E (Form of Good Guy Guaranty) to Agreement of Lease dated 7/1/11.']
+  },
+  'Duff and Phelps': {
+    shouldFind: [
+      'Letter agreement (Consent) by and among Landlord, Tenant and General Atlantic Service Company, L.P., as referenced in Third Amendment to Lease dated 4/5/24.',
+      'Document reflecting Premises of Part Basement, as reflected on Rent Roll as of 11/30/25.'
+    ]
+  },
+  'Morgan Stanley': {
+    shouldFind: [
+      'Guaranty of Lease (Exhibit F of Second Amendment dated 9/30/21) is not executed.',
+      'Release of Guaranty of Lease (Exhibit J of Second Amendment dated 9/30/21) is not executed.'
+    ]
+  }
+}
+
+// GET /api/mt/cheat-sheet — returns correct answers (for debugging / display)
+app.get('/api/mt/cheat-sheet', (_req, res) => res.json(MT_CHEAT_SHEET))
+
+// POST /api/mt/compare — compare model findings to cheat sheet answer key
+app.post('/api/mt/compare', express.json({ limit: '500kb' }), async (req, res) => {
+  try {
+    const { tenantName, modelFindings = [] } = req.body
+    if (!tenantName) return res.status(400).json({ error: 'tenantName required' })
+
+    // Fuzzy match tenant name (trim + lowercase) against cheat sheet keys
+    const csKey = Object.keys(MT_CHEAT_SHEET).find(k =>
+      k.trim().toLowerCase() === (tenantName || '').trim().toLowerCase()
+    )
+    if (!csKey) return res.status(404).json({ error: `No cheat sheet entry for: "${tenantName}"` })
+
+    const result = await compareToCheatSheet({
+      tenantName,
+      modelFindings,
+      shouldFind: MT_CHEAT_SHEET[csKey].shouldFind
+    })
+    res.json(result)
+  } catch (err) {
+    console.error('[mt/compare]', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/mt/synthesize — generate juice rules from comparison errors
+app.post('/api/mt/synthesize', express.json({ limit: '500kb' }), async (req, res) => {
+  try {
+    const { tenantName, missed = [], falsePositives = [], analysis = '', currentRules = [] } = req.body
+
+    // Format missed items as annotations (things the model didn't catch)
+    const annotations = missed.map(item => ({
+      comment: `MISSED: ${item}  |  Root cause analysis: ${analysis.slice(0, 300)}`,
+      docName: tenantName,
+      pageNum: ''
+    }))
+
+    // Format false positives as rejected findings
+    const rejectedFindings = falsePositives.map(f => ({
+      checkType:       f.checkType || 'UNKNOWN',
+      missingDocument: f.missingDocument || f.description || '',
+      evidence:        f.evidence || '',
+      comment:         f.comment || '',
+      reviewerNote:    `False positive — model incorrectly flagged this. ${analysis.slice(0, 200)}`
+    }))
+
+    const result = await synthesizeActiveLearning({
+      rejectedFindings,
+      confirmedFindings: [],
+      annotations,
+      currentRules
+    })
+    res.json(result)
+  } catch (err) {
+    console.error('[mt/synthesize]', err)
+    res.status(500).json({ error: err.message })
+  }
+})
 
 // ═══════════════════════════════════════════════════════════
 // START

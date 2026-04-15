@@ -8978,3 +8978,444 @@ updateSpeakerIcon()
     if (span)   startTypewriter(span)
   })
 })();
+
+// ═══════════════════════════════════════════════════════════
+// MASTER TRAINER — self-correcting training loop
+// ═══════════════════════════════════════════════════════════
+
+const mtState = {
+  active:          false,
+  sessionId:       null,
+  tenants:         [],
+  currentIdx:      0,
+  attempt:         0,
+  currentFindings: [],
+  currentRules:    [],
+  lastComparison:  null,
+  trainedTenants:  []
+}
+
+function mtHideAllButtons() {
+  ;['gym-mt-check-btn','gym-mt-learn-btn','gym-mt-rerun-btn','gym-mt-next-btn','gym-mt-save-btn'].forEach(id => {
+    document.getElementById(id)?.classList.add('hidden')
+  })
+}
+
+function mtShowButtons(...ids) {
+  mtHideAllButtons()
+  for (const id of ids) document.getElementById(id)?.classList.remove('hidden')
+}
+
+function mtUpdateHeader() {
+  const bar = document.getElementById('mt-header-bar')
+  if (!bar) return
+  if (!mtState.active) { bar.classList.add('hidden'); return }
+  bar.classList.remove('hidden')
+
+  const tenant = mtState.tenants[mtState.currentIdx]
+  const counter = document.getElementById('mt-tenant-counter')
+  const nameEl  = document.getElementById('mt-tenant-name')
+  const attempt = document.getElementById('mt-attempt-badge')
+  const rules   = document.getElementById('mt-rules-badge')
+
+  if (counter) counter.textContent = `${mtState.currentIdx + 1} / ${mtState.tenants.length}`
+  if (nameEl)  nameEl.textContent  = tenant?.tenantName || ''
+  if (attempt) attempt.textContent = `Attempt ${mtState.attempt}`
+  if (rules)   rules.textContent   = `${mtState.currentRules.length} rule${mtState.currentRules.length !== 1 ? 's' : ''}`
+}
+
+async function mtStartTraining() {
+  if (!state.tenants || state.tenants.length === 0) {
+    toast('Upload your Mistake training folders first, then click Master Trainer', 'error')
+    goTo('upload')
+    return
+  }
+
+  mtState.active          = true
+  mtState.sessionId       = state.sessionId
+  mtState.tenants         = [...state.tenants]
+  mtState.currentIdx      = 0
+  mtState.attempt         = 0
+  mtState.currentRules    = []
+  mtState.lastComparison  = null
+  mtState.trainedTenants  = []
+  mtState.currentFindings = []
+
+  goTo('gym')
+  await mtRunTenant(0)
+}
+
+async function mtRunTenant(idx) {
+  const tenant = mtState.tenants[idx]
+  if (!tenant) { mtSessionComplete(); return }
+
+  mtState.currentIdx      = idx
+  mtState.attempt         = mtState.lastComparison ? mtState.attempt : 1
+  mtState.lastComparison  = null
+  mtState.currentFindings = []
+
+  gymReset()
+  gymShowPanel('loading')
+  mtUpdateHeader()
+  mtHideAllButtons()
+
+  document.getElementById('gym-subtitle').textContent = `Training: ${tenant.tenantName}`
+  document.getElementById('gym-progress-fill').style.width = '0%'
+  document.getElementById('gym-loading-msg').textContent = 'Running blind analysis...'
+
+  // Inject accumulated juice rules (or reset if none yet)
+  try {
+    if (mtState.currentRules.length > 0) {
+      await fetch(sameOriginApi('/api/target/load-model'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: mtState.sessionId, rules: mtState.currentRules, modelId: null, modelName: 'MT session juice' })
+      })
+    } else {
+      await fetch(sameOriginApi('/api/target/reset-juice'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: mtState.sessionId })
+      })
+    }
+  } catch {}
+
+  await gymRegisterLocalFiles(tenant.id)
+
+  const url = sameOriginApi(
+    `/api/gym/analyze?sessionId=${encodeURIComponent(mtState.sessionId)}&tenantId=${encodeURIComponent(tenant.id)}${cheapQs()}`
+  )
+  if (state.eventSource) { state.eventSource.close() }
+  const es = new EventSource(url)
+  state.eventSource = es
+
+  es.addEventListener('gym-start', e => {
+    const d = JSON.parse(e.data)
+    document.getElementById('gym-subtitle').textContent = `Analyzing: ${d.tenantName}`
+  })
+  es.addEventListener('gym-progress', e => {
+    const d = JSON.parse(e.data)
+    document.getElementById('gym-progress-fill').style.width = (d.percent || 0) + '%'
+    document.getElementById('gym-loading-msg').textContent = d.message || ''
+  })
+  es.addEventListener('gym-complete', e => {
+    es.close(); state.eventSource = null
+    const d = JSON.parse(e.data)
+    document.getElementById('gym-progress-fill').style.width = '100%'
+    mtState.currentFindings = d.findings || []
+    gymLaunchWorkout(d)
+    mtUpdateHeader()
+    mtShowButtons('gym-mt-check-btn', 'gym-mt-next-btn')
+    sfxReady()
+  })
+  es.addEventListener('gym-error', e => {
+    es.close(); state.eventSource = null
+    const d = JSON.parse(e.data)
+    toast('Analysis error: ' + (d.error || 'Unknown'), 'error')
+    mtShowButtons('gym-mt-next-btn')
+  })
+  es.onerror = () => {}
+}
+
+async function mtCheckAnswer() {
+  const tenant = mtState.tenants[mtState.currentIdx]
+  if (!tenant) return
+
+  const btn = document.getElementById('gym-mt-check-btn')
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Checking...' }
+
+  try {
+    const res = await fetch(sameOriginApi('/api/mt/compare'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenantName: tenant.tenantName, modelFindings: mtState.currentFindings })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Compare failed')
+
+    mtState.lastComparison = data
+    mtRenderCompareOverlay(data, tenant.tenantName)
+  } catch (err) {
+    toast('Check failed: ' + err.message, 'error')
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔍 Check Answer' }
+  }
+}
+
+function mtRenderCompareOverlay(data, tenantName) {
+  const overlay    = document.getElementById('mt-compare-overlay')
+  const titleEl    = document.getElementById('mt-compare-title')
+  const scoreBadge = document.getElementById('mt-score-badge')
+  const bodyEl     = document.getElementById('mt-compare-body')
+  const analysisEl = document.getElementById('mt-compare-analysis')
+  if (!overlay) return
+
+  titleEl.textContent  = `ANSWER CHECK — ${tenantName}`
+  const score          = data.score ?? 0
+  scoreBadge.textContent = `${score}/100`
+  scoreBadge.className   = 'mt-score-badge ' + (score === 100 ? 'score-perfect' : score >= 50 ? 'score-good' : 'score-bad')
+
+  let html = ''
+
+  if (data.caught?.length > 0) {
+    html += `<div class="mt-compare-section-title caught">✅ CAUGHT (${data.caught.length})</div>`
+    html += data.caught.map(item => `
+      <div class="mt-compare-item caught">
+        <span class="mt-item-icon">✅</span>
+        <span class="mt-item-text">${escHtml(item)}</span>
+      </div>`).join('')
+  }
+
+  if (data.missed?.length > 0) {
+    html += `<div class="mt-compare-section-title missed">❌ MISSED (${data.missed.length})</div>`
+    html += data.missed.map(item => `
+      <div class="mt-compare-item missed">
+        <span class="mt-item-icon">❌</span>
+        <span class="mt-item-text">${escHtml(item)}</span>
+      </div>`).join('')
+  }
+
+  if (data.falsePositives?.length > 0) {
+    html += `<div class="mt-compare-section-title fp">🚫 FALSE POSITIVES (${data.falsePositives.length})</div>`
+    html += data.falsePositives.map(f => `
+      <div class="mt-compare-item fp">
+        <span class="mt-item-icon">🚫</span>
+        <div class="mt-item-text">
+          <div>${escHtml(f.missingDocument || '')}</div>
+          ${f.reason ? `<div class="mt-item-reason">${escHtml(f.reason)}</div>` : ''}
+        </div>
+      </div>`).join('')
+  }
+
+  if (!html) {
+    html = '<div style="padding:16px;text-align:center;color:#64748b;font-size:12px;">No findings to compare.</div>'
+  }
+
+  bodyEl.innerHTML = html
+  analysisEl.innerHTML = `
+    <div class="mt-compare-analysis-label">🧠 ANALYSIS</div>
+    <div>${escHtml(data.analysis || 'No analysis available.')}</div>`
+
+  const learnBtn = document.getElementById('mt-learn-overlay-btn')
+  const hasErrors = (data.missed?.length > 0) || (data.falsePositives?.length > 0)
+  if (learnBtn) {
+    learnBtn.style.display = hasErrors ? '' : 'none'
+    const closeBtn = document.getElementById('mt-close-secondary-btn')
+    if (closeBtn && !hasErrors) closeBtn.textContent = '✅ Perfect — Close'
+  }
+
+  overlay.classList.remove('hidden')
+  mtUpdateWorkoutButtons(score)
+}
+
+function mtUpdateWorkoutButtons(score) {
+  if (score === 100) {
+    mtShowButtons('gym-mt-check-btn', 'gym-mt-save-btn', 'gym-mt-next-btn')
+    const saveBtn = document.getElementById('gym-mt-save-btn')
+    if (saveBtn) saveBtn.disabled = false
+  } else {
+    mtShowButtons('gym-mt-check-btn', 'gym-mt-learn-btn', 'gym-mt-next-btn')
+  }
+}
+
+async function mtLearnFromThis() {
+  const comp   = mtState.lastComparison
+  const tenant = mtState.tenants[mtState.currentIdx]
+  if (!comp || !tenant) { toast('Run Check Answer first', 'error'); return }
+
+  const btn        = document.getElementById('gym-mt-learn-btn')
+  const overlayBtn = document.getElementById('mt-learn-overlay-btn')
+  if (btn)        { btn.disabled = true;        btn.textContent = '⏳ Learning...' }
+  if (overlayBtn) { overlayBtn.disabled = true;  overlayBtn.textContent = '⏳ Learning...' }
+
+  try {
+    const res = await fetch(sameOriginApi('/api/mt/synthesize'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tenantName:    tenant.tenantName,
+        missed:        comp.missed         || [],
+        falsePositives: comp.falsePositives || [],
+        analysis:      comp.analysis       || '',
+        currentRules:  mtState.currentRules
+      })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Synthesis failed')
+
+    mtState.currentRules = data.rules || []
+    mtUpdateHeader()
+
+    const rc = mtState.currentRules.length
+    toast(`🧠 ${rc} rule${rc !== 1 ? 's' : ''} generated — click Rerun to test`, 'success')
+    sfxReady()
+
+    document.getElementById('mt-compare-overlay')?.classList.add('hidden')
+    mtShowButtons('gym-mt-check-btn', 'gym-mt-learn-btn', 'gym-mt-rerun-btn', 'gym-mt-next-btn')
+  } catch (err) {
+    toast('Learn failed: ' + err.message, 'error')
+  } finally {
+    if (btn)        { btn.disabled = false;        btn.textContent = '🧠 Learn From This' }
+    if (overlayBtn) { overlayBtn.disabled = false;  overlayBtn.textContent = '🧠 Learn From This' }
+  }
+}
+
+async function mtRerun() {
+  const tenant = mtState.tenants[mtState.currentIdx]
+  if (!tenant) return
+
+  mtState.attempt++
+  mtState.lastComparison  = null
+  mtState.currentFindings = []
+
+  gymReset()
+  gymShowPanel('loading')
+  mtUpdateHeader()
+  mtHideAllButtons()
+
+  document.getElementById('gym-subtitle').textContent = `Rerun (Attempt ${mtState.attempt}): ${tenant.tenantName}`
+  document.getElementById('gym-progress-fill').style.width = '0%'
+  document.getElementById('gym-loading-msg').textContent = `Running with ${mtState.currentRules.length} juice rules...`
+
+  try {
+    await fetch(sameOriginApi('/api/target/load-model'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: mtState.sessionId, rules: mtState.currentRules, modelId: null, modelName: 'MT session juice' })
+    })
+  } catch {}
+
+  await gymRegisterLocalFiles(tenant.id)
+
+  const url = sameOriginApi(
+    `/api/gym/analyze?sessionId=${encodeURIComponent(mtState.sessionId)}&tenantId=${encodeURIComponent(tenant.id)}${cheapQs()}`
+  )
+  if (state.eventSource) { state.eventSource.close() }
+  const es = new EventSource(url)
+  state.eventSource = es
+
+  es.addEventListener('gym-start', () => {
+    document.getElementById('gym-subtitle').textContent = `Re-analyzing with juice: ${tenant.tenantName}`
+  })
+  es.addEventListener('gym-progress', e => {
+    const d = JSON.parse(e.data)
+    document.getElementById('gym-progress-fill').style.width = (d.percent || 0) + '%'
+    document.getElementById('gym-loading-msg').textContent = d.message || ''
+  })
+  es.addEventListener('gym-complete', e => {
+    es.close(); state.eventSource = null
+    const d = JSON.parse(e.data)
+    document.getElementById('gym-progress-fill').style.width = '100%'
+    mtState.currentFindings = d.findings || []
+    gymLaunchWorkout(d)
+    mtUpdateHeader()
+    mtShowButtons('gym-mt-check-btn', 'gym-mt-learn-btn', 'gym-mt-next-btn')
+    sfxReady()
+  })
+  es.addEventListener('gym-error', e => {
+    es.close(); state.eventSource = null
+    const d = JSON.parse(e.data)
+    toast('Rerun error: ' + (d.error || 'Unknown'), 'error')
+    mtShowButtons('gym-mt-check-btn', 'gym-mt-next-btn')
+  })
+  es.onerror = () => {}
+}
+
+function mtNextTenant() {
+  const cur = mtState.tenants[mtState.currentIdx]
+  if (cur) {
+    mtState.trainedTenants.push({
+      name:       cur.tenantName,
+      attempts:   mtState.attempt,
+      finalScore: mtState.lastComparison?.score ?? null,
+      ruleCount:  mtState.currentRules.length
+    })
+  }
+  const nextIdx = mtState.currentIdx + 1
+  mtState.attempt = 0
+  mtState.lastComparison = null
+  if (nextIdx >= mtState.tenants.length) { mtSessionComplete(); return }
+  mtRunTenant(nextIdx)
+}
+
+async function mtSaveRefined() {
+  if (!mtState.currentRules.length) { toast('No rules to save', 'error'); return }
+
+  const btn = document.getElementById('gym-mt-save-btn')
+  if (btn) { btn.disabled = true; btn.textContent = '💾 Saving...' }
+
+  const _now       = new Date()
+  const date       = _now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const time       = _now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+  const tenantName = mtState.tenants[mtState.currentIdx]?.tenantName || 'Unknown'
+  const modelName  = `Master Trainer — ${tenantName} — ${date} ${time}`
+
+  try {
+    const res = await fetch(sameOriginApi('/api/target/save-model'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        modelName,
+        rules:         mtState.currentRules,
+        reviewerName:  'Master Trainer',
+        comment:       `Refined on: ${tenantName}. Attempt ${mtState.attempt}. Score: ${mtState.lastComparison?.score ?? '?'}/100.`,
+        tenantCount:   mtState.currentIdx + 1,
+        sessionId:     mtState.sessionId,
+        deepSynthesis: false
+      })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Save failed')
+    if (btn) btn.textContent = '✅ Saved!'
+    sfxReady()
+    toast(`✅ Refined Juice saved — "${modelName}"`, 'success')
+  } catch (err) {
+    sfxError()
+    toast('Save failed: ' + err.message, 'error')
+    if (btn) { btn.disabled = false; btn.textContent = '✅ Save Refined Juice' }
+  }
+}
+
+function mtSessionComplete() {
+  mtState.active = false
+  const total  = mtState.trainedTenants.length
+  const rules  = mtState.currentRules.length
+  const perfect = mtState.trainedTenants.filter(t => t.finalScore === 100).length
+  toast(`🧪 Training complete — ${total} tenants, ${rules} rules, ${perfect} perfect score${perfect !== 1 ? 's' : ''}`, 'success')
+
+  // Auto-save the complete master juice if there are rules
+  if (rules > 0) {
+    const _now = new Date()
+    const date = _now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    const modelName = `Master Juice — ${total} Tenant${total !== 1 ? 's' : ''} — ${date}`
+    fetch(sameOriginApi('/api/target/save-model'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        modelName,
+        rules:         mtState.currentRules,
+        reviewerName:  'Master Trainer',
+        comment:       `Full session: ${total} tenants. ${perfect} reached score 100.`,
+        tenantCount:   total,
+        sessionId:     mtState.sessionId,
+        deepSynthesis: false
+      })
+    }).then(r => r.json()).then(d => {
+      if (d.ok) toast(`💾 Master Juice auto-saved — "${modelName}"`, 'success')
+    }).catch(() => {})
+  }
+
+  document.getElementById('mt-header-bar')?.classList.add('hidden')
+  mtHideAllButtons()
+  gymReset()
+  goTo('home')
+}
+
+// ── Master Trainer event wiring ───────────────────────────
+document.getElementById('btn-master-trainer')?.addEventListener('click', mtStartTraining)
+document.getElementById('gym-mt-check-btn')?.addEventListener('click', mtCheckAnswer)
+document.getElementById('gym-mt-learn-btn')?.addEventListener('click', mtLearnFromThis)
+document.getElementById('gym-mt-rerun-btn')?.addEventListener('click', mtRerun)
+document.getElementById('gym-mt-next-btn')?.addEventListener('click', mtNextTenant)
+document.getElementById('gym-mt-save-btn')?.addEventListener('click', mtSaveRefined)
+document.getElementById('mt-compare-close')?.addEventListener('click', () =>
+  document.getElementById('mt-compare-overlay')?.classList.add('hidden'))
+document.getElementById('mt-close-secondary-btn')?.addEventListener('click', () =>
+  document.getElementById('mt-compare-overlay')?.classList.add('hidden'))
+document.getElementById('mt-learn-overlay-btn')?.addEventListener('click', () => {
+  document.getElementById('mt-compare-overlay')?.classList.add('hidden')
+  mtLearnFromThis()
+})
