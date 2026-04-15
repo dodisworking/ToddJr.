@@ -9025,6 +9025,18 @@ function mtUpdateHeader() {
 // ── MT isolated upload overlay ────────────────────────────────────────────────
 
 function mtOpenUploadOverlay() {
+  // ── Fast path: tenants already loaded from main upload — reuse them directly ──
+  if (state.tenants && state.tenants.length > 0) {
+    mtState.sessionId    = state.sessionId      // reuse registered session
+    mtState.localFiles   = state.localFiles     // reuse in-memory file buffers (may be empty for disk sessions)
+    mtState.tenants      = state.tenants.map(t => ({ ...t }))  // shallow copy
+    mtState.startingJuice = null
+    mtState.currentRules  = []
+    mtBeginTraining()
+    return
+  }
+
+  // ── Slow path: no tenants loaded yet — show the upload overlay ──
   const overlay  = document.getElementById('mt-upload-overlay')
   const zone     = document.getElementById('mt-upload-zone')
   const progress = document.getElementById('mt-upload-progress')
