@@ -1896,7 +1896,7 @@ function updateHud() {
 }
 
 /** Estimate how many Claude batches this tenant will need.
- *  Mirrors analyzer.js buildBatches: groups PDFs until base64 total > 25MB. */
+ *  Mirrors analyzer.js buildBatches: sorts largest files first, then greedy-packs. */
 function predictBatches(files) {
   const BATCH_MAX_BASE64 = 25 * 1024 * 1024
   const PDF_MAX_BYTES    = 32 * 1024 * 1024
@@ -1905,8 +1905,10 @@ function predictBatches(files) {
     return ext === 'pdf' && (f.sizeBytes || 0) <= PDF_MAX_BYTES
   })
   if (!pdfs.length) return 1
+  // Sort largest first — mirrors analyzer.js buildBatches sort
+  const sorted = [...pdfs].sort((a, b) => (b.sizeBytes || 0) - (a.sizeBytes || 0))
   let batches = 0, cur = 0
-  for (const f of pdfs) {
+  for (const f of sorted) {
     const b64 = Math.ceil((f.sizeBytes || 0) * 4 / 3) + 1024
     if (cur > 0 && cur + b64 > BATCH_MAX_BASE64) { batches++; cur = b64 }
     else cur += b64
