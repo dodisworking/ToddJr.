@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=72" />
+  <link rel="stylesheet" href="style.css?v=73" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
@@ -721,19 +721,25 @@
 
       </div>
 
-      <!-- Action buttons -->
-      <div class="mt-rev-footer">
-        <button type="button" id="gym-mt-check-btn" class="btn-gym-mt-check hidden">📞 Call Teacher</button>
-        <button type="button" id="gym-mt-learn-btn" class="btn-gym-mt-learn hidden">🧑‍🏫 Have Teacher Teach</button>
-        <button type="button" id="gym-mt-rerun-btn" class="btn-gym-mt-rerun hidden">▶ Rerun With Rules</button>
-        <button type="button" id="gym-mt-next-btn" class="btn-gym-mt-next hidden">⏩ Next Tenant</button>
-        <button type="button" id="gym-mt-save-btn" class="btn-gym-mt-save hidden">💾 Save Refined Juice</button>
-      </div>
+      <!-- (MT action buttons live in the workout panel bottom bar — IDs must be unique) -->
 
     </div>
 
     <!-- PANEL: Workout (two columns) -->
     <div id="gym-panel-workout" class="gym-panel gym-panel-workout hidden">
+
+      <!-- Master Trainer header bar (hidden unless MT active) -->
+      <div id="mt-header-bar" class="mt-header-bar hidden">
+        <div class="mt-header-left">
+          <span class="mt-header-label">🧪 MASTER TRAINER</span>
+          <span class="mt-tenant-counter" id="mt-tenant-counter">1 / 17</span>
+          <span class="mt-tenant-name" id="mt-tenant-name"></span>
+        </div>
+        <div class="mt-header-right">
+          <span class="mt-attempt-badge" id="mt-attempt-badge">Attempt 1</span>
+          <span class="mt-rules-badge" id="mt-rules-badge">0 rules</span>
+        </div>
+      </div>
 
       <!-- Two-column layout -->
       <div class="gym-cols">
@@ -803,6 +809,11 @@
           <button type="button" id="gym-ex-save-next-btn" class="btn-gym-ex-save hidden">💾 Save & Next Tenant ›</button>
           <button type="button" id="gym-target-save-btn" class="btn-gym-target-save hidden">💾 Save Report &amp; Next →</button>
           <button type="button" id="gym-tp2-save-btn" class="btn-gym-tp2-save hidden">✅ Save &amp; Next →</button>
+          <button type="button" id="gym-mt-check-btn" class="btn-gym-mt-check hidden">📞 Call Teacher</button>
+          <button type="button" id="gym-mt-learn-btn" class="btn-gym-mt-learn hidden">🧑‍🏫 Have Teacher Teach</button>
+          <button type="button" id="gym-mt-rerun-btn" class="btn-gym-mt-rerun hidden">▶ Rerun With Rules</button>
+          <button type="button" id="gym-mt-next-btn" class="btn-gym-mt-next hidden">⏩ Next Tenant</button>
+          <button type="button" id="gym-mt-save-btn" class="btn-gym-mt-save hidden">💾 Save Refined Juice</button>
           <button id="gym-submit-btn" class="btn-gym-submit">💪 Analysis Workout</button>
         </div>
       </div>
@@ -1349,7 +1360,7 @@
         <!-- analysis paragraph -->
       </div>
       <div class="mt-compare-footer">
-        <button class="btn-gym-mt-learn-overlay" id="mt-learn-overlay-btn">🧠 Learn From This</button>
+        <button class="btn-gym-mt-learn-overlay" id="mt-learn-overlay-btn">🧑‍🏫 Have Teacher Teach</button>
         <button class="btn-mt-close-secondary" id="mt-close-secondary-btn">Close</button>
       </div>
     </div>
@@ -1362,7 +1373,7 @@
   <script src="drlab-flasks.js?v=6"></script>
   <script src="sbs-boxing.js?v=3"></script>
   <script src="target-game.js?v=4"></script>
-  <script src="app.js?v=104"></script>
+  <script src="app.js?v=105"></script>
   <script src="game-mode.js?v=4"></script>
   <script src="rr-app.js?v=1"></script>
 </body>

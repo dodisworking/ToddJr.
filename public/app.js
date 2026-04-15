@@ -9009,11 +9009,15 @@ function mtShowButtons(...ids) {
 }
 
 function mtUpdateHeader() {
+  const bar = document.getElementById('mt-header-bar')
+  if (!bar) return
+  if (!mtState.active) { bar.classList.add('hidden'); return }
+  bar.classList.remove('hidden')
   const tenant = mtState.tenants[mtState.currentIdx]
-  const counter = document.getElementById('mt-rev-counter')
-  const nameEl  = document.getElementById('mt-rev-name')
-  const attempt = document.getElementById('mt-rev-attempt')
-  const rules   = document.getElementById('mt-rev-rules')
+  const counter = document.getElementById('mt-tenant-counter')
+  const nameEl  = document.getElementById('mt-tenant-name')
+  const attempt = document.getElementById('mt-attempt-badge')
+  const rules   = document.getElementById('mt-rules-badge')
   if (counter) counter.textContent = `${mtState.currentIdx + 1} / ${mtState.tenants.length}`
   if (nameEl)  nameEl.textContent  = tenant?.tenantName || ''
   if (attempt) attempt.textContent = `Attempt ${mtState.attempt}`
@@ -9236,7 +9240,9 @@ async function mtRunTenant(idx) {
     const d = JSON.parse(e.data)
     document.getElementById('gym-progress-fill').style.width = '100%'
     mtState.currentFindings = d.findings || []
-    mtShowReviewPanel(d)
+    gymLaunchWorkout(d)
+    mtUpdateHeader()
+    mtShowButtons('gym-mt-check-btn', 'gym-mt-next-btn')
     sfxReady()
   })
   es.addEventListener('gym-error', e => {
@@ -9264,16 +9270,7 @@ async function mtCheckAnswer() {
     if (!res.ok) throw new Error(data.error || 'Compare failed')
 
     mtState.lastComparison = data
-    mtRenderVerdict(data)
-
-    // Show appropriate buttons based on score
-    if (data.score >= 100) {
-      mtShowButtons('gym-mt-save-btn', 'gym-mt-next-btn')
-      const saveBtn = document.getElementById('gym-mt-save-btn')
-      if (saveBtn) saveBtn.disabled = false
-    } else {
-      mtShowButtons('gym-mt-learn-btn', 'gym-mt-next-btn')
-    }
+    mtRenderCompareOverlay(data, tenant.tenantName)
   } catch (err) {
     toast('Teacher check failed: ' + err.message, 'error')
     if (btn) { btn.disabled = false; btn.textContent = '📞 Call Teacher' }
@@ -9384,9 +9381,93 @@ function _mtReadVerdictConfirmations(bodyEl) {
 }
 
 /**
- * Render the teacher's verdict inline in the MT review panel.
- * Each item has ✅ Correct / ❌ Wrong buttons so the trainer can verify.
- * Called after /api/mt/compare responds.
+ * Show the teacher verdict in the mt-compare-overlay popup.
+ * Each Caught / Missed / False-Positive item has ✓ Correct / ✗ Wrong buttons
+ * so the trainer can confirm or override what the teacher decided.
+ * A notes textarea lets the trainer add extra context before "Have Teacher Teach."
+ */
+function mtRenderCompareOverlay(data, tenantName) {
+  const overlay    = document.getElementById('mt-compare-overlay')
+  const titleEl    = document.getElementById('mt-compare-title')
+  const scoreBadge = document.getElementById('mt-score-badge')
+  const bodyEl     = document.getElementById('mt-compare-body')
+  const analysisEl = document.getElementById('mt-compare-analysis')
+  if (!overlay) return
+
+  const score  = data.score ?? 0
+  const caught = data.caught         || []
+  const missed = data.missed         || []
+  const fps    = data.falsePositives || []
+
+  if (titleEl)    titleEl.textContent    = `TEACHER'S VERDICT — ${tenantName}`
+  if (scoreBadge) {
+    scoreBadge.textContent = `${score}/100`
+    scoreBadge.className   = 'mt-score-badge ' + (score >= 100 ? 'score-perfect' : score >= 50 ? 'score-good' : 'score-bad')
+  }
+
+  let html = ''
+  if (caught.length > 0) {
+    html += `<div class="mt-vg mt-vg-caught"><div class="mt-vg-label">✅ CAUGHT (${caught.length})</div>
+      ${caught.map((s, i) => _mtVerdictItem(s, 'caught', i)).join('')}</div>`
+  }
+  if (missed.length > 0) {
+    html += `<div class="mt-vg mt-vg-missed"><div class="mt-vg-label">❌ MISSED (${missed.length})</div>
+      ${missed.map((s, i) => _mtVerdictItem(s, 'missed', i)).join('')}</div>`
+  }
+  if (fps.length > 0) {
+    html += `<div class="mt-vg mt-vg-fp"><div class="mt-vg-label">🚫 FALSE POSITIVES (${fps.length})</div>
+      ${fps.map((f, i) => _mtVerdictItem(typeof f === 'string' ? f : (f.missingDocument || ''), 'fp', i)).join('')}</div>`
+  }
+  if (!html) {
+    html = score >= 100
+      ? '<div class="mt-vi-perfect">🎯 Perfect — all required items found!</div>'
+      : '<div class="mt-vi-empty">No findings to compare.</div>'
+  }
+
+  // Notes field below verdict items
+  html += `
+    <div class="mt-overlay-notes-wrap">
+      <label class="mt-rev-notes-label" for="mt-overlay-notes">
+        ✏️ YOUR NOTES
+        <span class="mt-rev-notes-hint">(optional — extra context for the teacher)</span>
+      </label>
+      <textarea id="mt-overlay-notes" class="mt-rev-notes" rows="2"
+        placeholder="e.g. The guaranty was only a signature page, not the full exhibit..."></textarea>
+    </div>`
+
+  if (bodyEl) {
+    bodyEl.innerHTML = html
+    bodyEl.style.overflowY = 'auto'
+    _mtWireVerdictButtons(bodyEl)
+  }
+
+  if (analysisEl && data.analysis) {
+    analysisEl.innerHTML = `<div class="mt-vg-label">🧠 WHY</div><div class="mt-analysis-text">${escHtml(data.analysis)}</div>`
+    analysisEl.style.display = ''
+  } else if (analysisEl) {
+    analysisEl.style.display = 'none'
+  }
+
+  // Footer: Learn button only if there are errors; Next button always
+  const learnBtn = document.getElementById('mt-learn-overlay-btn')
+  const hasErrors = missed.length > 0 || fps.length > 0
+  if (learnBtn) learnBtn.style.display = hasErrors ? '' : 'none'
+
+  overlay.classList.remove('hidden')
+
+  // Update bottom-bar buttons
+  if (score >= 100) {
+    mtShowButtons('gym-mt-save-btn', 'gym-mt-next-btn')
+    const saveBtn = document.getElementById('gym-mt-save-btn')
+    if (saveBtn) saveBtn.disabled = false
+  } else {
+    mtShowButtons('gym-mt-check-btn', 'gym-mt-learn-btn', 'gym-mt-next-btn')
+  }
+}
+
+/**
+ * Render the teacher's verdict inline in the MT review panel (unused in main flow,
+ * kept for the gym-panel-mt-review fallback path).
  */
 function mtRenderVerdict(data) {
   const verdictEl  = document.getElementById('mt-rev-verdict')
@@ -9457,8 +9538,8 @@ async function mtLearnFromThis() {
   const btn = document.getElementById('gym-mt-learn-btn')
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Teaching...' }
 
-  // Read trainer confirmations from verdict DOM
-  const bodyEl = document.getElementById('mt-rev-verdict-body')
+  // Read trainer confirmations from the overlay verdict body
+  const bodyEl = document.getElementById('mt-compare-body')
   const { confirmedMissed, confirmedFPs, deniedCaught } = bodyEl
     ? _mtReadVerdictConfirmations(bodyEl)
     : { confirmedMissed: [], confirmedFPs: [], deniedCaught: [] }
@@ -9467,8 +9548,11 @@ async function mtLearnFromThis() {
   const missedToTeach = confirmedMissed.length > 0 ? confirmedMissed : (comp.missed || [])
   const fpsToTeach    = confirmedFPs.length    > 0 ? confirmedFPs    : (comp.falsePositives || [])
 
-  // Manual notes the trainer typed
-  const trainerNotes = (document.getElementById('mt-rev-notes')?.value || '').trim()
+  // Notes from overlay textarea (or the mt-rev-notes fallback)
+  const trainerNotes = (
+    document.getElementById('mt-overlay-notes')?.value ||
+    document.getElementById('mt-rev-notes')?.value || ''
+  ).trim()
 
   try {
     const res = await fetch(sameOriginApi('/api/mt/synthesize'), {
@@ -9487,6 +9571,8 @@ async function mtLearnFromThis() {
 
     mtState.currentRules = data.rules || []
     mtUpdateHeader()
+
+    document.getElementById('mt-compare-overlay')?.classList.add('hidden')
 
     const rc = mtState.currentRules.length
     toast(`🧠 ${rc} rule${rc !== 1 ? 's' : ''} — ready to rerun`, 'success')
@@ -9545,7 +9631,9 @@ async function mtRerun() {
     const d = JSON.parse(e.data)
     document.getElementById('gym-progress-fill').style.width = '100%'
     mtState.currentFindings = d.findings || []
-    mtShowReviewPanel(d)
+    gymLaunchWorkout(d)
+    mtUpdateHeader()
+    mtShowButtons('gym-mt-check-btn', 'gym-mt-next-btn')
     sfxReady()
   })
   es.addEventListener('gym-error', e => {
@@ -9698,3 +9786,13 @@ document.getElementById('gym-mt-learn-btn')?.addEventListener('click', mtLearnFr
 document.getElementById('gym-mt-rerun-btn')?.addEventListener('click', mtRerun)
 document.getElementById('gym-mt-next-btn')?.addEventListener('click', mtNextTenant)
 document.getElementById('gym-mt-save-btn')?.addEventListener('click', mtSaveRefined)
+
+// Compare overlay close buttons
+document.getElementById('mt-compare-close')?.addEventListener('click', () =>
+  document.getElementById('mt-compare-overlay')?.classList.add('hidden'))
+document.getElementById('mt-close-secondary-btn')?.addEventListener('click', () =>
+  document.getElementById('mt-compare-overlay')?.classList.add('hidden'))
+// "Have Teacher Teach" from inside the overlay
+document.getElementById('mt-learn-overlay-btn')?.addEventListener('click', () => {
+  mtLearnFromThis()
+})

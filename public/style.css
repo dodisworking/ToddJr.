@@ -8662,3 +8662,16 @@ a.isaac-session-pkg-btn:hover { background: rgba(16,185,129,0.25); text-decorati
   color: #fff;
   border-color: #ef4444;
 }
+
+/* MT compare overlay — notes field */
+.mt-overlay-notes-wrap {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #1e3a5f;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* Ensure mt-vg + mt-vi classes work inside the overlay body */
+.mt-compare-body .mt-vg { margin-bottom: 8px; }
+.mt-compare-body .mt-vi-row { padding: 5px 6px; }
