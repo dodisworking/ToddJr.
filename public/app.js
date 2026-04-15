@@ -9398,37 +9398,100 @@ function mtShowReviewPanel(data) {
   if (findings.length === 0) {
     findingsEl.innerHTML = '<div class="mt-rev-finding-empty">✨ Model found no issues in this folder.</div>'
   } else {
+    // Render using the exact same gym-finding-card template as TP2
     findingsEl.innerHTML = findings.map((f, i) => {
-      const sev = (f.severity || 'LOW').toUpperCase()
-      const sevClass = sev === 'HIGH' ? 'mt-sev-high' : sev === 'MEDIUM' ? 'mt-sev-med' : 'mt-sev-low'
-      // Show where finding was found — prefer howIFoundThis (plain English), fall back to evidence
-      const sourceText = f.howIFoundThis || f.evidence || ''
-      return `<div class="mt-rev-finding-row" data-fidx="${i}" data-fstate="unset">
-        <div class="mt-rev-finding-meta">
-          <span class="mt-rev-finding-type">${escHtml(f.checkType || '')}</span>
-          <span class="mt-rev-finding-sev ${sevClass}">${escHtml(sev)}</span>
-          <span class="mt-rev-fv-btns">
-            <button type="button" class="mt-fv-btn mt-fv-approve" title="Mark correct finding">✅</button>
-            <button type="button" class="mt-fv-btn mt-fv-reject"  title="Mark as false positive">❌</button>
-          </span>
+      const sevClass  = (f.severity || 'low').toLowerCase()
+      const confClass = { HIGH: 'conf-high', MEDIUM: 'conf-med', LOW: 'conf-low' }[f.confidence] || 'conf-med'
+      const checked   = Array.isArray(f.checkedAndEliminated) && f.checkedAndEliminated.length
+        ? f.checkedAndEliminated.map(c => `<li>${escHtml(c)}</li>`).join('')
+        : ''
+      const fid = f.id || `mt-f-${i}`
+
+      return `
+      <div class="gym-finding-card" id="mt-card-${fid}" data-fid="${fid}" data-fidx="${i}">
+        <div class="gym-card-top">
+          <span class="gym-card-check">${escHtml(CHECK_LABELS[f.checkType] || f.checkType || 'CHECK')}</span>
+          <span class="sev-pill sev-${sevClass}">${escHtml(f.severity || 'LOW')}</span>
+          ${f.confidence ? `<span class="gym-conf-badge ${confClass}">${escHtml(f.confidence)}</span>` : ''}
         </div>
-        <div class="mt-rev-finding-doc">${escHtml(f.missingDocument || f.checkType || '')}</div>
-        ${f.comment ? `<div class="mt-rev-finding-comment">${escHtml(f.comment)}</div>` : ''}
-        ${sourceText ? `<div class="mt-rev-finding-evidence">📍 ${escHtml(sourceText)}</div>` : ''}
+
+        <div class="gym-excel-row">
+          <span class="gym-excel-label">Missing Document</span>
+          <span class="gym-excel-value gym-card-doc">${escHtml(f.missingDocument || 'N/A')}</span>
+        </div>
+
+        <div class="gym-excel-row">
+          <span class="gym-excel-label">Comment / Status</span>
+          <span class="gym-excel-value clamped gym-clamp-val">${escHtml(f.comment || '')}</span>
+        </div>
+
+        <div class="gym-excel-row">
+          <span class="gym-excel-label">Evidence</span>
+          <span class="gym-excel-value clamped gym-clamp-val gym-evidence-val">${escHtml(f.evidence || '')}</span>
+        </div>
+
+        ${f.howIFoundThis ? `<div class="gym-how-found">💡 ${escHtml(f.howIFoundThis)}</div>` : ''}
+
+        <div class="gym-card-actions">
+          <button class="gym-verdict-btn gym-verdict-correct" data-fid="${fid}">✅ Correct</button>
+          <button class="gym-verdict-btn gym-verdict-wrong"   data-fid="${fid}">❌ Wrong</button>
+        </div>
+        <div class="gym-card-comment" id="mt-comment-${fid}"></div>
+
+        <button class="gym-expand-btn" id="mt-exp-${fid}" data-fid="${fid}">▼ Show Todd's reasoning</button>
+        <div class="gym-reasoning-block hidden" id="mt-rb-${fid}">
+          ${f.triggerQuote ? `
+          <div class="gym-rb-section">
+            <div class="gym-rb-label">🔍 What triggered this finding</div>
+            <div class="gym-rb-quote">${escHtml(f.triggerQuote)}</div>
+          </div>` : ''}
+          ${f.reasoning ? `
+          <div class="gym-rb-section">
+            <div class="gym-rb-label">🧠 How Todd reasoned through it</div>
+            <div class="gym-rb-text">${escHtml(f.reasoning)}</div>
+          </div>` : ''}
+          ${checked ? `
+          <div class="gym-rb-section">
+            <div class="gym-rb-label">✔️ What Todd checked & eliminated</div>
+            <ul class="gym-rb-list">${checked}</ul>
+          </div>` : ''}
+        </div>
       </div>`
     }).join('')
 
-    // Wire approve/reject buttons — toggle data-fstate on the card row
-    findingsEl.querySelectorAll('.mt-fv-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const row = btn.closest('.mt-rev-finding-row')
-        const isApprove = btn.classList.contains('mt-fv-approve')
-        const cur  = row.dataset.fstate
-        const next = (isApprove && cur === 'approved') || (!isApprove && cur === 'rejected')
-          ? 'unset'
-          : isApprove ? 'approved' : 'rejected'
-        row.dataset.fstate = next
+    // Wire ✅ Correct / ❌ Wrong — same visual as TP2, stored on card class for mtLearnFromThis
+    findingsEl.querySelectorAll('.gym-verdict-correct').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation()
+        const card = document.getElementById(`mt-card-${btn.dataset.fid}`)
+        if (card) { card.className = 'gym-finding-card verdict-correct' }
+        btn.classList.add('active')
+        btn.closest('.gym-card-actions')?.querySelector('.gym-verdict-wrong')?.classList.remove('active')
       })
+    })
+    findingsEl.querySelectorAll('.gym-verdict-wrong').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation()
+        const card = document.getElementById(`mt-card-${btn.dataset.fid}`)
+        if (card) { card.className = 'gym-finding-card verdict-wrong' }
+        btn.classList.add('active')
+        btn.closest('.gym-card-actions')?.querySelector('.gym-verdict-correct')?.classList.remove('active')
+      })
+    })
+
+    // Wire expand/collapse reasoning
+    findingsEl.querySelectorAll('.gym-expand-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation()
+        const rb       = document.getElementById(`mt-rb-${btn.dataset.fid}`)
+        const expanded = rb?.classList.toggle('hidden') === false
+        btn.textContent = expanded ? '▲ Hide reasoning' : '▼ Show Todd\'s reasoning'
+      })
+    })
+
+    // Expand clamped values on click
+    findingsEl.querySelectorAll('.gym-clamp-val').forEach(el => {
+      el.addEventListener('click', e => { e.stopPropagation(); el.classList.toggle('expanded') })
     })
   }
 
@@ -9499,8 +9562,8 @@ function _mtReadVerdictConfirmations(bodyEl) {
 }
 
 /**
- * Read ✅/❌ states from the finding-card buttons in mt-rev-findings.
- * Returns arrays of finding labels that the trainer manually marked.
+ * Read ✅/❌ states from the gym-finding-card verdict classes in mt-rev-findings.
+ * Cards with class verdict-correct = approved; verdict-wrong = rejected (false positive).
  */
 function _mtReadManualFindingVerdicts() {
   const findingsEl = document.getElementById('mt-rev-findings')
@@ -9509,13 +9572,13 @@ function _mtReadManualFindingVerdicts() {
   const manualApproved = []
   const manualRejected = []
 
-  findingsEl.querySelectorAll('.mt-rev-finding-row[data-fstate]').forEach(row => {
-    const idx = parseInt(row.dataset.fidx, 10)
+  findingsEl.querySelectorAll('.gym-finding-card[data-fidx]').forEach(card => {
+    const idx = parseInt(card.dataset.fidx, 10)
     const f   = mtState.currentFindings[idx]
     if (!f) return
     const label = f.missingDocument || f.checkType || ''
-    if (row.dataset.fstate === 'approved') manualApproved.push(label)
-    if (row.dataset.fstate === 'rejected') manualRejected.push(label)
+    if (card.classList.contains('verdict-correct')) manualApproved.push(label)
+    if (card.classList.contains('verdict-wrong'))   manualRejected.push(label)
   })
 
   return { manualApproved, manualRejected }
