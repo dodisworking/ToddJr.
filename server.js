@@ -1708,9 +1708,11 @@ app.get('/api/gym/analyze', async (req, res) => {
       if (!aborted) emit('gym-progress', { percent, message })
     }
     // Gym mode uses the extended reasoning schema
-    // If this session has active learning juice rules (Target Practice), inject them
-    const juiceRules = session.targetJuiceRules || []
-    const result = await gymAnalyzeTenant(tenant, tenant.files, onProgress, { cheapMode: isCheapMode(req), juiceRules, preferredKeyIdx })
+    // If this session has active learning juice rules (Target Practice), inject them.
+    // Always inject active learnings so MT/gym sees the same trained model as the main hunt.
+    const juiceRules       = session.targetJuiceRules || []
+    const activeLearnings  = readLearnings().filter(l => l.active)
+    const result = await gymAnalyzeTenant(tenant, tenant.files, onProgress, { cheapMode: isCheapMode(req), juiceRules, activeLearnings, preferredKeyIdx })
 
     // Attach stable IDs to findings for feedback tracking
     const findingsWithIds = (result.findings || []).map((f, i) => ({ ...f, id: `finding-${i}` }))

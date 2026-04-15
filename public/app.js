@@ -9398,21 +9398,38 @@ function mtShowReviewPanel(data) {
   if (findings.length === 0) {
     findingsEl.innerHTML = '<div class="mt-rev-finding-empty">✨ Model found no issues in this folder.</div>'
   } else {
-    findingsEl.innerHTML = findings.map(f => {
+    findingsEl.innerHTML = findings.map((f, i) => {
       const sev = (f.severity || 'LOW').toUpperCase()
       const sevClass = sev === 'HIGH' ? 'mt-sev-high' : sev === 'MEDIUM' ? 'mt-sev-med' : 'mt-sev-low'
       // Show where finding was found — prefer howIFoundThis (plain English), fall back to evidence
       const sourceText = f.howIFoundThis || f.evidence || ''
-      return `<div class="mt-rev-finding-row">
+      return `<div class="mt-rev-finding-row" data-fidx="${i}" data-fstate="unset">
         <div class="mt-rev-finding-meta">
           <span class="mt-rev-finding-type">${escHtml(f.checkType || '')}</span>
           <span class="mt-rev-finding-sev ${sevClass}">${escHtml(sev)}</span>
+          <span class="mt-rev-fv-btns">
+            <button type="button" class="mt-fv-btn mt-fv-approve" title="Mark correct finding">✅</button>
+            <button type="button" class="mt-fv-btn mt-fv-reject"  title="Mark as false positive">❌</button>
+          </span>
         </div>
         <div class="mt-rev-finding-doc">${escHtml(f.missingDocument || f.checkType || '')}</div>
         ${f.comment ? `<div class="mt-rev-finding-comment">${escHtml(f.comment)}</div>` : ''}
         ${sourceText ? `<div class="mt-rev-finding-evidence">📍 ${escHtml(sourceText)}</div>` : ''}
       </div>`
     }).join('')
+
+    // Wire approve/reject buttons — toggle data-fstate on the card row
+    findingsEl.querySelectorAll('.mt-fv-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const row = btn.closest('.mt-rev-finding-row')
+        const isApprove = btn.classList.contains('mt-fv-approve')
+        const cur  = row.dataset.fstate
+        const next = (isApprove && cur === 'approved') || (!isApprove && cur === 'rejected')
+          ? 'unset'
+          : isApprove ? 'approved' : 'rejected'
+        row.dataset.fstate = next
+      })
+    })
   }
 
   mtShowButtons('gym-mt-check-btn', 'gym-mt-next-btn')
@@ -9479,6 +9496,29 @@ function _mtReadVerdictConfirmations(bodyEl) {
   })
 
   return { confirmedMissed, confirmedFPs, deniedCaught }
+}
+
+/**
+ * Read ✅/❌ states from the finding-card buttons in mt-rev-findings.
+ * Returns arrays of finding labels that the trainer manually marked.
+ */
+function _mtReadManualFindingVerdicts() {
+  const findingsEl = document.getElementById('mt-rev-findings')
+  if (!findingsEl) return { manualApproved: [], manualRejected: [] }
+
+  const manualApproved = []
+  const manualRejected = []
+
+  findingsEl.querySelectorAll('.mt-rev-finding-row[data-fstate]').forEach(row => {
+    const idx = parseInt(row.dataset.fidx, 10)
+    const f   = mtState.currentFindings[idx]
+    if (!f) return
+    const label = f.missingDocument || f.checkType || ''
+    if (row.dataset.fstate === 'approved') manualApproved.push(label)
+    if (row.dataset.fstate === 'rejected') manualRejected.push(label)
+  })
+
+  return { manualApproved, manualRejected }
 }
 
 /**
@@ -9639,15 +9679,20 @@ async function mtLearnFromThis() {
   const btn = document.getElementById('gym-mt-learn-btn')
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Teaching...' }
 
-  // Read trainer confirmations from the inline verdict body
+  // Read trainer confirmations from the inline verdict body (teacher path)
   const bodyEl = document.getElementById('mt-rev-verdict-body')
   const { confirmedMissed, confirmedFPs, deniedCaught } = bodyEl
     ? _mtReadVerdictConfirmations(bodyEl)
     : { confirmedMissed: [], confirmedFPs: [], deniedCaught: [] }
 
+  // Also read manual ✅/❌ verdicts the trainer clicked on finding cards
+  const { manualRejected } = _mtReadManualFindingVerdicts()
+
   // If trainer confirmed specific items, use those; otherwise fall back to all missed/fps
   const missedToTeach = confirmedMissed.length > 0 ? confirmedMissed : (comp.missed || [])
-  const fpsToTeach    = confirmedFPs.length    > 0 ? confirmedFPs    : (comp.falsePositives || [])
+  const teacherFPs    = confirmedFPs.length    > 0 ? confirmedFPs    : (comp.falsePositives || [])
+  // Merge teacher FPs with any finding cards the trainer manually marked ❌
+  const fpsToTeach    = [...new Set([...teacherFPs, ...manualRejected])]
 
   // Notes from the inline textarea
   const trainerNotes = (document.getElementById('mt-rev-notes')?.value || '').trim()
