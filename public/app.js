@@ -8998,9 +8998,21 @@ const mtState = {
   startingJuice:   null        // { id, name, rules } — optional juice model loaded at session start
 }
 
+const MT_BTN_DEFAULTS = {
+  'gym-mt-check-btn': '📞 Call Teacher',
+  'gym-mt-learn-btn': '🧑‍🏫 Have Teacher Teach',
+  'gym-mt-rerun-btn': '▶ Rerun With Rules',
+  'gym-mt-next-btn':  '⏩ Next Tenant',
+  'gym-mt-save-btn':  '💾 Save Refined Juice',
+}
+
 function mtHideAllButtons() {
-  ;['gym-mt-check-btn','gym-mt-learn-btn','gym-mt-rerun-btn','gym-mt-next-btn','gym-mt-save-btn'].forEach(id => {
-    document.getElementById(id)?.classList.add('hidden')
+  Object.entries(MT_BTN_DEFAULTS).forEach(([id, label]) => {
+    const el = document.getElementById(id)
+    if (!el) return
+    el.classList.add('hidden')
+    el.disabled   = false      // always reset so next show is fully clickable
+    el.textContent = label     // always reset so next show has the right label
   })
 }
 
