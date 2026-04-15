@@ -8229,7 +8229,10 @@ document.getElementById('gym-skip-btn').addEventListener('click', () => {
   gymJumpToFinding(next)
 })
 
-// ── PDF viewer ─────────────────────────────────────────────
+// ── PDF viewer — scrollable all-pages ─────────────────────
+// IntersectionObserver tracks which page is most visible as user scrolls
+let _gymPageObserver = null
+
 async function gymLoadDoc(fileIndex, goToPage = 1) {
   const file = gymState.files[fileIndex]
   if (!file || !file.isPDF) return
@@ -8264,6 +8267,9 @@ async function gymLoadDoc(fileIndex, goToPage = 1) {
     document.getElementById('gym-pdf-prev').disabled = false
     document.getElementById('gym-pdf-next').disabled = false
     document.getElementById('gym-pdf-hint').textContent = 'Drag to annotate in "Flag Area" mode'
+
+    // Render all pages stacked vertically
+    await gymRenderAllPages(gymState.pdfDoc)
     gymGoToPage(Math.min(goToPage, gymState.totalPages))
   } catch (err) {
     console.error('[gym PDF]', err)
@@ -8271,7 +8277,92 @@ async function gymLoadDoc(fileIndex, goToPage = 1) {
   }
 }
 
-async function gymGoToPage(pageNum) {
+// Render every page of the PDF as stacked canvases inside gym-canvas-wrap
+async function gymRenderAllPages(pdfDoc) {
+  const wrap = document.getElementById('gym-canvas-wrap')
+  const overlay = document.getElementById('gym-anno-overlay')
+  const total = pdfDoc.numPages
+
+  // Disconnect old observer before rebuilding
+  if (_gymPageObserver) { _gymPageObserver.disconnect(); _gymPageObserver = null }
+
+  // Clear existing page canvases (keep overlay and anno-rect elements)
+  Array.from(wrap.querySelectorAll('canvas[data-page-num]')).forEach(c => c.remove())
+
+  const scale = 1.4
+  const viewport = document.getElementById('gym-pdf-viewport')
+
+  // Render pages sequentially and insert before the overlay
+  for (let i = 1; i <= total; i++) {
+    const page = await pdfDoc.getPage(i)
+    const vp   = page.getViewport({ scale })
+
+    const canvas = document.createElement('canvas')
+    canvas.width  = vp.width
+    canvas.height = vp.height
+    canvas.setAttribute('data-page-num', i)
+    canvas.style.display = 'block'
+    canvas.style.maxWidth = '100%'
+    canvas.style.border = '1px solid var(--border)'
+    canvas.style.borderRadius = '4px'
+    canvas.style.boxShadow = '0 4px 24px rgba(0,0,0,0.6)'
+    canvas.style.marginBottom = '12px'
+
+    // Insert before the overlay so overlay stays on top
+    wrap.insertBefore(canvas, overlay)
+
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise
+  }
+
+  // Also keep the legacy #gym-pdf-canvas in sync for annotation cropping:
+  // point it to page 1 initially (will be updated by scroll observer)
+  const legacyCanvas = document.getElementById('gym-pdf-canvas')
+  if (legacyCanvas) {
+    const firstCanvas = wrap.querySelector('canvas[data-page-num="1"]')
+    if (firstCanvas) {
+      legacyCanvas.width  = firstCanvas.width
+      legacyCanvas.height = firstCanvas.height
+      legacyCanvas.getContext('2d').drawImage(firstCanvas, 0, 0)
+    }
+    legacyCanvas.style.display = 'none'  // hidden — only used for annotation cropping
+  }
+
+  // IntersectionObserver: keep gymState.currentPage and page indicator updated as user scrolls
+  const pageInfoEl = document.getElementById('gym-pdf-pageinfo')
+  _gymPageObserver = new IntersectionObserver(entries => {
+    let best = null, bestRatio = 0
+    entries.forEach(e => {
+      if (e.intersectionRatio > bestRatio) { bestRatio = e.intersectionRatio; best = e.target }
+    })
+    if (best) {
+      const p = parseInt(best.getAttribute('data-page-num'))
+      if (p && p !== gymState.currentPage) {
+        gymState.currentPage = p
+        pageInfoEl.textContent = `${p} / ${total}`
+        document.getElementById('gym-pdf-prev').disabled = p <= 1
+        document.getElementById('gym-pdf-next').disabled = p >= total
+        // Keep legacy canvas in sync for annotation
+        const legacyC = document.getElementById('gym-pdf-canvas')
+        if (legacyC) {
+          legacyC.width  = best.width
+          legacyC.height = best.height
+          legacyC.getContext('2d').drawImage(best, 0, 0)
+        }
+      }
+    }
+  }, { root: viewport, threshold: [0, 0.25, 0.5, 0.75, 1.0] })
+
+  wrap.querySelectorAll('canvas[data-page-num]').forEach(c => _gymPageObserver.observe(c))
+
+  // Set initial page indicator
+  gymState.currentPage = 1
+  pageInfoEl.textContent = `1 / ${total}`
+  document.getElementById('gym-pdf-prev').disabled = true
+  document.getElementById('gym-pdf-next').disabled = total <= 1
+}
+
+// Scroll to a specific page
+function gymGoToPage(pageNum) {
   if (!gymState.pdfDoc) return
   const total = gymState.totalPages
   pageNum = Math.max(1, Math.min(pageNum, total))
@@ -8280,24 +8371,11 @@ async function gymGoToPage(pageNum) {
   document.getElementById('gym-pdf-prev').disabled = pageNum <= 1
   document.getElementById('gym-pdf-next').disabled = pageNum >= total
 
-  try {
-    const page  = await gymState.pdfDoc.getPage(pageNum)
-    const scale = 1.4
-    const vp    = page.getViewport({ scale })
-
-    // Render to offscreen canvas first — eliminates blank flash on the display canvas
-    const offscreen = document.createElement('canvas')
-    offscreen.width  = vp.width
-    offscreen.height = vp.height
-    await page.render({ canvasContext: offscreen.getContext('2d'), viewport: vp }).promise
-
-    // Swap onto the visible canvas in one synchronous step — instant, no flicker
-    const canvas = document.getElementById('gym-pdf-canvas')
-    canvas.width  = vp.width
-    canvas.height = vp.height
-    canvas.getContext('2d').drawImage(offscreen, 0, 0)
-  } catch (err) {
-    console.error('[gym render page]', err)
+  // Scroll the target canvas into view
+  const wrap = document.getElementById('gym-canvas-wrap')
+  const target = wrap ? wrap.querySelector(`canvas[data-page-num="${pageNum}"]`) : null
+  if (target) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 }
 
@@ -8453,13 +8531,30 @@ function _gymFinishDraw(clientX, clientY) {
   const h  = Math.abs((clientY - overlayRect.top)  - _gymAnnoY0)
   if (w < 10 || h < 10) { _gymRect.classList.add('hidden'); return }
 
-  // ── Crop the exact area from the live PDF canvas ──────────
-  // The overlay wraps the canvas directly (same parent, inset:0 → overlay ≡ canvas bounds).
-  // Drag coords are relative to overlay top-left which equals canvas top-left → offset = 0.
-  const canvasEl = document.getElementById('gym-pdf-canvas')
+  // ── Crop the exact area from the correct page canvas ──────
+  // In scrollable mode, find which page canvas the drag started on by
+  // comparing the drag y1 (overlay-relative) to each page canvas's position.
+  const wrap = document.getElementById('gym-canvas-wrap')
+  const wrapRect = wrap ? wrap.getBoundingClientRect() : overlayRect
+  const pageCanvases = wrap ? Array.from(wrap.querySelectorAll('canvas[data-page-num]')) : []
+
+  // Find the page canvas that contains the drag start point (absolute clientY)
+  const absY1 = y1 + overlayRect.top   // convert overlay-relative → absolute
+  let canvasEl = null, annoPageNum = gymState.currentPage
+  for (const c of pageCanvases) {
+    const cr2 = c.getBoundingClientRect()
+    if (absY1 >= cr2.top && absY1 <= cr2.bottom) {
+      canvasEl = c
+      annoPageNum = parseInt(c.getAttribute('data-page-num')) || gymState.currentPage
+      break
+    }
+  }
+  // Fallback: use the legacy hidden canvas (mirrors current page)
+  if (!canvasEl) canvasEl = document.getElementById('gym-pdf-canvas')
+
   const cr = canvasEl.getBoundingClientRect()
 
-  // Overlay sits directly on canvas; compute residual offset (should be ~0)
+  // Overlay sits directly on canvas-wrap; compute offset of this canvas from overlay origin
   const canvasOffX = cr.left - overlayRect.left
   const canvasOffY = cr.top  - overlayRect.top
 
@@ -8496,7 +8591,7 @@ function _gymFinishDraw(clientX, clientY) {
   gymState.pendingAnno = {
     docIdx:      gymState.currentDocIdx,
     docName:     file ? file.name : 'Unknown',
-    pageNum:     gymState.currentPage,
+    pageNum:     annoPageNum,
     cropDataUrl,   // base64 PNG of the flagged area
     normRect,      // normalised position on the page (for AI context)
   }

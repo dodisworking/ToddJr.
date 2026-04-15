@@ -4086,12 +4086,15 @@ input:checked + .toggle-slider:before { transform:translateX(22px); background:#
   background: var(--card2);
 }
 
-/* ── Canvas wrapper (gives overlay a scrolling positioned ancestor) ── */
+/* ── Canvas wrapper — scrollable all-pages stacked vertically ── */
 #gym-canvas-wrap {
   position: relative;
-  display: inline-block;
-  line-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   align-self: flex-start;
+  width: 100%;
+  line-height: 0;
 }
 
 /* ── Annotation overlay ───────────────────────────────────── */
