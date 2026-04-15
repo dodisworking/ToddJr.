@@ -9288,8 +9288,11 @@ function mtShowReviewPanel(data) {
   gymShowPanel('mt-review')
   mtUpdateHeader()
 
-  // Hide verdict until teacher is called
+  // Hide verdict + notes until teacher is called; clear previous notes
   document.getElementById('mt-rev-verdict')?.classList.add('hidden')
+  document.getElementById('mt-rev-notes-wrap')?.classList.add('hidden')
+  const notesEl = document.getElementById('mt-rev-notes')
+  if (notesEl) notesEl.value = ''
   const scoreBadge = document.getElementById('mt-rev-score-badge')
   if (scoreBadge) { scoreBadge.textContent = ''; scoreBadge.className = 'mt-rev-score-badge' }
 
@@ -9372,6 +9375,9 @@ function mtRenderVerdict(data) {
   }
 
   verdictEl.classList.remove('hidden')
+  // Show manual notes field (only useful when there are errors to explain)
+  const notesWrap = document.getElementById('mt-rev-notes-wrap')
+  if (notesWrap) notesWrap.classList.remove('hidden')
   // Scroll verdict into view
   verdictEl.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
@@ -9384,6 +9390,9 @@ async function mtLearnFromThis() {
   const btn = document.getElementById('gym-mt-learn-btn')
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Teaching...' }
 
+  // Pick up any manual notes the trainer typed
+  const trainerNotes = (document.getElementById('mt-rev-notes')?.value || '').trim()
+
   try {
     const res = await fetch(sameOriginApi('/api/mt/synthesize'), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -9392,6 +9401,7 @@ async function mtLearnFromThis() {
         missed:         comp.missed         || [],
         falsePositives: comp.falsePositives || [],
         analysis:       comp.analysis       || '',
+        trainerNotes,
         currentRules:   mtState.currentRules
       })
     })

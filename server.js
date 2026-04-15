@@ -2356,11 +2356,14 @@ app.post('/api/mt/compare', express.json({ limit: '500kb' }), async (req, res) =
 // POST /api/mt/synthesize — generate juice rules from comparison errors
 app.post('/api/mt/synthesize', express.json({ limit: '500kb' }), async (req, res) => {
   try {
-    const { tenantName, missed = [], falsePositives = [], analysis = '', currentRules = [] } = req.body
+    const { tenantName, missed = [], falsePositives = [], analysis = '', trainerNotes = '', currentRules = [] } = req.body
+
+    // Combine AI analysis with any manual trainer notes
+    const fullAnalysis = [analysis, trainerNotes ? `\nTRAINER'S OWN NOTES: ${trainerNotes}` : ''].filter(Boolean).join('')
 
     // Format missed items as annotations (things the model didn't catch)
     const annotations = missed.map(item => ({
-      comment: `MISSED: ${item}  |  Root cause analysis: ${analysis.slice(0, 300)}`,
+      comment: `MISSED: ${item}  |  Root cause analysis: ${fullAnalysis.slice(0, 500)}`,
       docName: tenantName,
       pageNum: ''
     }))
@@ -2368,10 +2371,10 @@ app.post('/api/mt/synthesize', express.json({ limit: '500kb' }), async (req, res
     // Format false positives as rejected findings
     const rejectedFindings = falsePositives.map(f => ({
       checkType:       f.checkType || 'UNKNOWN',
-      missingDocument: f.missingDocument || f.description || '',
+      missingDocument: typeof f === 'string' ? f : (f.missingDocument || f.description || ''),
       evidence:        f.evidence || '',
       comment:         f.comment || '',
-      reviewerNote:    `False positive — model incorrectly flagged this. ${analysis.slice(0, 200)}`
+      reviewerNote:    `False positive — model incorrectly flagged this. ${fullAnalysis.slice(0, 300)}`
     }))
 
     const result = await synthesizeActiveLearning({
