@@ -9219,8 +9219,9 @@ async function mtRunTenant(idx) {
 
   await mtGymRegisterLocalFiles(tenant.id)
 
+  // MT always uses the full model — never pass cheapQs() here (same as TP2)
   const url = sameOriginApi(
-    `/api/gym/analyze?sessionId=${encodeURIComponent(mtState.sessionId)}&tenantId=${encodeURIComponent(tenant.id)}${cheapQs()}`
+    `/api/gym/analyze?sessionId=${encodeURIComponent(mtState.sessionId)}&tenantId=${encodeURIComponent(tenant.id)}`
   )
   if (state.eventSource) { state.eventSource.close() }
   const es = new EventSource(url)
@@ -9611,8 +9612,9 @@ async function mtRerun() {
 
   await mtGymRegisterLocalFiles(tenant.id)
 
+  // MT always uses the full model — never pass cheapQs() here (same as TP2)
   const url = sameOriginApi(
-    `/api/gym/analyze?sessionId=${encodeURIComponent(mtState.sessionId)}&tenantId=${encodeURIComponent(tenant.id)}${cheapQs()}`
+    `/api/gym/analyze?sessionId=${encodeURIComponent(mtState.sessionId)}&tenantId=${encodeURIComponent(tenant.id)}`
   )
   if (state.eventSource) { state.eventSource.close() }
   const es = new EventSource(url)
