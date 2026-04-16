@@ -248,6 +248,13 @@ const LAUREN_REVIEW_SEED = [
     createdAt: '2026-04-15T00:00:00.000Z',
     suggestion: "Do not generate findings about special rights or provisions that have been deleted, superseded, or removed by subsequent amendments. If a renewal option, exclusivity clause, or other special right that appeared in an earlier lease document has been explicitly deleted by a later amendment, this is not a finding — the deletion is intentional. Only flag the absence of special rights documents when those rights are currently operative.",
     rationale: "Finding 72 rejected — reviewer: 'This does not need to be noted.' Reporting deleted rights is informational noise."
+  },
+  {
+    id: 'learning-1775100000001-dup001', source: 'manual-training-2026-04-16', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-04-16T00:00:00.000Z',
+    suggestion: "When you find BOTH of these conditions for the same amendment: (1) the amendment document in the folder has completely blank 'By:' signature lines for both parties (unexecuted template), AND (2) one or more later amendments in the folder reference that same amendment as having been executed on a specific date — do NOT generate two separate findings. Generate exactly ONE consolidated REFERENCED_DOC finding that combines both pieces of evidence. The finding should state: (a) what was received — an unexecuted template with blank signature lines, (b) what later amendments confirm — that the executed version exists, citing the specific recital language and date, and (c) the conclusion — the signed counterpart is absent from the folder. DO NOT also generate a separate EXECUTION finding for the same amendment in this scenario. Two findings for the same document gap is redundant noise.",
+    rationale: "Manual training 4/16/2026 (Monterey Bay Homes). Model generated 4 findings for 2 amendments: unexecuted Amendment 3 template (EXECUTION) + signed Amendment 3 missing per recitals (REFERENCED_DOC) = same gap, two findings. Correct behavior: one consolidated REFERENCED_DOC finding per amendment combining both pieces of evidence."
   }
 ]
 
