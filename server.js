@@ -2542,34 +2542,63 @@ app.post('/api/mt/compare', express.json({ limit: '500kb' }), async (req, res) =
 // POST /api/mt/synthesize — generate juice rules from comparison errors
 app.post('/api/mt/synthesize', express.json({ limit: '500kb' }), async (req, res) => {
   try {
-    const { tenantName, missed = [], falsePositives = [], caught = [], analysis = '', trainerNotes = '', currentRules = [] } = req.body
+    const { tenantName, missed=[], falsePositives=[], caught=[], analysis='', trainerNotes='', currentRules=[], currentFindings=[] } = req.body
 
-    // Combine AI analysis with any manual trainer notes
     const fullAnalysis = [analysis, trainerNotes ? `\nTRAINER'S OWN NOTES: ${trainerNotes}` : ''].filter(Boolean).join('')
 
-    // Format missed items as annotations (things the model didn't catch)
+    // Helper: find the actual gym finding matching a text label (from teacher comparison)
+    function findGymFinding(label) {
+      if (!label || !currentFindings.length) return null
+      const norm = s => String(s || '').toLowerCase().replace(/\s+/g,' ').trim()
+      const target = norm(label)
+      // exact match on missingDocument
+      let hit = currentFindings.find(f => norm(f.missingDocument) === target)
+      // fuzzy: one contains the other
+      if (!hit) hit = currentFindings.find(f => {
+        const doc = norm(f.missingDocument)
+        return doc.length > 8 && (target.includes(doc) || doc.includes(target))
+      })
+      return hit || null
+    }
+
+    // Build rejectedFindings with full reasoning chains from actual findings
+    const rejectedFindings = falsePositives.map(fp => {
+      const label = typeof fp === 'string' ? fp : (fp.missingDocument || fp.description || '')
+      const gymF  = findGymFinding(label)
+      return {
+        checkType:            gymF?.checkType       || (fp.checkType || 'UNKNOWN'),
+        missingDocument:      label,
+        evidence:             gymF?.evidence        || fp.evidence || '',
+        comment:              gymF?.comment         || fp.comment  || '',
+        triggerQuote:         gymF?.triggerQuote    || '',  // EXACT text that made the AI fire
+        reasoning:            gymF?.reasoning       || '',  // AI's step-by-step logic chain
+        checkedAndEliminated: gymF?.checkedAndEliminated || [],  // what AI verified before flagging
+        howIFoundThis:        gymF?.howIFoundThis   || '',  // plain-English signal summary
+        confidence:           gymF?.confidence      || '',
+        reviewerNote:         `False positive — model incorrectly flagged this. ${fullAnalysis.slice(0,300)}`
+      }
+    })
+
+    // Annotations for missed items
     const annotations = missed.map(item => ({
       comment: `MISSED: ${item}  |  Root cause analysis: ${fullAnalysis.slice(0, 500)}`,
       docName: tenantName,
       pageNum: ''
     }))
 
-    // Format false positives as rejected findings
-    const rejectedFindings = falsePositives.map(f => ({
-      checkType:       f.checkType || 'UNKNOWN',
-      missingDocument: typeof f === 'string' ? f : (f.missingDocument || f.description || ''),
-      evidence:        f.evidence || '',
-      comment:         f.comment || '',
-      reviewerNote:    `False positive — model incorrectly flagged this. ${fullAnalysis.slice(0, 300)}`
-    }))
-
-    // Pass confirmed (correctly caught) findings so synthesis doesn't write rules that suppress them
-    const confirmedFindings = caught.map(c => ({
-      checkType:       'CONFIRMED',
-      missingDocument: typeof c === 'string' ? c : (c.missingDocument || c.description || c),
-      evidence:        '',
-      comment:         'Model found this correctly — do NOT create rules that would suppress or narrow this finding type.'
-    }))
+    // Confirmed findings with reasoning
+    const confirmedFindings = caught.map(c => {
+      const label = typeof c === 'string' ? c : (c.missingDocument || c.description || c)
+      const gymF  = findGymFinding(label)
+      return {
+        checkType:       gymF?.checkType    || 'CONFIRMED',
+        missingDocument: label,
+        evidence:        gymF?.evidence     || '',
+        triggerQuote:    gymF?.triggerQuote || '',
+        reasoning:       gymF?.reasoning    || '',
+        comment: 'Model found this correctly — do NOT create rules that would suppress or narrow this finding type.'
+      }
+    })
 
     const result = await synthesizeActiveLearning({
       rejectedFindings,

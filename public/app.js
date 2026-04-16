@@ -9736,7 +9736,8 @@ async function mtLearnFromThis() {
         caught:         comp.caught || [],   // tell synthesis what was already working — don't suppress these
         analysis:       comp.analysis || '',
         trainerNotes,
-        currentRules:   mtState.currentRules
+        currentRules:   mtState.currentRules,
+        currentFindings: mtState.currentFindings   // ADD THIS LINE
       })
     })
     const data = await res.json()
