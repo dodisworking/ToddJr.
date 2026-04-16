@@ -78,6 +78,190 @@ function writeLearnings(arr) {
   try { fs.writeFileSync(LEARNINGS_PATH, JSON.stringify(arr, null, 2)) } catch {}
 }
 
+// ─── Startup Seed: lawyer-validated rules from Lauren's 4/14/2026 TP2 review ───
+// These are idempotent: rules are only added if their ID is not already present.
+const LAUREN_REVIEW_SEED = [
+  {
+    id: 'learning-1775000000001-mp001', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'MISSING_PAGES', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "When a page number sequence gap is detected in a document's printed page numbers, do NOT flag it as missing pages without first reading the full document to confirm an actual content gap. Apparent jumps in printed page numbers are extremely common and are caused by: dual numbering systems (per-section numbers alongside overall document numbers), cover pages and exhibit separator pages that are unnumbered, blank back pages from physical multi-page documents, page numbering that restarts within exhibits or attachments, and OCR misreads of page numbers due to scan artifacts. A printed page number jump from N to N+X is only a valid Missing Pages finding when you have read the surrounding content and can confirm the document text is discontinuous — meaning a sentence, section, or clause is clearly cut off mid-thought. If the document reads continuously and coherently despite the number gap, do not generate a Missing Pages finding.",
+    rationale: "Synthesized from 20+ rejected findings across 12 tenants — in every case the reviewer confirmed no pages were actually missing despite the model flagging page number gaps."
+  },
+  {
+    id: 'learning-1775000000002-lc002', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'LEASE_CURRENCY', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "Never generate a finding that states a lease is current, active, or in good standing. The only valid Lease Currency findings are: (1) the lease is EXPIRED — the controlling end date is in the past and no extension document in the folder establishes a later date, OR (2) a document extending the term appears to be missing — e.g., the rent roll shows a later expiration date than any document in the folder can support. A confirmatory note saying 'the lease is current through [date]' is not a finding and must not be generated. Silence means current.",
+    rationale: "Findings 3, 7, 22, 44, 54, 66, 92 all rejected — reviewer confirmed 'This is correct but does not need to be noted.'"
+  },
+  {
+    id: 'learning-1775000000003-nm003', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'NAME_MISMATCH', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "Never generate a Name Mismatch finding based on any difference between a folder label, file name, or external label and the legal entity name inside the document. Folder names and file names are assigned by the client and are almost never exact matches to legal entity names — this is expected and acceptable. The only relevant identity check is whether documents within the folder are consistent with each other; trade names, d/b/a abbreviations, entity conversions, and common shorthand are always acceptable variations.",
+    rationale: "Findings 4, 57, 86, 98 rejected — reviewer: 'Folder names are rarely exact matches to Lease docs. This is irrelevant.'"
+  },
+  {
+    id: 'learning-1775000000004-ar004', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "When a folder contains an Amended and Restated Lease that sets out full lease terms, do NOT flag the original lease or any amendments predating the Amended and Restated Lease as missing documents. An Amended and Restated Lease supersedes and replaces the original lease and all prior amendments — those earlier documents are intentionally absent because they have been folded into the A&R Lease. Only track the amendment sequence beginning after the Amended and Restated Lease's execution date.",
+    rationale: "Findings 13, 14, 15, 42 rejected — reviewer: 'If there is an Amended and Restated Lease that contains full Lease terms, this is considered the Lease. We don't need the old Lease.'"
+  },
+  {
+    id: 'learning-1775000000005-ex005', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "When a signature block contains a pre-printed name that has been crossed out (struck through) and replaced with a different handwritten or typed name and an accompanying signature, this is a VALID and fully executed signature block — do not flag it as an execution issue. Crossing out a pre-populated form name and writing a replacement is standard practice when correcting pre-filled documents; the result is a complete execution. Similarly, a blank 'Name:' or 'Printed Name:' line below a signature line is NOT an execution defect — a signature in the 'By:' field is legally sufficient. Only flag execution issues when the signature field ('By:' line) itself is blank or visibly unsigned.",
+    rationale: "Findings 1 and 16 rejected — reviewer confirmed cross-outs and blank Name lines are fine when a signature is present."
+  },
+  {
+    id: 'learning-1775000000006-ex006', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "Do not flag a document as unexecuted or questionably executed based solely on signature size, penmanship quality, or visual appearance. A small, abbreviated, stylized, or difficult-to-read signature is legally valid. Only flag execution issues when the signature space ('By:' field) is visibly blank or empty. Missing initials at the bottom of pages are NEVER an execution defect — initials are not required. Do not flag missing initials on any document.",
+    rationale: "Findings 10, 17, 26 rejected — reviewer: 'It's ok if they're small' and 'We don't need initials here.'"
+  },
+  {
+    id: 'learning-1775000000007-ex007', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "Exhibits embedded in or attached to a lease — such as Exhibit A (site plan), Exhibit B (work letter), Memorandum of Lease forms, Collateral Assignment forms, SNDA forms, or any other form exhibit — do NOT need to be executed. The ONLY exhibit type that must be verified for execution is a Guaranty of Lease (or Guaranty of License). For all other exhibit types, verify only that the exhibit is present as a form; execution is not required and must not be flagged. Do not flag the Certificate of Substantial Completion or any construction-related exhibit for execution either.",
+    rationale: "Findings 34, 38, 80, 90 all rejected — reviewer: 'The only Exhibit we usually need executed are Guaranties.'"
+  },
+  {
+    id: 'learning-1775000000008-ex008', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "When reviewing execution of a document and the entity name in the signature block differs slightly from the entity name elsewhere in the document (abbreviation, punctuation, d/b/a variation, or minor spelling difference), this is NOT an execution defect. Minor entity name variations within signature blocks are common and acceptable. Only flag an execution issue for an entity name discrepancy if the entity in the signature block appears to be a completely different and unrelated entity.",
+    rationale: "Finding 5 rejected — reviewer: 'This doesn't matter.' Entity name minor variations in signature blocks are not execution defects."
+  },
+  {
+    id: 'learning-1775000000009-sn009', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'SPECIAL_AGREEMENT', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "Never flag a Subordination, Non-Disturbance and Attornment Agreement (SNDA) as a missing document, a missing exhibit, or as requiring execution. SNDAs are not used or required in this lease abstracting practice. Whether an SNDA is present, absent, executed, or unexecuted — and whether or not one is referenced in the lease — must never generate a finding of any kind.",
+    rationale: "Findings 35, 89, 91, 96 all rejected — reviewer: 'We don't need SNDA Agreements' and 'We do not use SNDA in abstracting. It's not needed.'"
+  },
+  {
+    id: 'learning-1775000000010-oos010', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "The following document types are NEVER in scope for this lease abstracting practice and must never be flagged as missing regardless of whether they are referenced in the lease or absent from the folder: (1) Certificates of Insurance (COI), (2) HVAC Maintenance Contracts, (3) Pest Control Contracts, (4) Business Licenses, (5) Building Permits, (6) City Development Orders / Certifications of Ownership, (7) Broker Commission Agreements / Lease Commission Agreements / Broker Acknowledgment pages. If any of these appear in a folder, do not generate a finding about their presence or absence.",
+    rationale: "Findings 56, 69, 70, 71, 83, 84, 85, 88 all rejected for these out-of-scope document types."
+  },
+  {
+    id: 'learning-1775000000011-ca011', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "Collateral Assignments of Lease and their attached exhibits are not required for lease abstracting. Do not flag a Collateral Assignment as a missing document, do not flag the exhibits to a Collateral Assignment (such as an attached copy of the lease) as missing, and do not flag the Collateral Assignment form embedded as an exhibit within the lease for execution. If a Collateral Assignment is present, that is fine — simply confirm it exists. Do not generate any findings about its content, execution, or attached materials.",
+    rationale: "Findings 80, 81 rejected — reviewer: 'We don't usually need Collateral Assignments for abstracting.'"
+  },
+  {
+    id: 'learning-1775000000012-ag012', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'AMENDMENT_GAP', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "If two documents in a folder are both labeled with the same amendment number (e.g., two documents both described as 'Fourth Amendment'), this is NOT an amendment gap and must not be flagged as a missing document. Duplicate amendment numbers typically reflect a correction, supersession, or restated version of the same amendment. Do not flag the sequence as incomplete or raise a clarification request simply because two documents share the same amendment number label.",
+    rationale: "Finding 25 rejected — reviewer: 'This is ok and not considered a missing document.'"
+  },
+  {
+    id: 'learning-1775000000013-ag013', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'AMENDMENT_GAP', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "If the amendment chain is complete and unbroken, do NOT generate any finding about it — not even a confirmatory or 'all clear' note. Amendment Gap findings must only be generated when a specific amendment is actually missing from the folder. Do not surface informational notes confirming completeness.",
+    rationale: "Finding 23 rejected — reviewer: 'This is correct, but we don't need it noted.'"
+  },
+  {
+    id: 'learning-1775000000014-est014', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'SPECIAL_AGREEMENT', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "Estoppel Certificates do not need to be signed by the landlord or lender — only the certifying party's signature (typically the tenant) is required. Do not flag an Estoppel Certificate for missing landlord execution, lender execution, or any other countersignature. If the certifying party has signed, the document is complete.",
+    rationale: "Finding 20 rejected — reviewer: 'Estoppels don't need to be signed.'"
+  },
+  {
+    id: 'learning-1775000000015-gty015', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'GUARANTY', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "A Guaranty of Lease is fully and validly executed when the guarantor's signature is present in the signature ('By:') field. Do not flag a Guaranty as defectively executed because it lacks a notary acknowledgment, notary stamp, witness signatures, or witness lines. The presence of the guarantor's signature alone is sufficient execution. Additionally, when a Guaranty is present and signed, do NOT generate any findings about its scope, coverage period, which amendments it does or does not cover, or other informational details. The only Guaranty findings should be: (1) the Guaranty is absent and should be present, or (2) the Guaranty is present but the signature field is blank.",
+    rationale: "Findings 87 and 97 rejected — notary absence and scope notes are not defects."
+  },
+  {
+    id: 'learning-1775000000016-leg016', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'LEGIBILITY', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "Only flag a document for legibility if the content critical to the analysis — party names, key dates, signature fields, or operative terms — is genuinely impossible to read and cannot be determined from surrounding context. Do not flag legibility issues for: scan shadows covering part of a page but leaving key content readable, textured or patterned backgrounds, photocopy artifacts overlaid with DocuSign formatting, dark smudges on non-critical portions of a page, or any condition where signatures and printed names can still be identified even with difficulty. The threshold for a legibility finding is that information essential to the analysis is truly and completely undecipherable.",
+    rationale: "Findings 9, 48, 53, 60, 64 all rejected — reviewers confirmed documents were readable despite scan artifacts."
+  },
+  {
+    id: 'learning-1775000000017-gen017', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'GENERAL', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "Never generate informational, confirmatory, or 'all clear' findings. Every finding must identify an actual gap, defect, or document that is genuinely missing or defective. Do not surface notes confirming: that a lease is current, that an amendment chain is complete, that a particular document type is present and executed, or any other positive confirmation. If a check reveals everything is in order for a particular check type, generate no finding for that check type.",
+    rationale: "13 separate findings rejected as 'correct but does not need to be noted.' Findings are only for problems."
+  },
+  {
+    id: 'learning-1775000000018-gen018', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'GENERAL', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "File names (the names assigned to PDF files) are completely irrelevant to the analysis. A document's identity, date, type, amendment number, and parties must be determined solely by reading the document's own title, header, recitals, and signature block — not by what the file is named. Never flag a discrepancy between a file name and the document's internal content. Never exclude a document from analysis based on its file name.",
+    rationale: "Finding 31 rejected — reviewer: 'File names are irrelevant because they can be named anything. We go by what the document inside the file says.'"
+  },
+  {
+    id: 'learning-1775000000019-fa019', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "Franchise Agreements are generally not required for this lease abstracting practice and must not be flagged as missing. Do not flag the absence of a Franchise Agreement as a finding even when the tenant operates under a franchise brand or when a Franchise Agreement is referenced in a lease document.",
+    rationale: "Findings 82 and 94 rejected — Franchise Agreements are out of scope for standard abstracting."
+  },
+  {
+    id: 'learning-1775000000020-ex020', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'MISSING_EXHIBIT', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "Sub-exhibits — documents referenced within an exhibit rather than directly in the lease (such as 'Exhibit A-1' within Exhibit D, or 'Exhibit A (WARRANTIES)' within Exhibit A) — are generally not required for abstracting and their absence should not generate a Missing Exhibit finding. If the parent exhibit is present and functional, sub-exhibits within it do not need to be separately present. Only flag a sub-exhibit as missing if the parent exhibit itself is materially incomplete without it.",
+    rationale: "Findings 33, 46, 59 all rejected — reviewer: 'It's usually ok if the Exhibit to the Exhibit is missing' and 'We dont usually need sub exhibits.'"
+  },
+  {
+    id: 'learning-1775000000021-noc021', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "Do not flag a Notice of Commencement as a missing document. Notice of Commencement documents (including those required under Florida Statute 713.13 or equivalent statutes) are not included in this lease abstracting practice.",
+    rationale: "Finding 21 rejected — reviewer: 'This is not considered a missing document.'"
+  },
+  {
+    id: 'learning-1775000000022-ren022', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "When a tenant has exercised a lease renewal or extension option via an informal document (email, letter, or notice) rather than a formal executed amendment, this is acceptable — do not flag the absence of a formal Lease Renewal Amendment or Lease Commencement Notice as a missing document. An informal renewal exercise letter or email is sufficient evidence of the option exercise.",
+    rationale: "Finding 93 rejected — reviewer: 'This is ok.' Informal renewal exercises are valid."
+  },
+  {
+    id: 'learning-1775000000023-cog023', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'GUARANTY', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "When reviewing a Consent of Guarantor page attached to an amendment: if the signature block is present and a signature appears in it, the document is fully executed — do not flag it for missing execution. Only flag a Consent of Guarantor if its signature block is completely blank or if the document is entirely absent from the folder.",
+    rationale: "Findings 27 and 55 rejected — reviewer confirmed both were executed."
+  },
+  {
+    id: 'learning-1775000000024-sa024', source: 'lauren-review-2026-04-14', active: true,
+    checkType: 'SPECIAL_AGREEMENT', confidence: 'HIGH',
+    createdAt: '2026-04-15T00:00:00.000Z',
+    suggestion: "Do not generate findings about special rights or provisions that have been deleted, superseded, or removed by subsequent amendments. If a renewal option, exclusivity clause, or other special right that appeared in an earlier lease document has been explicitly deleted by a later amendment, this is not a finding — the deletion is intentional. Only flag the absence of special rights documents when those rights are currently operative.",
+    rationale: "Finding 72 rejected — reviewer: 'This does not need to be noted.' Reporting deleted rights is informational noise."
+  }
+]
+
+function seedLaurensLearnings() {
+  const existing = readLearnings()
+  const existingIds = new Set(existing.map(l => l.id))
+  const toAdd = LAUREN_REVIEW_SEED.filter(l => !existingIds.has(l.id))
+  if (toAdd.length > 0) {
+    writeLearnings([...existing, ...toAdd])
+    console.log(`[learnings] Seeded ${toAdd.length} lawyer-validated rules from Lauren's 4/14/2026 TP2 review`)
+  }
+}
+seedLaurensLearnings()
+
 /** Persist full Dr. Todd synthesis reports on disk (Railway outputs volume). */
 function appendDrToddReportArchive({ tenantName, folderName, reportText, sessionId }) {
   try {
