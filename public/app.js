@@ -1896,17 +1896,20 @@ function updateHud() {
 }
 
 /** Estimate how many Claude batches this tenant will need.
- *  Mirrors analyzer.js buildBatches: sorts largest files first, then greedy-packs. */
+ *  Mirrors analyzer.js buildBatches: sorts largest files first, then greedy-packs.
+ *  Oversized PDFs (>32MB) are split into page-range chunks server-side — each
+ *  chunk counts as its own batch (ceil(sizeBytes / 32MB) chunks per oversized file). */
 function predictBatches(files) {
   const BATCH_MAX_BASE64 = 25 * 1024 * 1024
   const PDF_MAX_BYTES    = 32 * 1024 * 1024
-  const pdfs = (files || []).filter(f => {
-    const ext = f.name.split('.').pop().toLowerCase()
-    return ext === 'pdf' && (f.sizeBytes || 0) <= PDF_MAX_BYTES
-  })
-  if (!pdfs.length) return 1
-  // Sort largest first — mirrors analyzer.js buildBatches sort
-  const sorted = [...pdfs].sort((a, b) => (b.sizeBytes || 0) - (a.sizeBytes || 0))
+  const allPdfs = (files || []).filter(f => f.name.split('.').pop().toLowerCase() === 'pdf')
+  if (!allPdfs.length) return 1
+
+  const normal    = allPdfs.filter(f => (f.sizeBytes || 0) <= PDF_MAX_BYTES)
+  const oversized = allPdfs.filter(f => (f.sizeBytes || 0) >  PDF_MAX_BYTES)
+
+  // Greedy-pack normal files largest-first (mirrors analyzer.js buildBatches)
+  const sorted = [...normal].sort((a, b) => (b.sizeBytes || 0) - (a.sizeBytes || 0))
   let batches = 0, cur = 0
   for (const f of sorted) {
     const b64 = Math.ceil((f.sizeBytes || 0) * 4 / 3) + 1024
@@ -1914,7 +1917,13 @@ function predictBatches(files) {
     else cur += b64
   }
   if (cur > 0) batches++
-  return batches
+
+  // Each oversized file is page-split into ceil(size/32MB) chunks = that many extra batches
+  for (const f of oversized) {
+    batches += Math.ceil((f.sizeBytes || 0) / PDF_MAX_BYTES)
+  }
+
+  return Math.max(1, batches)
 }
 
 function makeTenantCard(t, animDelay = 0, removable = false) {
@@ -2653,15 +2662,9 @@ prefetchLearningsCount().then(async () => {
 })
 
 function showOversizeWarnings(tenants) {
+  // Oversized files are shown as multi-batch counts on each tenant card — no separate banner needed.
   const warn = document.getElementById('oversize-warning')
-  if (!warn) return
-  const all = tenants.flatMap(t =>
-    (t.oversizedFiles || []).map(f => `${t.tenantName}: ${f}`)
-  )
-  if (all.length === 0) { warn.classList.add('hidden'); return }
-  warn.classList.remove('hidden')
-  warn.innerHTML = `<strong>⚠️ ${all.length} file${all.length !== 1 ? 's' : ''} exceed 32MB — will be split into page-range chunks for full visual scan:</strong>` +
-    all.map(f => `• ${f}`).join('<br/>')
+  if (warn) warn.classList.add('hidden')
 }
 
 function showHuntCta() {
@@ -3625,18 +3628,6 @@ document.getElementById('btn-dc-juice')?.addEventListener('click', async () => {
 })
 
 async function startHunt(testTenantId = null) {
-  // Pre-hunt: warn about oversized files before executing
-  const tenantsToCheck = testTenantId
-    ? state.tenants.filter(t => t.id === testTenantId)
-    : state.tenants
-  const oversized = tenantsToCheck.flatMap(t =>
-    (t.oversizedFiles || []).map(f => `• ${t.tenantName}: ${f}`)
-  )
-  if (oversized.length > 0) {
-    const msg = `${oversized.length} file${oversized.length !== 1 ? 's' : ''} exceed 32MB and will be split into page-range chunks.\nClaude will visually scan every page across multiple batches.\n\n${oversized.join('\n')}\n\nContinue?`
-    if (!await pixelConfirm(msg, '⚠ LARGE FILES')) return
-  }
-
   // If files are in local RAM (client-side extraction), use inline POST flow
   if (state.localFiles && state.localFiles.size > 0) {
     return startHuntLocal(testTenantId)
