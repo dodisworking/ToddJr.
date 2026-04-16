@@ -9331,8 +9331,8 @@ async function mtRunTenant(idx) {
   })
   es.addEventListener('gym-error', e => {
     es.close(); state.eventSource = null
+    clearTimeout(mtRunTimeout)
     const d = JSON.parse(e.data)
-    // Show a proper error card in the panel so user isn't staring at a blank screen
     mtShowReviewPanel({
       findings: [{
         checkType: 'ERROR', severity: 'HIGH',
@@ -9342,11 +9342,44 @@ async function mtRunTenant(idx) {
       }],
       allClear: false
     })
-    // Override to show only Next (no Call Teacher when analysis failed)
     mtShowButtons('gym-mt-next-btn')
     toast('Analysis error — see finding card for details', 'error')
   })
-  es.onerror = () => {}
+  // If SSE connection drops, close it and show error instead of silently reconnecting forever
+  es.onerror = () => {
+    if (es.readyState === EventSource.CLOSED) return
+    es.close(); state.eventSource = null
+    clearTimeout(mtRunTimeout)
+    mtShowReviewPanel({
+      findings: [{
+        checkType: 'ERROR', severity: 'HIGH',
+        missingDocument: 'Connection lost',
+        comment: 'The connection to the server was lost mid-analysis. Try running again or move to the next tenant.',
+        evidence: ''
+      }],
+      allClear: false
+    })
+    mtShowButtons('gym-mt-rerun-btn', 'gym-mt-next-btn')
+    toast('Connection lost — try running again', 'error')
+  }
+  // 20-minute safety net — show error if nothing finishes
+  const mtRunTimeout = setTimeout(() => {
+    if (!state.eventSource) return
+    state.eventSource.close(); state.eventSource = null
+    mtShowReviewPanel({
+      findings: [{
+        checkType: 'ERROR', severity: 'HIGH',
+        missingDocument: 'Analysis timed out',
+        comment: 'No response after 20 minutes. Railway may be overloaded. Try running again or move to the next tenant.',
+        evidence: ''
+      }],
+      allClear: false
+    })
+    mtShowButtons('gym-mt-rerun-btn', 'gym-mt-next-btn')
+    toast('Timed out — try running again', 'error')
+  }, 20 * 60 * 1000)
+  // Clear timeout when complete
+  es.addEventListener('gym-complete', () => clearTimeout(mtRunTimeout), { once: true })
 }
 
 async function mtCheckAnswer() {
@@ -9782,8 +9815,11 @@ async function mtRerun() {
   document.getElementById('gym-loading-msg').textContent = `Running with ${mtState.currentRules.length} juice rules...`
 
   try {
+    const ctrl = new AbortController()
+    setTimeout(() => ctrl.abort(), 15000)
     await fetch(sameOriginApi('/api/target/load-model'), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
+      signal: ctrl.signal,
       body: JSON.stringify({ sessionId: mtState.sessionId, rules: mtState.currentRules, modelId: null, modelName: 'MT session juice' })
     })
   } catch {}
@@ -9816,6 +9852,7 @@ async function mtRerun() {
   })
   es.addEventListener('gym-error', e => {
     es.close(); state.eventSource = null
+    clearTimeout(mtRerunTimeout)
     const d = JSON.parse(e.data)
     mtShowReviewPanel({
       findings: [{
@@ -9826,10 +9863,43 @@ async function mtRerun() {
       }],
       allClear: false
     })
-    mtShowButtons('gym-mt-check-btn', 'gym-mt-next-btn')
+    mtShowButtons('gym-mt-rerun-btn', 'gym-mt-next-btn')
     toast('Rerun error — see finding card for details', 'error')
   })
-  es.onerror = () => {}
+  // If SSE connection drops, close and show error instead of silently reconnecting forever
+  es.onerror = () => {
+    if (es.readyState === EventSource.CLOSED) return
+    es.close(); state.eventSource = null
+    clearTimeout(mtRerunTimeout)
+    mtShowReviewPanel({
+      findings: [{
+        checkType: 'ERROR', severity: 'HIGH',
+        missingDocument: 'Connection lost',
+        comment: 'The connection to the server was lost during the rerun. Click "Run Again With New Juice" to retry.',
+        evidence: ''
+      }],
+      allClear: false
+    })
+    mtShowButtons('gym-mt-rerun-btn', 'gym-mt-next-btn')
+    toast('Connection lost — click Run Again to retry', 'error')
+  }
+  // 20-minute safety net
+  const mtRerunTimeout = setTimeout(() => {
+    if (!state.eventSource) return
+    state.eventSource.close(); state.eventSource = null
+    mtShowReviewPanel({
+      findings: [{
+        checkType: 'ERROR', severity: 'HIGH',
+        missingDocument: 'Rerun timed out',
+        comment: 'No response after 20 minutes. Click "Run Again With New Juice" to retry, or move to the next tenant.',
+        evidence: ''
+      }],
+      allClear: false
+    })
+    mtShowButtons('gym-mt-rerun-btn', 'gym-mt-next-btn')
+    toast('Rerun timed out — click Run Again to retry', 'error')
+  }, 20 * 60 * 1000)
+  es.addEventListener('gym-complete', () => clearTimeout(mtRerunTimeout), { once: true })
 }
 
 function mtNextTenant() {
