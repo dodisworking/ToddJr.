@@ -9433,18 +9433,27 @@ function _mtDeactivateBottomBar() {
  * Called after /api/mt/compare responds.
  */
 /**
- * Build an individual verdict item row with ✅ Correct / ❌ Wrong confirm buttons.
+ * Build an individual verdict item row with context-aware confirm buttons.
  * data-group = "caught" | "missed" | "fp"
  * data-state  = "unset" | "confirmed" | "denied"
- * Clicking ✅ marks the teacher correct; ❌ marks the teacher wrong.
+ * Button labels are section-specific so the meaning is always unambiguous:
+ *   caught  → "✓ Got it"      / "✗ Didn't get it"
+ *   missed  → "✓ Yes, missed" / "✗ Actually found it"
+ *   fp      → "✓ Yes, FP"     / "✗ Not a FP"
  */
 function _mtVerdictItem(text, group, idx) {
+  const labels = {
+    caught: { yes: '✓ Got it',        no: '✗ Didn\'t get it'   },
+    missed: { yes: '✓ Yes, missed',   no: '✗ Actually found it' },
+    fp:     { yes: '✓ Yes, FP',       no: '✗ Not a FP'          },
+  }
+  const { yes, no } = labels[group] || { yes: '✓ Agree', no: '✗ Disagree' }
   return `
     <div class="mt-vi-row" data-group="${group}" data-idx="${idx}" data-state="unset">
       <span class="mt-vi-text mt-vi-${group}">• ${escHtml(text)}</span>
       <span class="mt-vi-confirm-btns">
-        <button type="button" class="mt-vi-btn mt-vi-btn-yes" title="Teacher is correct">✓ Correct</button>
-        <button type="button" class="mt-vi-btn mt-vi-btn-no"  title="Teacher is wrong">✗ Wrong</button>
+        <button type="button" class="mt-vi-btn mt-vi-btn-yes" title="Agree with teacher">${yes}</button>
+        <button type="button" class="mt-vi-btn mt-vi-btn-no"  title="Disagree with teacher">${no}</button>
       </span>
     </div>`
 }
