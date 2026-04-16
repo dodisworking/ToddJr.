@@ -8992,7 +8992,7 @@ const mtState = {
 const MT_BTN_DEFAULTS = {
   'gym-mt-check-btn': '📞 Call Teacher',
   'gym-mt-learn-btn': '🧑‍🏫 Have Teacher Teach',
-  'gym-mt-rerun-btn': '▶ Rerun With Rules',
+  'gym-mt-rerun-btn': '▶ Run Again With New Juice',
   'gym-mt-next-btn':  '⏩ Next Tenant',
   'gym-mt-save-btn':  '💾 Save Refined Juice',
 }
@@ -9712,8 +9712,49 @@ async function mtLearnFromThis() {
     mtState.currentRules = data.rules || []
     mtUpdateHeader()
 
+    // ── Show what the teacher actually taught ──────────────────
+    const overlay    = document.getElementById('mt-compare-overlay')
+    const analysisEl = document.getElementById('mt-compare-analysis')
+
+    // Remove any previous rules-taught block
+    overlay?.querySelector('.mt-rules-taught')?.remove()
+
+    if (data.rules?.length > 0) {
+      const TYPE_LABEL = {
+        AVOID_FALSE_POSITIVE: '🚫 Avoid FP',
+        PRIORITIZE_CHECK:     '🔍 Look harder',
+        CONDITIONAL_CHECK:    '⚖️ Conditional',
+        PATTERN_RECOGNITION:  '🧩 Pattern',
+      }
+      const rulesHtml = data.rules.map((r, i) => `
+        <div class="mt-rule-row">
+          <span class="mt-rule-badge">${TYPE_LABEL[r.type] || r.type}</span>
+          <span class="mt-rule-checktype">${r.checkType || ''}</span>
+          <div class="mt-rule-text">${escHtml(r.rule || '')}</div>
+          ${r.triggeredBy ? `<div class="mt-rule-trigger">↳ ${escHtml(r.triggeredBy)}</div>` : ''}
+        </div>`).join('')
+
+      const block = document.createElement('div')
+      block.className = 'mt-rules-taught'
+      block.innerHTML = `
+        <div class="mt-vg-label" style="margin-top:14px">📋 RULES TAUGHT (${data.rules.length})</div>
+        ${data.summary ? `<div class="mt-rules-summary">${escHtml(data.summary)}</div>` : ''}
+        ${rulesHtml}`
+
+      // Insert after the analysis block (or at end of overlay body)
+      const bodyEl2 = document.getElementById('mt-compare-body')
+      if (analysisEl && analysisEl.parentNode) {
+        analysisEl.parentNode.insertBefore(block, analysisEl.nextSibling)
+      } else if (bodyEl2) {
+        bodyEl2.appendChild(block)
+      }
+
+      // Scroll to show the new rules
+      block.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+
     const rc = mtState.currentRules.length
-    toast(`🧠 ${rc} rule${rc !== 1 ? 's' : ''} — ready to rerun`, 'success')
+    toast(`🧠 ${rc} rule${rc !== 1 ? 's' : ''} loaded — ready to rerun`, 'success')
     sfxReady()
     mtShowButtons('gym-mt-rerun-btn', 'gym-mt-next-btn')
   } catch (err) {
