@@ -9557,11 +9557,12 @@ function _mtReadManualFindingVerdicts() {
  * A notes textarea lets the trainer add extra context before "Have Teacher Teach."
  */
 function mtRenderCompareOverlay(data, tenantName) {
-  const overlay    = document.getElementById('mt-compare-overlay')
-  const titleEl    = document.getElementById('mt-compare-title')
-  const scoreBadge = document.getElementById('mt-score-badge')
-  const bodyEl     = document.getElementById('mt-compare-body')
-  const analysisEl = document.getElementById('mt-compare-analysis')
+  const overlay      = document.getElementById('mt-compare-overlay')
+  const titleEl      = document.getElementById('mt-compare-title')
+  const scoreBadge   = document.getElementById('mt-score-badge')
+  const bodyEl       = document.getElementById('mt-compare-body')
+  const analysisEl   = document.getElementById('mt-compare-analysis')
+  const trainingEl   = document.getElementById('mt-compare-training-instruction')
   if (!overlay) return
 
   const score  = data.score ?? 0
@@ -9611,30 +9612,32 @@ function mtRenderCompareOverlay(data, tenantName) {
     _mtWireVerdictButtons(bodyEl)
   }
 
+  // WHY — teacher's analysis in its own block
   if (analysisEl) {
-    let analysisHtml = ''
     if (data.analysis) {
-      analysisHtml += `<div class="mt-vg-label">🧠 WHY</div><div class="mt-analysis-text">${escHtml(data.analysis)}</div>`
-    }
-    // Training instruction — copy-paste box for manual training via Claude Code
-    if (data.trainingInstruction && !data.trainingInstruction.startsWith('No training needed')) {
-      analysisHtml += `
-        <div class="mt-training-instruction">
-          <div class="mt-vg-label" style="margin-top:12px">📋 TELL CLAUDE CODE</div>
-          <div class="mt-training-hint">Copy this and paste it into Claude Code to fix the pattern for any tenant:</div>
-          <div class="mt-training-text" id="mt-training-text-box">${escHtml(data.trainingInstruction)}</div>
-          <button type="button" class="mt-training-copy-btn" onclick="
-            navigator.clipboard.writeText(document.getElementById('mt-training-text-box').textContent).then(()=>{
-              this.textContent='✓ Copied!'; setTimeout(()=>this.textContent='Copy',1500)
-            })
-          ">Copy</button>
-        </div>`
-    }
-    if (analysisHtml) {
-      analysisEl.innerHTML = analysisHtml
+      analysisEl.innerHTML = `<div class="mt-vg-label">🧠 WHY</div><div class="mt-analysis-text">${escHtml(data.analysis)}</div>`
       analysisEl.style.display = ''
     } else {
       analysisEl.style.display = 'none'
+    }
+  }
+
+  // TELL CLAUDE CODE — separate block with copy button
+  if (trainingEl) {
+    if (data.trainingInstruction && !data.trainingInstruction.startsWith('No training needed')) {
+      const instrId = 'mt-training-overlay-' + Date.now()
+      trainingEl.innerHTML = `
+        <div class="mt-vg-label" style="color:#a5b4fc">📋 TELL CLAUDE CODE</div>
+        <div class="mt-training-hint">Copy &amp; paste into this Claude Code chat to fix the root pattern for any tenant:</div>
+        <div class="mt-training-text" id="${instrId}">${escHtml(data.trainingInstruction)}</div>
+        <button type="button" class="mt-training-copy-btn" onclick="
+          navigator.clipboard.writeText(document.getElementById('${instrId}').textContent).then(()=>{
+            this.textContent='✓ Copied!'; setTimeout(()=>this.textContent='Copy',1500)
+          })
+        ">Copy</button>`
+      trainingEl.classList.remove('hidden')
+    } else {
+      trainingEl.classList.add('hidden')
     }
   }
 
@@ -9660,10 +9663,11 @@ function mtRenderCompareOverlay(data, tenantName) {
  * kept for the gym-panel-mt-review fallback path).
  */
 function mtRenderVerdict(data) {
-  const verdictEl  = document.getElementById('mt-rev-verdict')
-  const bodyEl     = document.getElementById('mt-rev-verdict-body')
-  const analysisEl = document.getElementById('mt-rev-verdict-analysis')
-  const scoreBadge = document.getElementById('mt-rev-score-badge')
+  const verdictEl    = document.getElementById('mt-rev-verdict')
+  const bodyEl       = document.getElementById('mt-rev-verdict-body')
+  const analysisEl   = document.getElementById('mt-rev-verdict-analysis')
+  const trainingEl   = document.getElementById('mt-rev-training-instruction')
+  const scoreBadge   = document.getElementById('mt-rev-score-badge')
   if (!verdictEl) return
 
   const score  = data.score ?? 0
@@ -9705,6 +9709,7 @@ function mtRenderVerdict(data) {
     _mtWireVerdictButtons(bodyEl)
   }
 
+  // WHY — teacher's analysis of what went wrong
   if (analysisEl && data.analysis) {
     analysisEl.innerHTML = `<div class="mt-vg-label">🧠 WHY</div><div class="mt-analysis-text">${escHtml(data.analysis)}</div>`
     analysisEl.classList.remove('hidden')
@@ -9712,12 +9717,29 @@ function mtRenderVerdict(data) {
     analysisEl.classList.add('hidden')
   }
 
+  // TELL CLAUDE CODE — separate block with copy button
+  if (trainingEl && data.trainingInstruction && !data.trainingInstruction.startsWith('No training needed')) {
+    const instrId = 'mt-training-inline-' + Date.now()
+    trainingEl.innerHTML = `
+      <div class="mt-vg-label" style="color:#a5b4fc">📋 TELL CLAUDE CODE</div>
+      <div class="mt-training-hint">Copy &amp; paste into this Claude Code chat to fix the root pattern:</div>
+      <div class="mt-training-text" id="${instrId}">${escHtml(data.trainingInstruction)}</div>
+      <button type="button" class="mt-training-copy-btn" onclick="
+        navigator.clipboard.writeText(document.getElementById('${instrId}').textContent).then(()=>{
+          this.textContent='✓ Copied!'; setTimeout(()=>this.textContent='Copy',1500)
+        })
+      ">Copy</button>`
+    trainingEl.classList.remove('hidden')
+  } else if (trainingEl) {
+    trainingEl.classList.add('hidden')
+  }
+
   verdictEl.classList.remove('hidden')
   // Show manual notes field
   const notesWrap = document.getElementById('mt-rev-notes-wrap')
   if (notesWrap) notesWrap.classList.remove('hidden')
-  // Scroll verdict into view
-  verdictEl.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  // Scroll verdict into view (parent scroll container handles it)
+  verdictEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
 }
 
 async function mtLearnFromThis() {

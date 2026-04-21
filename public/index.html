@@ -704,6 +704,8 @@
             <span>Findings</span>
             <span class="gym-findings-count" id="gym-findings-count">0 findings</span>
           </div>
+          <!-- Single scrollable wrapper so Teacher Verdict is always reachable -->
+          <div class="gym-left-inner-scroll">
           <div class="gym-findings-scroll" id="gym-findings-scroll">
             <!-- Finding cards injected here -->
           </div>
@@ -722,12 +724,16 @@
               <span id="mt-rev-score-badge" class="mt-rev-score-badge"></span>
             </div>
             <div id="mt-rev-verdict-body" class="mt-rev-verdict-body"></div>
+            <!-- WHY — teacher's analysis of what went wrong -->
             <div id="mt-rev-verdict-analysis" class="mt-rev-verdict-analysis hidden"></div>
+            <!-- TELL CLAUDE CODE — copy-paste instruction to fix the root cause -->
+            <div id="mt-rev-training-instruction" class="mt-rev-training-instruction-block hidden"></div>
             <div class="mt-rev-notes-wrap hidden" id="mt-rev-notes-wrap">
               <label class="mt-rev-notes-label" for="mt-rev-notes">✏️ YOUR NOTES <span class="mt-rev-notes-hint">(optional — tell the teacher what it missed &amp; why)</span></label>
               <textarea id="mt-rev-notes" class="mt-rev-notes" rows="3" placeholder="e.g. It should have noticed the guaranty was only a signature page, not the full exhibit..."></textarea>
             </div>
           </div>
+          </div><!-- /gym-left-inner-scroll -->
         </div>
 
         <!-- RIGHT: PDF viewer -->
@@ -1332,9 +1338,12 @@
       <div class="mt-compare-body" id="mt-compare-body">
         <!-- filled dynamically -->
       </div>
+      <!-- WHY — teacher's analysis -->
       <div class="mt-compare-analysis" id="mt-compare-analysis">
         <!-- analysis paragraph -->
       </div>
+      <!-- TELL CLAUDE CODE — copy-paste instruction -->
+      <div class="mt-compare-training-instruction hidden" id="mt-compare-training-instruction"></div>
       <div class="mt-compare-footer">
         <button class="btn-gym-mt-learn-overlay" id="mt-learn-overlay-btn">🧑‍🏫 Have Teacher Teach</button>
         <button class="btn-mt-close-secondary" id="mt-close-secondary-btn">Close</button>
@@ -1349,7 +1358,7 @@
   <script src="drlab-flasks.js?v=6"></script>
   <script src="sbs-boxing.js?v=3"></script>
   <script src="target-game.js?v=4"></script>
-  <script src="app.js?v=105"></script>
+  <script src="app.js?v=106"></script>
   <script src="game-mode.js?v=4"></script>
   <script src="rr-app.js?v=1"></script>
 </body>
