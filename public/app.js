@@ -9611,11 +9611,31 @@ function mtRenderCompareOverlay(data, tenantName) {
     _mtWireVerdictButtons(bodyEl)
   }
 
-  if (analysisEl && data.analysis) {
-    analysisEl.innerHTML = `<div class="mt-vg-label">🧠 WHY</div><div class="mt-analysis-text">${escHtml(data.analysis)}</div>`
-    analysisEl.style.display = ''
-  } else if (analysisEl) {
-    analysisEl.style.display = 'none'
+  if (analysisEl) {
+    let analysisHtml = ''
+    if (data.analysis) {
+      analysisHtml += `<div class="mt-vg-label">🧠 WHY</div><div class="mt-analysis-text">${escHtml(data.analysis)}</div>`
+    }
+    // Training instruction — copy-paste box for manual training via Claude Code
+    if (data.trainingInstruction && !data.trainingInstruction.startsWith('No training needed')) {
+      analysisHtml += `
+        <div class="mt-training-instruction">
+          <div class="mt-vg-label" style="margin-top:12px">📋 TELL CLAUDE CODE</div>
+          <div class="mt-training-hint">Copy this and paste it into Claude Code to fix the pattern for any tenant:</div>
+          <div class="mt-training-text" id="mt-training-text-box">${escHtml(data.trainingInstruction)}</div>
+          <button type="button" class="mt-training-copy-btn" onclick="
+            navigator.clipboard.writeText(document.getElementById('mt-training-text-box').textContent).then(()=>{
+              this.textContent='✓ Copied!'; setTimeout(()=>this.textContent='Copy',1500)
+            })
+          ">Copy</button>
+        </div>`
+    }
+    if (analysisHtml) {
+      analysisEl.innerHTML = analysisHtml
+      analysisEl.style.display = ''
+    } else {
+      analysisEl.style.display = 'none'
+    }
   }
 
   // Footer: Learn button only if there are errors; Next button always
