@@ -1900,28 +1900,53 @@ function updateHud() {
  *  Oversized PDFs (>32MB) are split into page-range chunks server-side — each
  *  chunk counts as its own batch (ceil(sizeBytes / 32MB) chunks per oversized file). */
 function predictBatches(files) {
-  const BATCH_MAX_BASE64 = 25 * 1024 * 1024
-  const PDF_MAX_BYTES    = 32 * 1024 * 1024
+  // Mirrors the server logic in analyzer.js:
+  //   1. Estimate total pages from file sizes
+  //   2. If ≥ compression threshold → auto-compressed → always 1 call
+  //   3. Otherwise → native path, check page-count batch limit
+  const PDF_MAX_BYTES        = 32 * 1024 * 1024
+  const SPLIT_TARGET_BYTES   = 12 * 1024 * 1024   // server splits oversized files at 12MB chunks
+  const BATCH_MAX_PAGES      = 580                 // matches analyzer.js
+  const BATCH_MAX_BASE64     = 80 * 1024 * 1024   // matches analyzer.js
+  const AVG_BYTES_PER_PAGE   = 75 * 1024           // ~75KB/page — typical scanned lease PDF
+  const COMPRESSION_THRESHOLD = 587                // pages above which server auto-compresses → 1 call
+
   const allPdfs = (files || []).filter(f => f.name.split('.').pop().toLowerCase() === 'pdf')
   if (!allPdfs.length) return 1
 
-  const normal    = allPdfs.filter(f => (f.sizeBytes || 0) <= PDF_MAX_BYTES)
-  const oversized = allPdfs.filter(f => (f.sizeBytes || 0) >  PDF_MAX_BYTES)
-
-  // Greedy-pack normal files largest-first (mirrors analyzer.js buildBatches)
-  const sorted = [...normal].sort((a, b) => (b.sizeBytes || 0) - (a.sizeBytes || 0))
-  let batches = 0, cur = 0
-  for (const f of sorted) {
-    const b64 = Math.ceil((f.sizeBytes || 0) * 4 / 3) + 1024
-    if (cur > 0 && cur + b64 > BATCH_MAX_BASE64) { batches++; cur = b64 }
-    else cur += b64
+  // Expand oversized files into their server-side page-range chunks
+  const candidates = []
+  for (const f of allPdfs) {
+    const bytes = f.sizeBytes || 0
+    if (bytes > PDF_MAX_BYTES) {
+      const numChunks = Math.ceil(bytes / SPLIT_TARGET_BYTES)
+      const chunkBytes = Math.ceil(bytes / numChunks)
+      for (let i = 0; i < numChunks; i++) candidates.push(chunkBytes)
+    } else {
+      candidates.push(bytes)
+    }
   }
-  if (cur > 0) batches++
 
-  // Each oversized file is page-split into ceil(size/32MB) chunks = that many extra batches
-  for (const f of oversized) {
-    batches += Math.ceil((f.sizeBytes || 0) / PDF_MAX_BYTES)
+  // Estimate total pages
+  const totalBytes = candidates.reduce((s, b) => s + b, 0)
+  const estPages   = Math.ceil(totalBytes / AVG_BYTES_PER_PAGE)
+
+  // Compression path → always 1 call
+  if (estPages >= COMPRESSION_THRESHOLD) return 1
+
+  // Native path — greedy-pack by bytes AND page count (mirrors buildBatches)
+  const sorted = [...candidates].sort((a, b) => b - a)
+  let batches = 0, curBytes = 0, curPages = 0
+  for (const bytes of sorted) {
+    const b64   = Math.ceil(bytes * 4 / 3) + 1024
+    const pages = Math.max(1, Math.ceil(bytes / AVG_BYTES_PER_PAGE))
+    if (curBytes > 0 && (curBytes + b64 > BATCH_MAX_BASE64 || curPages + pages > BATCH_MAX_PAGES)) {
+      batches++; curBytes = b64; curPages = pages
+    } else {
+      curBytes += b64; curPages += pages
+    }
   }
+  if (curBytes > 0) batches++
 
   return Math.max(1, batches)
 }
