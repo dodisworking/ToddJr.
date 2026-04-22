@@ -1948,6 +1948,10 @@ function predictBatches(files) {
   }
   if (curBytes > 0) batches++
 
+  // Secondary compression trigger (mirrors analyzer.js): if native packing
+  // would need > 1 batch, server auto-compresses → always 1 call
+  if (batches > 1) return 1
+
   return Math.max(1, batches)
 }
 
