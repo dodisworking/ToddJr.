@@ -1193,6 +1193,10 @@ function applyClientMode() {
   // Juice Library row on home screen — owner only
   const juiceLibBtn = document.getElementById('btn-juice-library')
   if (juiceLibBtn) juiceLibBtn.classList.toggle('hidden', pub)
+
+  // Leads Dashboard row — owner only
+  const leadsRowBtn = document.getElementById('btn-leads-dashboard')
+  if (leadsRowBtn) leadsRowBtn.classList.toggle('hidden', pub)
 }
 
 // Run once on load
@@ -10345,5 +10349,200 @@ async function contactsDelete(id) {
   // Allow Enter in any form field to save
   document.getElementById('contacts-form-wrap')?.addEventListener('keydown', e => {
     if (e.key === 'Enter') contactsSave()
+  })
+})()
+
+
+// ═══════════════════════════════════════════════════════════
+// LEADS — track call clicks + schedule submissions
+// ═══════════════════════════════════════════════════════════
+
+async function trackLead(type, data = {}) {
+  try {
+    await fetch('/api/leads/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, ...data })
+    })
+  } catch { /* non-critical */ }
+}
+
+// ── Schedule overlay ────────────────────────────────────────
+function openScheduleOverlay() {
+  const overlay = document.getElementById('schedule-overlay')
+  if (!overlay) return
+  // Reset form
+  ;['sched-name','sched-email','sched-phone','sched-message'].forEach(id => {
+    const el = document.getElementById(id)
+    if (el) el.value = ''
+  })
+  document.getElementById('schedule-success')?.classList.add('hidden')
+  document.getElementById('schedule-submit-btn')?.classList.remove('hidden')
+  overlay.classList.remove('hidden')
+  document.getElementById('sched-name')?.focus()
+}
+
+function closeScheduleOverlay() {
+  document.getElementById('schedule-overlay')?.classList.add('hidden')
+}
+
+async function submitSchedule() {
+  const name    = document.getElementById('sched-name')?.value.trim()    || ''
+  const email   = document.getElementById('sched-email')?.value.trim()   || ''
+  const phone   = document.getElementById('sched-phone')?.value.trim()   || ''
+  const message = document.getElementById('sched-message')?.value.trim() || ''
+  if (!name && !email) {
+    document.getElementById('sched-name')?.focus()
+    return
+  }
+  const btn = document.getElementById('schedule-submit-btn')
+  if (btn) btn.disabled = true
+  await trackLead('schedule_submit', { name, email, phone, message })
+  document.getElementById('schedule-success')?.classList.remove('hidden')
+  if (btn) btn.classList.add('hidden')
+  // Auto-close after 3s
+  setTimeout(closeScheduleOverlay, 3000)
+}
+
+// ── Leads dashboard (owner only) ────────────────────────────
+async function openLeadsDashboard() {
+  document.getElementById('leads-overlay')?.classList.remove('hidden')
+  await leadsLoad()
+}
+
+function closeLeadsDashboard() {
+  document.getElementById('leads-overlay')?.classList.add('hidden')
+}
+
+async function leadsLoad() {
+  try {
+    const res  = await fetch('/api/leads')
+    const data = await res.json()
+    document.getElementById('lstat-schedule-num').textContent = data.scheduleCount ?? 0
+    document.getElementById('lstat-call-num').textContent     = data.callCount     ?? 0
+    document.getElementById('lstat-total-num').textContent    = data.total         ?? 0
+    // Update home badge
+    const badge = document.getElementById('home-leads-badge')
+    if (badge) badge.textContent = data.total > 0 ? data.total : ''
+    leadsRender(data.leads || [], document.getElementById('leads-search')?.value || '')
+  } catch { /* non-critical */ }
+}
+
+function leadsRender(leads, query = '') {
+  const list  = document.getElementById('leads-list')
+  const count = document.getElementById('leads-count')
+  const empty = document.getElementById('leads-empty')
+  if (!list) return
+
+  const q = (query || '').toLowerCase().trim()
+  const filtered = q
+    ? leads.filter(l =>
+        (l.name    || '').toLowerCase().includes(q) ||
+        (l.email   || '').toLowerCase().includes(q) ||
+        (l.phone   || '').toLowerCase().includes(q) ||
+        (l.message || '').toLowerCase().includes(q))
+    : leads
+
+  if (count) count.textContent = `${filtered.length} lead${filtered.length !== 1 ? 's' : ''}`
+  Array.from(list.querySelectorAll('.lead-row')).forEach(el => el.remove())
+
+  if (filtered.length === 0) {
+    if (empty) empty.style.display = ''
+    return
+  }
+  if (empty) empty.style.display = 'none'
+
+  for (const l of filtered) {
+    const row = document.createElement('div')
+    row.className = 'lead-row'
+
+    const badge = document.createElement('div')
+    badge.className = l.type === 'call_click'
+      ? 'lead-type-badge lead-type-badge--call'
+      : 'lead-type-badge lead-type-badge--schedule'
+    badge.textContent = l.type === 'call_click' ? '📞 CALL' : '📅 SCHED'
+    row.appendChild(badge)
+
+    const info = document.createElement('div')
+    info.className = 'lead-info'
+    if (l.name || l.email) {
+      const nameEl = document.createElement('div')
+      nameEl.className = 'lead-name'
+      nameEl.textContent = l.name || l.email
+      info.appendChild(nameEl)
+    }
+    const metaParts = []
+    if (l.name && l.email) metaParts.push(l.email)
+    if (l.phone) metaParts.push(l.phone)
+    if (metaParts.length) {
+      const meta = document.createElement('div')
+      meta.className = 'lead-meta'
+      meta.textContent = metaParts.join(' · ')
+      info.appendChild(meta)
+    }
+    if (l.message) {
+      const msg = document.createElement('div')
+      msg.className = 'lead-msg'
+      msg.textContent = `"${l.message}"`
+      info.appendChild(msg)
+    }
+    if (!l.name && !l.email && !l.phone) {
+      const anon = document.createElement('div')
+      anon.className = 'lead-meta'
+      anon.textContent = 'Anonymous click'
+      info.appendChild(anon)
+    }
+    row.appendChild(info)
+
+    const time = document.createElement('div')
+    time.className = 'lead-time'
+    try {
+      const d = new Date(l.savedAt)
+      time.textContent = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + '\n' +
+                         d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+      time.style.whiteSpace = 'pre'
+    } catch { time.textContent = l.savedAt || '' }
+    row.appendChild(time)
+
+    list.appendChild(row)
+  }
+}
+
+// ── Wire up all leads events ────────────────────────────────
+;(function initLeads() {
+  // Call button: track + dial
+  document.getElementById('btn-cta-call')?.addEventListener('click', async () => {
+    await trackLead('call_click')
+    // If OWNER_PHONE is served via config, use it — else just track the intent
+    try {
+      const cfg = await fetch('/api/config').then(r => r.ok ? r.json() : {})
+      if (cfg.phone) window.location.href = `tel:${cfg.phone}`
+    } catch { /* no config endpoint — just tracked */ }
+  })
+
+  // Schedule button: open modal
+  document.getElementById('btn-cta-schedule')?.addEventListener('click', openScheduleOverlay)
+  document.getElementById('schedule-close-btn')?.addEventListener('click', closeScheduleOverlay)
+  document.getElementById('schedule-overlay')?.addEventListener('click', e => {
+    if (e.target === document.getElementById('schedule-overlay')) closeScheduleOverlay()
+  })
+  document.getElementById('schedule-submit-btn')?.addEventListener('click', submitSchedule)
+  document.getElementById('schedule-form')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) submitSchedule()
+  })
+
+  // Leads dashboard
+  document.getElementById('btn-leads-dashboard')?.addEventListener('click', openLeadsDashboard)
+  document.getElementById('leads-close-btn')?.addEventListener('click', closeLeadsDashboard)
+  document.getElementById('leads-overlay')?.addEventListener('click', e => {
+    if (e.target === document.getElementById('leads-overlay')) closeLeadsDashboard()
+  })
+  document.getElementById('leads-search')?.addEventListener('input', async e => {
+    // Re-render from last loaded data
+    try {
+      const res  = await fetch('/api/leads')
+      const data = await res.json()
+      leadsRender(data.leads || [], e.target.value)
+    } catch { /* ignore */ }
   })
 })()

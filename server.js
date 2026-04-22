@@ -2672,6 +2672,65 @@ app.delete('/api/contacts/:id', (req, res) => {
   }
 })
 
+// ─── LEADS — track call/schedule clicks, persisted to volume ──────────────
+
+const LEADS_PATH = path.join(OUTPUTS_DIR, 'leads.json')
+
+function readLeads() {
+  try { return JSON.parse(fs.readFileSync(LEADS_PATH, 'utf8')) } catch { return [] }
+}
+function writeLeads(arr) {
+  fs.writeFileSync(LEADS_PATH, JSON.stringify(arr, null, 2))
+}
+
+// POST /api/leads/track  { type: 'call_click' | 'schedule_submit', name?, email?, phone?, message? }
+app.post('/api/leads/track', express.json({ limit: '20kb' }), (req, res) => {
+  try {
+    const { type, name, email, phone, message } = req.body || {}
+    if (!type) return res.status(400).json({ error: 'type required' })
+    const lead = {
+      id:        randomUUID(),
+      type:      type === 'call_click' ? 'call_click' : 'schedule_submit',
+      name:      (name    || '').trim(),
+      email:     (email   || '').trim(),
+      phone:     (phone   || '').trim(),
+      message:   (message || '').trim(),
+      userAgent: req.headers['user-agent'] || '',
+      ip:        req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '',
+      savedAt:   new Date().toISOString()
+    }
+    const leads = readLeads()
+    leads.push(lead)
+    writeLeads(leads)
+    console.log(`[leads] ${lead.type} — ${lead.name || lead.email || 'anonymous'}`)
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[leads/track]', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/config  — public config for client (phone, schedule URL, etc.)
+// Set OWNER_PHONE and OWNER_SCHEDULE_URL in Railway env vars
+app.get('/api/config', (_req, res) => {
+  res.json({
+    phone:       process.env.OWNER_PHONE        || '',
+    scheduleUrl: process.env.OWNER_SCHEDULE_URL || ''
+  })
+})
+
+// GET /api/leads  (admin — no auth, owner PIN required on client side)
+app.get('/api/leads', (_req, res) => {
+  try {
+    const leads = readLeads()
+    const scheduleCount = leads.filter(l => l.type === 'schedule_submit').length
+    const callCount     = leads.filter(l => l.type === 'call_click').length
+    res.json({ leads: leads.slice().reverse(), scheduleCount, callCount, total: leads.length })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ═══════════════════════════════════════════════════════════
 // START
 // ═══════════════════════════════════════════════════════════
