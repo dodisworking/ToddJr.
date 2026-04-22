@@ -2621,6 +2621,58 @@ app.post('/api/mt/synthesize', express.json({ limit: '500kb' }), async (req, res
 })
 
 // ═══════════════════════════════════════════════════════════
+// CONTACTS — persisted in Railway volume (PERSIST_DIR/contacts.json)
+// ═══════════════════════════════════════════════════════════
+
+const CONTACTS_PATH = path.join(OUTPUTS_DIR, 'contacts.json')
+
+function readContacts() {
+  try { return JSON.parse(fs.readFileSync(CONTACTS_PATH, 'utf8')) } catch { return [] }
+}
+function writeContacts(arr) {
+  fs.writeFileSync(CONTACTS_PATH, JSON.stringify(arr, null, 2))
+}
+
+app.get('/api/contacts', (_req, res) => {
+  res.json(readContacts())
+})
+
+app.post('/api/contacts', express.json({ limit: '100kb' }), (req, res) => {
+  try {
+    const { id, name, email, phone, role, tenantName, property, notes } = req.body || {}
+    const contacts = readContacts()
+    const contact = {
+      id:         id || randomUUID(),
+      name:       (name       || '').trim(),
+      email:      (email      || '').trim(),
+      phone:      (phone      || '').trim(),
+      role:       (role       || '').trim(),
+      tenantName: (tenantName || '').trim(),
+      property:   (property   || '').trim(),
+      notes:      (notes      || '').trim(),
+      savedAt:    new Date().toISOString()
+    }
+    const idx = id ? contacts.findIndex(c => c.id === id) : -1
+    if (idx >= 0) contacts[idx] = contact
+    else contacts.push(contact)
+    writeContacts(contacts)
+    res.json({ ok: true, contact })
+  } catch (err) {
+    console.error('[contacts/save]', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.delete('/api/contacts/:id', (req, res) => {
+  try {
+    writeContacts(readContacts().filter(c => c.id !== req.params.id))
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ═══════════════════════════════════════════════════════════
 // START
 // ═══════════════════════════════════════════════════════════
 

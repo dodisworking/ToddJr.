@@ -23,7 +23,55 @@
   <nav class="global-pixel-nav" id="global-pixel-nav" aria-label="App navigation">
     <button type="button" class="pixel-nav-btn pixel-nav-back" id="btn-global-back" title="Go back one screen">◀ BACK</button>
     <button type="button" class="pixel-nav-btn pixel-nav-home" id="btn-global-home" title="Home — new session">⌂ HOME</button>
+    <button type="button" class="pixel-nav-btn pixel-nav-contacts" id="btn-open-contacts" title="Contacts directory">📇</button>
   </nav>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       OVERLAY: CONTACTS DIRECTORY
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="contacts-overlay" class="contacts-overlay hidden" role="dialog" aria-modal="true" aria-label="Contacts">
+    <div class="contacts-panel">
+      <div class="contacts-header">
+        <span class="contacts-title">📇 CONTACTS</span>
+        <button type="button" class="contacts-close-btn" id="contacts-close-btn" title="Close">✕</button>
+      </div>
+
+      <!-- Add / Edit form -->
+      <div class="contacts-form-wrap" id="contacts-form-wrap">
+        <div class="contacts-form-row">
+          <input type="text"   class="contacts-input" id="cf-name"       placeholder="Name *" />
+          <input type="text"   class="contacts-input" id="cf-role"       placeholder="Role (e.g. Property Manager)" />
+        </div>
+        <div class="contacts-form-row">
+          <input type="email"  class="contacts-input" id="cf-email"      placeholder="Email" />
+          <input type="tel"    class="contacts-input" id="cf-phone"      placeholder="Phone" />
+        </div>
+        <div class="contacts-form-row">
+          <input type="text"   class="contacts-input" id="cf-tenant"     placeholder="Tenant name (optional)" />
+          <input type="text"   class="contacts-input" id="cf-property"   placeholder="Property (optional)" />
+        </div>
+        <div class="contacts-form-row">
+          <input type="text"   class="contacts-input contacts-input--full" id="cf-notes" placeholder="Notes" />
+        </div>
+        <div class="contacts-form-actions">
+          <span class="contacts-editing-label hidden" id="contacts-editing-label">Editing contact</span>
+          <button type="button" class="contacts-cancel-btn hidden" id="contacts-cancel-btn">Cancel</button>
+          <button type="button" class="contacts-save-btn"          id="contacts-save-btn">＋ Save Contact</button>
+        </div>
+      </div>
+
+      <!-- Search -->
+      <div class="contacts-search-row">
+        <input type="search" class="contacts-search" id="contacts-search" placeholder="🔍  Search by name, email, tenant…" />
+        <span class="contacts-count" id="contacts-count">0 contacts</span>
+      </div>
+
+      <!-- Contact cards -->
+      <div class="contacts-grid" id="contacts-grid">
+        <div class="contacts-empty" id="contacts-empty">No contacts saved yet. Add one above.</div>
+      </div>
+    </div>
+  </div>
 
   <!-- ═══════════════════════════════════════════════════════════
        SCREEN: HOME — NES-style game select (root of all games)
@@ -1358,7 +1406,7 @@
   <script src="drlab-flasks.js?v=6"></script>
   <script src="sbs-boxing.js?v=3"></script>
   <script src="target-game.js?v=4"></script>
-  <script src="app.js?v=108"></script>
+  <script src="app.js?v=109"></script>
   <script src="game-mode.js?v=4"></script>
   <script src="rr-app.js?v=1"></script>
 </body>

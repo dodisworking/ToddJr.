@@ -1016,8 +1016,9 @@ requestAnimationFrame(animLoop)
 // SCREEN TRANSITIONS
 // ═══════════════════════════════════════════════════════════
 
-const btnGlobalBack = document.getElementById('btn-global-back')
-const btnGlobalHome = document.getElementById('btn-global-home')
+const btnGlobalBack     = document.getElementById('btn-global-back')
+const btnGlobalHome     = document.getElementById('btn-global-home')
+const btnOpenContacts   = document.getElementById('btn-open-contacts')
 
 function updateGlobalNav() {
   if (!btnGlobalBack || !btnGlobalHome) return
@@ -1025,6 +1026,8 @@ function updateGlobalNav() {
   const isRoot = state.screen === 'home'
   btnGlobalHome.hidden = isRoot
   btnGlobalBack.hidden = isRoot
+  // Contacts button is always visible
+  if (btnOpenContacts) btnOpenContacts.hidden = false
   const busyCook = state.screen === 'cooking'
   btnGlobalBack.disabled = busyCook
   btnGlobalBack.title = busyCook ? 'Not available while cooking' : 'Go back one screen'
@@ -10124,3 +10127,223 @@ document.getElementById('mt-close-secondary-btn')?.addEventListener('click', () 
 document.getElementById('mt-learn-overlay-btn')?.addEventListener('click', () => {
   mtLearnFromThis()
 })
+
+
+// ═══════════════════════════════════════════════════════════
+// CONTACTS DIRECTORY
+// ═══════════════════════════════════════════════════════════
+
+let contactsData = []
+let contactsEditingId = null
+
+async function openContactsOverlay(prefill = {}) {
+  document.getElementById('contacts-overlay')?.classList.remove('hidden')
+  await contactsLoad()
+  if (prefill.tenantName) document.getElementById('cf-tenant').value = prefill.tenantName
+  if (prefill.property)   document.getElementById('cf-property').value = prefill.property
+  document.getElementById('cf-name')?.focus()
+}
+
+function closeContactsOverlay() {
+  document.getElementById('contacts-overlay')?.classList.add('hidden')
+  contactsCancelEdit()
+}
+
+async function contactsLoad() {
+  try {
+    const res = await fetch('/api/contacts')
+    contactsData = await res.json()
+  } catch { contactsData = [] }
+  contactsRender()
+}
+
+function contactsRender(query = '') {
+  const grid  = document.getElementById('contacts-grid')
+  const count = document.getElementById('contacts-count')
+  const empty = document.getElementById('contacts-empty')
+  if (!grid) return
+
+  const q = (query || '').toLowerCase().trim()
+  const filtered = q
+    ? contactsData.filter(c =>
+        (c.name       || '').toLowerCase().includes(q) ||
+        (c.email      || '').toLowerCase().includes(q) ||
+        (c.phone      || '').toLowerCase().includes(q) ||
+        (c.role       || '').toLowerCase().includes(q) ||
+        (c.tenantName || '').toLowerCase().includes(q) ||
+        (c.property   || '').toLowerCase().includes(q) ||
+        (c.notes      || '').toLowerCase().includes(q))
+    : contactsData
+
+  if (count) count.textContent = `${filtered.length} contact${filtered.length !== 1 ? 's' : ''}`
+
+  // Remove existing cards (not the empty-state div)
+  Array.from(grid.querySelectorAll('.contact-card')).forEach(el => el.remove())
+
+  if (filtered.length === 0) {
+    if (empty) empty.style.display = ''
+    return
+  }
+  if (empty) empty.style.display = 'none'
+
+  for (const c of filtered) {
+    const card = document.createElement('div')
+    card.className = 'contact-card'
+    card.dataset.id = c.id
+
+    const nameEl = document.createElement('div')
+    nameEl.className = 'contact-card-name'
+    nameEl.textContent = c.name || '(no name)'
+    card.appendChild(nameEl)
+
+    if (c.role) {
+      const roleEl = document.createElement('div')
+      roleEl.className = 'contact-card-role'
+      roleEl.textContent = c.role
+      card.appendChild(roleEl)
+    }
+
+    if (c.tenantName || c.property) {
+      const tenEl = document.createElement('div')
+      tenEl.className = 'contact-card-tenant'
+      tenEl.textContent = [c.tenantName, c.property].filter(Boolean).join(' · ')
+      card.appendChild(tenEl)
+    }
+
+    const links = document.createElement('div')
+    links.className = 'contact-card-links'
+    if (c.email) {
+      const a = document.createElement('a')
+      a.className = 'contact-card-link'
+      a.href = `mailto:${c.email}`
+      a.title = c.email
+      a.innerHTML = `<span class="contact-card-link-icon">✉</span>${escHtml(c.email)}`
+      links.appendChild(a)
+    }
+    if (c.phone) {
+      const a = document.createElement('a')
+      a.className = 'contact-card-link'
+      a.href = `tel:${c.phone.replace(/\s/g,'')}`
+      a.title = c.phone
+      a.innerHTML = `<span class="contact-card-link-icon">📞</span>${escHtml(c.phone)}`
+      links.appendChild(a)
+    }
+    if (links.childElementCount > 0) card.appendChild(links)
+
+    if (c.notes) {
+      const notesEl = document.createElement('div')
+      notesEl.className = 'contact-card-notes'
+      notesEl.textContent = c.notes
+      card.appendChild(notesEl)
+    }
+
+    // Edit / Delete buttons
+    const actions = document.createElement('div')
+    actions.className = 'contact-card-actions'
+    const editBtn = document.createElement('button')
+    editBtn.type = 'button'
+    editBtn.className = 'contact-card-btn'
+    editBtn.title = 'Edit'
+    editBtn.textContent = '✏'
+    editBtn.addEventListener('click', () => contactsStartEdit(c))
+    const delBtn = document.createElement('button')
+    delBtn.type = 'button'
+    delBtn.className = 'contact-card-btn contact-card-btn--delete'
+    delBtn.title = 'Delete'
+    delBtn.textContent = '✕'
+    delBtn.addEventListener('click', () => contactsDelete(c.id))
+    actions.appendChild(editBtn)
+    actions.appendChild(delBtn)
+    card.appendChild(actions)
+
+    grid.appendChild(card)
+  }
+}
+
+function contactsStartEdit(c) {
+  contactsEditingId = c.id
+  document.getElementById('cf-name').value      = c.name       || ''
+  document.getElementById('cf-role').value      = c.role       || ''
+  document.getElementById('cf-email').value     = c.email      || ''
+  document.getElementById('cf-phone').value     = c.phone      || ''
+  document.getElementById('cf-tenant').value    = c.tenantName || ''
+  document.getElementById('cf-property').value  = c.property   || ''
+  document.getElementById('cf-notes').value     = c.notes      || ''
+  document.getElementById('contacts-editing-label')?.classList.remove('hidden')
+  document.getElementById('contacts-cancel-btn')?.classList.remove('hidden')
+  document.getElementById('contacts-save-btn').textContent = '💾 Update Contact'
+  document.getElementById('cf-name')?.focus()
+  document.querySelector('.contacts-form-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+}
+
+function contactsCancelEdit() {
+  contactsEditingId = null
+  ;['cf-name','cf-role','cf-email','cf-phone','cf-tenant','cf-property','cf-notes']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = '' })
+  document.getElementById('contacts-editing-label')?.classList.add('hidden')
+  document.getElementById('contacts-cancel-btn')?.classList.add('hidden')
+  document.getElementById('contacts-save-btn').textContent = '＋ Save Contact'
+}
+
+async function contactsSave() {
+  const body = {
+    id:         contactsEditingId || undefined,
+    name:       document.getElementById('cf-name')?.value.trim()     || '',
+    role:       document.getElementById('cf-role')?.value.trim()     || '',
+    email:      document.getElementById('cf-email')?.value.trim()    || '',
+    phone:      document.getElementById('cf-phone')?.value.trim()    || '',
+    tenantName: document.getElementById('cf-tenant')?.value.trim()   || '',
+    property:   document.getElementById('cf-property')?.value.trim() || '',
+    notes:      document.getElementById('cf-notes')?.value.trim()    || '',
+  }
+  if (!body.name && !body.email && !body.phone) {
+    document.getElementById('cf-name')?.focus()
+    return
+  }
+  try {
+    const res = await fetch('/api/contacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+    if (!res.ok) throw new Error(await res.text())
+    const { contact } = await res.json()
+    const idx = contactsData.findIndex(c => c.id === contact.id)
+    if (idx >= 0) contactsData[idx] = contact
+    else contactsData.push(contact)
+    contactsCancelEdit()
+    contactsRender(document.getElementById('contacts-search')?.value || '')
+  } catch (err) {
+    console.error('[contacts] save error:', err)
+  }
+}
+
+async function contactsDelete(id) {
+  if (!confirm('Delete this contact?')) return
+  try {
+    await fetch(`/api/contacts/${id}`, { method: 'DELETE' })
+    contactsData = contactsData.filter(c => c.id !== id)
+    if (contactsEditingId === id) contactsCancelEdit()
+    contactsRender(document.getElementById('contacts-search')?.value || '')
+  } catch (err) {
+    console.error('[contacts] delete error:', err)
+  }
+}
+
+// Wire up contacts overlay events
+;(function initContacts() {
+  document.getElementById('btn-open-contacts')?.addEventListener('click', () => openContactsOverlay())
+  document.getElementById('contacts-close-btn')?.addEventListener('click', closeContactsOverlay)
+  document.getElementById('contacts-overlay')?.addEventListener('click', e => {
+    if (e.target === document.getElementById('contacts-overlay')) closeContactsOverlay()
+  })
+  document.getElementById('contacts-save-btn')?.addEventListener('click', contactsSave)
+  document.getElementById('contacts-cancel-btn')?.addEventListener('click', contactsCancelEdit)
+  document.getElementById('contacts-search')?.addEventListener('input', e => {
+    contactsRender(e.target.value)
+  })
+  // Allow Enter in any form field to save
+  document.getElementById('contacts-form-wrap')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') contactsSave()
+  })
+})()
