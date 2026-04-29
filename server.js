@@ -255,6 +255,70 @@ const LAUREN_REVIEW_SEED = [
     createdAt: '2026-04-16T00:00:00.000Z',
     suggestion: "When you find BOTH of these conditions for the same amendment: (1) the amendment document in the folder has completely blank 'By:' signature lines for both parties (unexecuted template), AND (2) one or more later amendments in the folder reference that same amendment as having been executed on a specific date — do NOT generate two separate findings. Generate exactly ONE consolidated REFERENCED_DOC finding that combines both pieces of evidence. The finding should state: (a) what was received — an unexecuted template with blank signature lines, (b) what later amendments confirm — that the executed version exists, citing the specific recital language and date, and (c) the conclusion — the signed counterpart is absent from the folder. DO NOT also generate a separate EXECUTION finding for the same amendment in this scenario. Two findings for the same document gap is redundant noise.",
     rationale: "Manual training 4/16/2026 (Monterey Bay Homes). Model generated 4 findings for 2 amendments: unexecuted Amendment 3 template (EXECUTION) + signed Amendment 3 missing per recitals (REFERENCED_DOC) = same gap, two findings. Correct behavior: one consolidated REFERENCED_DOC finding per amendment combining both pieces of evidence."
+  },
+  // ── Lauren's 2026-04-23 TP2 review (Masons-Pigtails + BOA-Ground Central) ──────
+  {
+    id: 'learning-1775527200001-fp001', source: 'lauren-review-2026-04-23', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-04-29T00:00:00.000Z',
+    suggestion: "CRITICAL — before flagging ANY document as unexecuted or partially executed, you must read ALL pages from the first signature block through the end of the document. Multi-party lease documents routinely place each party's signature on a separate consecutive page: Landlord signs on page N, Tenant signs on page N+1, Guarantor signs on page N+2. A blank 'By:' line on page N does NOT mean that party failed to sign — their signature may be on the very next page. Required two-step procedure: (1) locate the opening of the signature section, (2) scan every remaining page of the document for signatures before drawing any execution conclusion. Only flag a document as unexecuted when you have confirmed that NO signature for that party exists anywhere from the first signature block through the final page of the document.",
+    rationale: "7 rejected HIGH findings from 2026-04-23 TP2 session (Evercore, Duff & Phelps ×5, BlakeTodd). Reviewer explicitly stated 'The tenant signed on the following page' for 2 findings; all others confirmed 'fully executed.' Single largest false-positive driver in this session."
+  },
+  {
+    id: 'learning-1775527200002-bl002', source: 'lauren-review-2026-04-23', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-04-29T00:00:00.000Z',
+    suggestion: "A blank 'Date:' line or 'Dated:' line immediately below or beside a completed signature ('By:') block is NOT an execution defect. Documents are executed when parties sign — the date line is a courtesy field. The ONLY line whose blank status determines execution is the 'By:' signature line itself. If 'By:' has a signature, the document is executed regardless of whether the Date, Name, Title, or any other secondary field below it is blank.",
+    rationale: "2 rejected HIGH findings from 2026-04-23 TP2 session (Monterey Bay Homes Amendment No. 5 and 6). Landlord 'By:' line had a visible signature; 'Date:' line below was blank. Reviewer confirmed both: 'This document is fully executed.' Extends existing rule ex005 to explicitly cover blank Date lines."
+  },
+  {
+    id: 'learning-1775527200003-pb003', source: 'lauren-review-2026-04-23', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-04-29T00:00:00.000Z',
+    suggestion: "Template placeholder blanks in the preamble or recitals of a document — such as 'This Lease entered into this ___ day of _______________, 20__' — are completely irrelevant to execution status. These are form-printing artifacts routinely left blank in practice. Execution is determined solely by the signature page(s). If the signature blocks are completed, the document is fully executed regardless of blank preamble fields. Do not generate any finding about unfilled blanks in preamble or introductory language.",
+    rationale: "1 rejected HIGH finding from 2026-04-23 TP2 session (Pho Tastic lease). Model flagged preamble 'this ___ day of ___' blanks as execution concern. Reviewer: 'This does not matter. This is not a missing document. The lease is executed.' Signature page had clear notary-acknowledged date (May 12, 2025)."
+  },
+  {
+    id: 'learning-1775527200004-dv004', source: 'lauren-review-2026-04-23', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-04-29T00:00:00.000Z',
+    suggestion: "When a folder contains two versions of the same document — one fully executed (signed PDF) and one unexecuted template (blank .docx or unsigned PDF) — the executed version is the operative document and the folder is complete for that instrument. Do not flag the unexecuted template as an execution deficiency or a duplicate. To confirm two documents are versions of the same instrument, compare document title, effective date, and parties. If those match and one is executed, no finding is needed.",
+    rationale: "1 rejected HIGH finding from 2026-04-23 TP2 session (China Dragon Second Amendment). Folder had both executed PDF and unexecuted .docx of same Amendment. Reviewer: 'One of the Second Amendments is executed which is sufficient.' Note: the inverse still applies — if ONLY the unexecuted template exists with no executed counterpart, the finding is valid."
+  },
+  {
+    id: 'learning-1775527200005-oe005', source: 'lauren-review-2026-04-23', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-04-29T00:00:00.000Z',
+    suggestion: "A signed letter or notice exercising any contractual option — including renewal options, extension options, expansion options, right-of-first-offer exercises, and termination option notices — is sufficient documentation of that option exercise. Do not flag the absence of a formal executed amendment memorializing the exercise unless the option agreement itself expressly states that a formal amendment is required as a condition of effectiveness. An exercise notice or letter signed by the exercising party is the operative document.",
+    rationale: "1 rejected MEDIUM finding from 2026-04-23 TP2 session (Morgan Stanley 10th Floor expansion option). Model flagged no formal amendment memorialized the expansion after the exercise notice. Reviewer: 'The letter says it is the exercise of the 10th floor expansion.' Extends existing rule ren022 to all option types, not just renewal/extension."
+  },
+  {
+    id: 'learning-1775527200006-nd006', source: 'lauren-review-2026-04-23', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-04-29T00:00:00.000Z',
+    suggestion: "Do not generate any finding about a discrepancy between a notary acknowledgment date and the document's stated effective date (e.g., notary date precedes effective date by one month). Notary dates routinely differ from effective dates — pre-execution notarization and administrative post-dating are both common practice. This type of date discrepancy is outside review scope. A document is executed when signatures are present.",
+    rationale: "1 rejected MEDIUM finding from 2026-04-23 TP2 session (Masons Tennismart Guaranty). Notary acknowledgment (Dec 15, 2022) predated effective date (Jan 18, 2023) by one month. Reviewer: 'This is not exactly wrong, but we don't need this information for Missing Documents.'"
+  },
+  {
+    id: 'learning-1775527200007-rr007', source: 'lauren-review-2026-04-23', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-04-29T00:00:00.000Z',
+    suggestion: "When a document's recitals or body references another document by name, do NOT automatically generate a Missing Document finding. First search the entire folder — all files, all pages, including exhibits and attachments — to verify whether the referenced document is already present under a different filename, slightly different title, or as an attachment. Only flag it as missing after a thorough folder-wide search. If a document in the folder reasonably matches the referenced instrument (matching parties, approximate date, subject matter), do not flag it as missing even if filename or title differs slightly.",
+    rationale: "1 rejected MEDIUM finding from 2026-04-23 TP2 session (Duff and Phelps). Model flagged missing document based on body reference. Reviewer: 'The reviewer determined this is not missing. It may just mean that it is a reference to an amendment we already have.'"
+  },
+  {
+    id: 'learning-1775527200008-gty008', source: 'lauren-review-2026-04-23', active: true,
+    checkType: 'GUARANTY', confidence: 'HIGH',
+    createdAt: '2026-04-29T00:00:00.000Z',
+    suggestion: "Do not flag a Guaranty as missing unless you find EXPLICIT evidence in the documents that a guaranty was contractually required. Acceptable evidence: (a) lease clause stating Tenant shall deliver a guaranty with named guarantor, (b) lease Table of Contents listing 'Exhibit [X]: Guaranty of Lease', (c) lease body referencing 'the Guaranty attached hereto as Exhibit [X]', or (d) amendment recital confirming a specific guaranty was delivered. If no such evidence exists and no guaranty document is in the folder, do not raise a Missing Guaranty finding — the guaranty requirement may have been waived or may never have existed. Flag only when: the obligation is documented AND either the document is absent OR present but unsigned.",
+    rationale: "1 rejected HIGH finding from 2026-04-23 TP2 session (China Dragon Guaranty). Reviewer: 'It's possible a Guaranty was never signed. The best rule is if a document is titled guaranty then it should have the guaranty signature.' Only assert missing guaranty when lease explicitly required one."
+  },
+  {
+    id: 'learning-1775527200009-mp009', source: 'lauren-review-2026-04-23', active: true,
+    checkType: 'MISSING_PAGES', confidence: 'HIGH',
+    createdAt: '2026-04-29T00:00:00.000Z',
+    suggestion: "Apply a HIGH confidence threshold before raising any Missing Pages finding. A Missing Pages finding requires ALL THREE of the following simultaneously: (1) there is a gap in the document's OWN internal page numbering (as printed on the pages, not the PDF viewer count), (2) you can identify specific content that would appear on the missing pages — a broken sentence, an incomplete clause, a Table of Contents entry with no corresponding page, or a defined term that appears but is never explained, AND (3) the missing content is material — a signature page, operative provision, or key exhibit. If you cannot satisfy all three conditions, do not generate a Missing Pages finding.",
+    rationale: "3 rejected LOW findings from 2026-04-23 TP2 session (BlakeTodd ×3). Reviewer confirmed in all three: 'Pages are not missing' / 'These pages are present and not missing.' Supplements existing rule mp001 with explicit three-condition threshold."
   }
 ]
 
