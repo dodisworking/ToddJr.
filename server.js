@@ -417,6 +417,41 @@ const LAUREN_REVIEW_SEED = [
     createdAt: '2026-05-01T00:00:00.000Z',
     suggestion: "EXHIBIT AND DOCUMENT-END PAGE GAPS ARE NOT SUBJECT TO THE CONTENT-CONTINUITY VETO. The content-continuity test (does the surrounding text flow without a scar?) only applies to gaps in the middle of body text sections. Two additional gap types must always be flagged regardless of content continuity: (1) EXHIBIT GAPS — if a referenced exhibit begins but appears to have its first page or opening pages missing (e.g., Exhibit F header appears with no content, or the exhibit index lists Exhibit F but no Exhibit F pages appear in the document), flag it. An exhibit stub with no content pages IS a missing pages finding. (2) DOCUMENT-END GAPS — if printed page numbers end before the expected last page (e.g., document shows pages 1-49 but the sequence implies page 50 should be present, or the document ends mid-section without a signature page), flag it regardless of whether preceding pages read continuously. For these two gap types, the simple page-number gap trigger (Step 1 of mp009) is sufficient — the content-continuity Step 2 is NOT required to confirm.",
     rationale: "2 false negatives from 2026-05-01 Test 5: Kay Jewelers (page 50 missing from lease — reviewer manual flag: 'Page 50 is missing from KayJewelers Lease dated 8.23.10.pdf') and Jared Vault (First page of Exhibit F missing — reviewer manual flag: 'Page 47: First page of Exh F missing'). In both cases the model suppressed the finding because surrounding body content read continuously, but the missing page was at an exhibit boundary or document end where that test is invalid."
+  },
+  {
+    id: 'learning-1775872800001-sf024', source: 'lauren-review-2026-05-01b', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-05-01T00:00:00.000Z',
+    suggestion: "If a document has a blank signature block for one party AND the folder contains a separate file that is clearly a detached signature page, signature scan, or standalone signature form, treat that separate file as the signature page for the main document — do NOT flag the main document as unexecuted. Matching logic: a separate signature file belongs to a main document if it shares any of: the same year, the same document type (amendment, renewal, assignment), or the same parties. Example: 'Scan Fried Signature to Renewal 2019.pdf' = the Landlord signature page for 'Assignment & 6th Amendment Renewal of Lease dated August 8, 2019.' You do not need an exact filename match — temporal and contextual proximity is sufficient. A blank signature block in the main PDF + a corresponding standalone signature file in the folder = fully executed.",
+    rationale: "2 rejected findings (duplicate) from 2026-05-01b session: Freeway Insurance. Landlord 'By:' blank in main lease file; separate 'Scan Fried Signature to Renewal 2019.pdf' existed in folder. Model flagged as unexecuted despite the signature scan. Reviewer: 'Landlord signed document.' / 'Document is fully executed.'"
+  },
+  {
+    id: 'learning-1775872800002-fn025', source: 'lauren-review-2026-05-01b', active: true,
+    checkType: 'NAME_MISMATCH', confidence: 'HIGH',
+    createdAt: '2026-05-01T00:00:00.000Z',
+    suggestion: "The folder name used to organize tenant documents is an administrative label — it is NEVER the legal entity name and must NOT be compared against legal entity names in documents. Folder names are shorthand (e.g., 'Freeway Insurance' for 'Freeway Insurance Services, LLC'; 'Gap' for 'Gap Inc.'; 'BOA' for 'Bank of America, N.A.'). A discrepancy between the folder name and the legal entity name in a document is NOT a name mismatch finding of any kind. Name mismatch findings are only valid when comparing legal entity names within documents against each other — never folder name vs. document name.",
+    rationale: "2 rejected findings (duplicate) from 2026-05-01b session: Freeway Insurance. Folder labeled 'Freeway Insurance'; documents show 'Freeway Insurance Services, LLC.' Model generated name mismatch finding. Reviewer: 'It's ok that the names are different. This does not need to be noted.' / 'Sometimes the names may not match. Nothing is missing.'"
+  },
+  {
+    id: 'learning-1775872800003-gty026', source: 'lauren-review-2026-05-01b', active: true,
+    checkType: 'GUARANTY', confidence: 'HIGH',
+    createdAt: '2026-05-01T00:00:00.000Z',
+    suggestion: "The language 'the guarantor of the Lease shall be [Name]' or '[Name] shall be the guarantor' in an amendment DOES NOT create an obligation to produce a separate executed guaranty document. This language names who would serve as guarantor but does not require delivery of a separate instrument. Do NOT flag a missing guaranty based solely on this language. Only flag a missing guaranty when the document explicitly requires delivery: e.g., 'Tenant shall deliver a Guaranty of Lease executed by [Name]', 'a Guaranty in the form of Exhibit [X] shall be executed and delivered', or the lease Table of Contents lists a Guaranty as a required exhibit. A naming clause is not a delivery requirement.",
+    rationale: "1 rejected finding from 2026-05-01b session: China Dragon Amendment No. 2 Paragraph 3 stated 'The guarantor of the Lease shall be Yu Hui Chen.' No Yu Hui Chen guaranty in folder. Model flagged as missing guaranty. Reviewer: 'The document doesn't exactly say a Guaranty exists. I wouldn't note this as a missing document.'"
+  },
+  {
+    id: 'learning-1775872800004-mol027', source: 'lauren-review-2026-05-01b', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-05-01T00:00:00.000Z',
+    suggestion: "Memoranda of Lease, Memoranda of Lease Agreement, Short Form Leases, and similar county-recording instruments are NOT operative lease documents and are completely out of scope for execution review. Do not flag blank witness lines, missing notarizations, incomplete acknowledgments, or any other execution concern in a Memorandum of Lease. These recording instruments are not used in abstracting and are never reviewed for execution deficiencies. If a Memorandum of Lease appears in a folder, it may be noted as present but requires no execution analysis whatsoever.",
+    rationale: "1 rejected finding from 2026-05-01b session: Bank of America Memorandum of Lease had blank Witness #1 and #2 lines on Landlord signature page. Model flagged as execution concern. Reviewer: 'This document is fully executed. We do not use Memorandum of Lease in abstracting so we would not include this document at all.'"
+  },
+  {
+    id: 'learning-1775872800005-sc029', source: 'lauren-review-2026-05-01b', active: true,
+    checkType: 'GENERAL', confidence: 'HIGH',
+    createdAt: '2026-05-01T00:00:00.000Z',
+    suggestion: "SELF-CONTRADICTING FINDINGS MUST BE SUPPRESSED: If your own finding description already acknowledges that the issue is not a deficiency — using phrases such as 'this is acceptable', 'not a mismatch', 'executed version is operative', 'not a deficiency', 'no finding needed', 'sufficient', 'this is acceptable shorthand', or any other self-exculpatory language — you MUST NOT output that finding. A finding whose own text explains why it is not a problem is a zero-value output that wastes reviewer time. Before outputting any finding, read your own description: if it contains language that resolves or dismisses the concern, delete the finding entirely. Examples of self-contradicting findings that must be suppressed: (a) 'Folder labeled X but tenant is Y — this is acceptable shorthand variation, not a mismatch'; (b) 'Two versions exist — executed version is operative; unexecuted template is not a deficiency'; (c) 'Blank date line below completed By: signature — date is a secondary field and does not affect execution.'",
+    rationale: "3 rejected findings from 2026-05-01b session where the AI's own finding text already dismissed the concern but still output the finding: Freeway Insurance name mismatch ('this is acceptable shorthand variation, not a mismatch' — still flagged), China Dragon Amendment No. 2 execution ('Executed version is operative; unexecuted template is not a deficiency' — still flagged). This is the single most wasteful false-positive pattern."
   }
 ]
 
