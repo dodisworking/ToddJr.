@@ -1429,15 +1429,23 @@ function fileEntryToFile(fileEntry) {
 /**
  * Collect files from one dropped directory (webkit DirectoryEntry).
  * Same tenant/portfolio rules as uploadFolder (FileSystemDirectoryHandle).
+ *
+ * @param {FileSystemDirectoryEntry} dirEntry
+ * @param {{ forceTenant?: boolean }} opts  Pass forceTenant:true when the caller
+ *   already knows this entry IS a tenant folder (e.g. from uploadMultipleFolderEntries).
+ *   This bypasses the heuristic that mis-fires when a tenant folder contains
+ *   sub-folders whose names happen to include " - " (e.g. "Documents - 2019").
  */
-async function collectFilesFromDirEntry(dirEntry) {
+async function collectFilesFromDirEntry(dirEntry, { forceTenant = false } = {}) {
   const name = dirEntry.name
   const topEntries = await readAllDirEntries(dirEntry)
   const subfolders = topEntries.filter(e => e.isDirectory)
 
   const droppedFolderIsTenant     = name.includes(' - ')
   const subfoldersLookLikeTenants = subfolders.some(e => e.name.includes(' - '))
-  const isSingleTenant            = droppedFolderIsTenant || !subfoldersLookLikeTenants
+  // forceTenant overrides the heuristic — use it when every dropped entry is
+  // already known to be a single tenant folder (multi-select drop scenario).
+  const isSingleTenant            = forceTenant || droppedFolderIsTenant || !subfoldersLookLikeTenants
 
   const fileMap = new Map()
 
@@ -1476,7 +1484,9 @@ async function uploadFolderFromEntry(dirEntry) {
 async function uploadMultipleFolderEntries(dirEntries) {
   const all = []
   for (const de of dirEntries) {
-    const { files } = await collectFilesFromDirEntry(de)
+    // Each entry IS a tenant folder by definition — force single-tenant mode so
+    // the heuristic can't misfire on sub-folders with " - " in their names.
+    const { files } = await collectFilesFromDirEntry(de, { forceTenant: true })
     all.push(...files)
   }
   console.log('[uploadMultipleFolderEntries]', dirEntries.length, 'roots →', all.length, 'files')
