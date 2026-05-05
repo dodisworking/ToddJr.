@@ -593,6 +593,29 @@ const LAUREN_REVIEW_SEED = [
     createdAt: '2026-05-05T00:00:00.000Z',
     suggestion: "The following document types are ENTIRELY OUT OF SCOPE and must NEVER be flagged as missing, unexecuted, incomplete, or deficient — regardless of whether they appear in the folder or are referenced in lease documents: (1) Sales Reports — periodic tenant sales volume reports submitted to landlord; (2) Gross Sales Certifications — annual or periodic certifications of gross sales for percentage rent purposes; (3) Percentage Rent Statements — reports calculating or certifying percentage rent obligations; (4) Sales Audit Correspondence — landlord demands for sales reports, audit requests, or responses to same; (5) Sales Reconciliation Letters — any correspondence settling, disputing, or confirming gross sales figures. These are operational financial documents, not lease instruments. Their presence or absence in a folder is irrelevant to the lease abstracting review. If any of these appear, do not analyze them. If any are absent, do not flag them.",
     rationale: "Pattern identified across TP sessions: model generated findings about missing sales reports, gross sales certifications, and demand-for-sales correspondence when percentage rent clauses in the lease referenced them. These are recurring operational documents that are out of scope for lease abstracting. Their absence is never a finding."
+  },
+
+  // ── TP2 session 2026-05-05: patterns from Target Practice 2 review ──────────
+  {
+    id: 'learning-1778112000001-ex050', source: 'tp2-review-2026-05-05', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-05-05T12:00:00.000Z',
+    suggestion: "A blank 'Date:' line immediately below or beside a signed 'By:' signature block is NEVER an execution defect. This is the single most-rejected category across all review sessions. The ONLY field that determines execution is the 'By:' signature line. If By: has any visible mark — handwritten signature, printed name with signature above it, electronic signature indicator, or initials — the document IS fully executed, regardless of: (a) a blank Date: field, (b) a blank Dated: field, (c) a date entered in the Title: field instead of the Date: field, (d) a blank Its: or Title: field, (e) a blank Print Name: or Printed Name: field. Do NOT generate any finding about these secondary fields. If you find yourself drafting a finding about a blank Date: line where By: is signed, DELETE that finding before outputting it. This is non-negotiable — reviewer has rejected this finding type in every test session.",
+    rationale: "TP2 session 2026-05-05: 4 of 7 rejected findings (across Stretch Zone, Wells Fargo, Monterey Bay Homes) were about blank Date: lines in otherwise fully-signed documents. Reviewer in every case: 'Document is fully executed. We do not need the date line to be filled out. We just need a signature.' This strengthens bl002 (2026-04-23) with explicit deletion instruction and specific variants."
+  },
+  {
+    id: 'learning-1778112000002-mp051', source: 'tp2-review-2026-05-05', active: true,
+    checkType: 'MISSING_PAGE', confidence: 'HIGH',
+    createdAt: '2026-05-05T12:00:00.000Z',
+    suggestion: "Blank pages appearing at the end of an exhibit section — such as a page labeled 'D-3' that is entirely blank, or a duplicate 'D-1' page that is blank, following substantive content pages D-1 and D-2 — are scan artifacts from the physical back-sides of pages or physical separator sheets. They are NOT missing content. Before flagging any blank pages as missing exhibit content, verify: (a) does the exhibit's substantive content on the pages BEFORE the blank pages flow to completion without a broken sentence? (b) does the preceding content appear to finish its numbered list or section cleanly? If both are true, the blank trailing pages are artifacts — do NOT generate a finding. The same logic applies to any exhibit that has numbered pages out of sequence (e.g., D-3 followed by a second D-1) — this is a scanning artifact, not a structural defect.",
+    rationale: "TP2 session 2026-05-05: Pho Tastic Exhibit D (Sign Criteria) — pages D-3 and duplicate D-1 were blank scan artifacts after complete content on D-1 and D-2. Reviewer: 'Nothing looks cut off. I wouldn't say anything is missing.' Model incorrectly flagged as LOW severity missing exhibit."
+  },
+  {
+    id: 'learning-1778112000003-mp052', source: 'tp2-review-2026-05-05', active: true,
+    checkType: 'MISSING_PAGE', confidence: 'HIGH',
+    createdAt: '2026-05-05T12:00:00.000Z',
+    suggestion: "Many commercial leases use dual numbering systems: Roman numerals (i, ii, iii, iv, v, vi) for front-matter sections (Table of Contents, Basic Lease Terms, Key Provisions Summary) and Arabic numerals (1, 2, 3…) starting at page 1 for the body. The transition from the last Roman-numeral page (e.g., page vi) to body page 1 (e.g., the first page of Section 2, Definitions) creates an apparent page number gap (the scan's page counter may jump from its internal count). This is NOT a missing page — it is a standard legal document formatting convention. Do NOT flag this transition as a missing pages gap. The two-step content check (mp009) must still confirm a genuine content scar before any missing-page finding is generated; the absence of page numbers '1' through '4' in the printed sequence when those pages are actually the Roman-numeral front matter is not a content scar.",
+    rationale: "TP2 session 2026-05-05: Stretch Zone 2019 lease — front matter used Roman numerals i–vi, body began at Arabic page 1. Model incorrectly detected a 'jump from page 1 to page 5' as missing pages. Reviewer: 'This does not need to be noted.' The automated page-gap detection misread the Roman numeral front matter as pages 1-4."
   }
 ]
 
