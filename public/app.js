@@ -9333,21 +9333,8 @@ async function mtRunTenant(idx) {
   document.getElementById('gym-progress-fill').style.width = '0%'
   document.getElementById('gym-loading-msg').textContent = 'Running blind analysis...'
 
-  // Inject accumulated juice rules (or reset if none yet)
-  try {
-    if (mtState.currentRules.length > 0) {
-      await fetch(sameOriginApi('/api/target/load-model'), {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: mtState.sessionId, rules: mtState.currentRules, modelId: null, modelName: 'MT session juice' })
-      })
-    } else {
-      await fetch(sameOriginApi('/api/target/reset-juice'), {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: mtState.sessionId })
-      })
-    }
-  } catch {}
-
+  // MT always runs on global learnings only — no juice rules injected.
+  // Feedback from MT comes back manually and gets written as permanent rules.
   await mtGymRegisterLocalFiles(tenant.id)
 
   // MT always uses the full model — never pass cheapQs() here (same as TP2)
@@ -9901,18 +9888,9 @@ async function mtRerun() {
   if (titleEl2) titleEl2.textContent = '🧪 Master Trainer'
   document.getElementById('gym-subtitle').textContent = `Rerun (Attempt ${mtState.attempt}): ${tenant.tenantName}`
   document.getElementById('gym-progress-fill').style.width = '0%'
-  document.getElementById('gym-loading-msg').textContent = `Running with ${mtState.currentRules.length} juice rules...`
+  document.getElementById('gym-loading-msg').textContent = 'Running analysis...'
 
-  try {
-    const ctrl = new AbortController()
-    setTimeout(() => ctrl.abort(), 15000)
-    await fetch(sameOriginApi('/api/target/load-model'), {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      signal: ctrl.signal,
-      body: JSON.stringify({ sessionId: mtState.sessionId, rules: mtState.currentRules, modelId: null, modelName: 'MT session juice' })
-    })
-  } catch {}
-
+  // MT always runs on global learnings only — no juice injection.
   await mtGymRegisterLocalFiles(tenant.id)
 
   // MT always uses the full model — never pass cheapQs() here (same as TP2)
