@@ -10,7 +10,7 @@ import fs from 'fs'
 import os from 'os'
 import unzipper from 'unzipper'
 import archiver from 'archiver'
-import { analyzeTenant, gymAnalyzeTenant, beefedUpAnalyzeTenant, doubleCheckTenant } from './lib/analyzer.js'
+import { analyzeTenant, gymAnalyzeTenant, beefedUpAnalyzeTenant, doubleCheckTenant, tp3AnalyzeTenant } from './lib/analyzer.js'
 import { synthesizeActiveLearning, synthesizeDeepLearning, compareToCheatSheet, getKeyCount, getLastGymKeyIdx } from './lib/claude.js'
 import { openaiAnalyzeTenant, isOpenAiKeyConfigured, getServerOpenAiKeyHint } from './lib/openai.js'
 import { generateReport } from './lib/reporter.js'
@@ -674,6 +674,92 @@ const LAUREN_REVIEW_SEED = [
     createdAt: '2026-05-06T00:00:00.000Z',
     suggestion: "TEXT-EXTRACTION PAGE-NUMBER ARTIFACTS: When you observe printed page numbers that appear to skip wildly (e.g., 5 → 20, 1 → 28, 28 → 4097, or PDF page 50 → page 1 → page 200), this is almost always a TEXT-EXTRACTION ARTIFACT, not missing pages. Causes include: (a) text extraction concatenating page numbers from multiple sub-documents bound into one PDF; (b) header/footer noise being parsed as page numbers; (c) section restart numbering across exhibits; (d) PDF metadata vs printed page mismatches. Before flagging missing pages, verify: does the lease body's TEXT FLOW continuously? Does it END with substantive content followed by a signature page? Are sections complete? If the document reads as a coherent complete lease end-to-end, the apparent page jumps are extraction artifacts — DO NOT flag missing pages. Only flag when the two-step content check (mp009) confirms a real content scar (broken sentence at boundary, TOC entry with no content, or skipped section number).",
     rationale: "TP2 session 2026-05-06: Fantastic Sams — model flagged 'Lease-pdf.pdf' as 'severely truncated' with page jumps 5→20, 1→28, 28→4097 and concluded 'lease body incomplete; no signature block.' Reviewer: 'Pages are not missing. Lease is present and complete.' The text extraction had concatenated multiple sub-document page numbers, creating phantom gaps."
+  },
+
+  // ── TP3 historical-corpus mining 2026-05-06: 18+ rejected-finding xlsx files ──
+  {
+    id: 'learning-1778205600001-ex061', source: 'tp3-corpus-mining-2026-05-06', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-05-06T18:00:00.000Z',
+    suggestion: "PRE-PRINTED NAME STRUCK OUT WITH HANDWRITTEN REPLACEMENT IS VALID: When a signature block has a pre-printed name that has been crossed out or struck through, with a handwritten name written in and a corresponding signature, the document IS executed. Do NOT flag this as a name mismatch or execution defect — it is standard practice when a different person from the originally-printed name actually signs. Similarly: if the handwritten signature does NOT visually match the printed name (e.g., printed name says 'John Smith' but signature looks like 'JS' initials or a stylized scrawl), this is still valid execution. Only the PRESENCE of a By: signature line marking determines execution.",
+    rationale: "Historical TP corpus: Smart Repair (pre-printed name struck out + handwritten replacement, reviewer: 'It's ok that its crossed out. We have a matching name and signature'); Mount of Olives + Sweet Frog (signatures don't match printed names, reviewer: 'It's ok that signatures don't match the handwritten name perfectly')."
+  },
+  {
+    id: 'learning-1778205600002-ex062', source: 'tp3-corpus-mining-2026-05-06', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-05-06T18:00:00.000Z',
+    suggestion: "NOTARY ACKNOWLEDGMENT, WITNESS SIGNATURES, AND BROKER ACKNOWLEDGMENTS ARE NOT REQUIRED: A blank, missing, illegible, or absent notary acknowledgment block, jurat, witness signature line, or broker acknowledgment block is NEVER an execution finding. These elements are not required for lease execution validity in this practice. Documents with blank notary or witness sections are still fully executed if the By: signature line of each required party is signed. Specifically do not flag: (a) blank notary acknowledgment on a Memorandum of Lease; (b) missing notary stamp; (c) blank witness signature line on the lease body or any amendment; (d) blank broker acknowledgment / broker signature page; (e) absent jurat language. Confirmed across multiple sessions: Pho Tastic, Oakley, BoA Memorandum, Barberito's, Donato's.",
+    rationale: "Historical TP corpus: Pho Tastic, Oakley, BoA Memorandum (notary blank, reviewer: 'Document is fully executed. Nothing needs to be noted'); BoA Memorandum + others (witnesses blank, reviewer: 'Document is fully executed'); Barberito's, Donato's (broker acknowledgment blank, reviewer: 'Not included in abstracting. Not missing'). Strengthens existing F12 (notarization absent) with explicit broker-ack and witness coverage."
+  },
+  {
+    id: 'learning-1778205600003-oos063', source: 'tp3-corpus-mining-2026-05-06', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-05-06T18:00:00.000Z',
+    suggestion: "MEMORANDUM OF LEASE / SNDA / ESTOPPEL / BROKER COMMISSION — NEVER FLAG AS MISSING OR REQUIRING SIGNATURE: These document types are out of abstracting scope and must NEVER appear in findings: (1) MEMORANDUM OF LEASE — not needed for abstracting, do not flag if missing, do not flag if unsigned; (2) SNDA / Subordination, Non-Disturbance & Attornment Agreement — never abstracted, regardless of references in the lease; (3) ESTOPPEL CERTIFICATE — estoppels do not need to be signed, do not flag missing or unsigned estoppels; (4) BROKER COMMISSION AGREEMENT / LEASE COMMISSION AGREEMENT — never abstracted; (5) FRANCHISE AGREEMENT / FRANCHISE COLLATERAL ASSIGNMENT — never abstracted. Even if any of these is referenced multiple times in the lease body, do not flag. Even if the lease 'requires' delivery of one of these, do not flag.",
+    rationale: "Historical TP corpus: BoA, Price Chopper, Instant Replay (Memorandum of Lease flagged, reviewer: 'Memorandum of Leases are not needed for abstracting'); Academy Sports, Barberito's, Duff & Phelps (SNDA flagged, reviewer: 'We don't need SNDA Agreements'); Dollar General (estoppel signature, reviewer: 'Estoppels don't need to be signed'); Fins, Donato's, Instant Replay (broker commission, reviewer: 'We don't include Broker Commission Agreements in abstract'); Donato's, Barberito's (franchise/collateral assignment, reviewer: 'We don't usually need Collateral Assignments for abstracting')."
+  },
+  {
+    id: 'learning-1778205600004-oos064', source: 'tp3-corpus-mining-2026-05-06', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-05-06T18:00:00.000Z',
+    suggestion: "OPERATIONAL / ANCILLARY DOCUMENTS NEVER ABSTRACTED: HVAC Service Agreement, Pest Control Agreement, Certificates of Insurance (COIs), Business License, W-9 form, ACH/Direct Deposit Authorization, Committee Review Form / Deal Approval Form, Sales Report demands or audit correspondence, Notice of Merger, Bankruptcy Assumption Order, court orders, Construction Sub-Contracts (AIA G704 / Certificate of Substantial Completion / TIA / Punch List), and similar operational documents are NEVER abstracted and NEVER missing. Do not flag any of these as missing, deficient, or unsigned. AIA G704 and similar construction sub-documents specifically: 'This does not need to be signed.'",
+    rationale: "Historical TP corpus: Wellness, BoA, Great Clips, Price Chopper (HVAC, COIs, W-9, ACH, Committee Review, sales-report demands flagged, reviewer: 'We do not need this'); Academy Sports (AIA G704 unsigned flagged, reviewer: 'This does not need to be signed'); Big Biscuit (Notice of Merger flagged, reviewer: 'We don't usually need a Notice of Merger'); Claire's (Bankruptcy Assumption Order flagged, reviewer: 'This is not a missing document')."
+  },
+  {
+    id: 'learning-1778205600005-amr065', source: 'tp3-corpus-mining-2026-05-06', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-05-06T18:00:00.000Z',
+    suggestion: "AMENDED & RESTATED LEASE SUPERSEDES ALL PRIOR DOCUMENTS: When the folder contains an Amended and Restated Lease (or A&R Lease) that contains the full lease terms, this document IS the operative lease. Do NOT flag the original lease, prior amendments, or related ancillary documents as missing — the A&R Lease incorporates and supersedes all of them. Specifically: (a) original lease that's been incorporated into A&R Lease — not missing; (b) early amendments incorporated into A&R Lease — not missing; (c) recital references to documents that have been folded into the A&R Lease — not findings. Same principle applies to expired/replaced TLA chains: when a current TLA supersedes prior expired TLAs, the prior TLAs are not missing.",
+    rationale: "Historical TP corpus: Sweet Frog, La Rosa Nails (original lease + early amendments flagged as missing, reviewer: 'If there is an Amended and Restated Lease that contains full Lease terms, this is considered the Lease'); Waikiki, Victoria's Secret short-term lease (expired TLAs flagged, reviewer: 'Expired and replaced, so nothing is needed'). Strengthens existing F14 (superseded documents) with explicit A&R Lease language."
+  },
+  {
+    id: 'learning-1778205600006-curr066', source: 'tp3-corpus-mining-2026-05-06', active: true,
+    checkType: 'CURRENCY', confidence: 'HIGH',
+    createdAt: '2026-05-06T18:00:00.000Z',
+    suggestion: "DO NOT NARRATE A CURRENT LEASE: When the lease IS current (not expired and not expiring within 90 days), generate ZERO findings of any kind about lease currency. Do NOT write affirmative narratives like 'The lease is current and active through [date],' 'The amendment chain is complete,' 'The guaranty is executed and in force,' 'No documents are missing,' or any similar status-confirmation note. Reviewer time is spent on actionable items only. The complete output for a current lease is silence. This is the most-rejected pattern across 8+ sessions: every affirmative-current narrative was rejected with 'This is correct but does not need to be noted.'",
+    rationale: "Historical TP corpus: Smart Repair, Sunset Shoes, Dollar General, La Rosa, Wellness, Barberito's, Zumiez x2, Zales, Big Biscuit (8+ sessions). All rejected affirmative-current narratives. Reviewer: 'This is correct but does not need to be noted. We only need to know if it's current.' Existing CHECK 3 already says silence = current, but the model keeps generating narratives anyway. This rule restates it as a hard prohibition."
+  },
+  {
+    id: 'learning-1778205600007-ag067', source: 'tp3-corpus-mining-2026-05-06', active: true,
+    checkType: 'AMENDMENT_GAP', confidence: 'HIGH',
+    createdAt: '2026-05-06T18:00:00.000Z',
+    suggestion: "AMENDMENT-CHAIN VERIFIED COMPLETE — DO NOT NOTE: When you have verified the amendment chain is complete and unbroken, generate NO finding about it. Do not write 'The amendment chain is complete,' 'All amendments are present,' 'Chain of title is unbroken,' or any affirmative completeness note. Generate findings ONLY for genuine gaps. Also: when recitals contain a DOCUMENT LIST that names every prior amendment by date and the listed documents are all present — even if the numbering differs from your expectation (e.g., 'Lease Extension' fills the Fifth-Amendment slot, or a 'Master Amendment' serves as the Third) — DO NOT flag a gap. The recitals' document list is authoritative. Go by the document list, not by ordinal numbering expectations.",
+    rationale: "Historical TP corpus: Dollar General, Wellness, Journeys, Sunglass Hut (4 sessions) — affirmative chain-complete narratives rejected: 'This is correct, but we don't need it noted.' Advance America, Sunglass Hut, Francesca's — model flagged numbered amendments as missing when recitals listed renamed/non-standard amendment titles, reviewer: 'if we have a document list in the recitals, we go by the document list.'"
+  },
+  {
+    id: 'learning-1778205600008-ex068', source: 'tp3-corpus-mining-2026-05-06', active: true,
+    checkType: 'MISSING_EXHIBIT', confidence: 'HIGH',
+    createdAt: '2026-05-06T18:00:00.000Z',
+    suggestion: "RESERVED EXHIBITS AND SUB-EXHIBITS ARE NEVER MISSING: (1) An exhibit explicitly marked 'RESERVED', '[Intentionally Left Blank]', '[Reserved]', or similar in the index or as a placeholder page is NOT missing — it is intentionally absent by design. Do NOT flag. (2) Sub-exhibits — exhibits within exhibits — such as Exhibit A-1, Exhibit A-2 within Exhibit A, sub-warranties, electrical proposals embedded in a Work Letter, or sub-attachments within a Collateral Assignment, are NOT separately required and are NEVER missing-exhibit findings. Only top-level exhibits listed in the formal lease exhibit index need to be checked.",
+    rationale: "Historical TP corpus: Academy K (RESERVED exhibit flagged, reviewer: 'This is fine'); La Rosa, Goldsmith, Academy (sub-exhibits flagged, reviewer: 'We dont usually need sub exhibits'). Strengthens existing exhibit-handling rules."
+  },
+  {
+    id: 'learning-1778205600009-gty069', source: 'tp3-corpus-mining-2026-05-06', active: true,
+    checkType: 'GUARANTY', confidence: 'HIGH',
+    createdAt: '2026-05-06T18:00:00.000Z',
+    suggestion: "DO NOT SPECULATIVELY FLAG GUARANTIES: A Guaranty finding is only valid when the lease/amendment EXPLICITLY requires delivery of a separate Guaranty document AND no executed Guaranty (under any filename) is present in the folder. Do NOT flag based on inference, indirect references, or speculative reasoning like 'a guaranty might exist,' 'a guaranty appears to be expected,' or 'language suggests a guarantor.' Naming a guarantor in passing (e.g., 'guarantor: John Smith') is NOT a delivery requirement. Also: if the guaranty IS present and signed by the guarantor, do NOT flag a missing Landlord countersignature/acceptance — guaranties are unilateral and do not require landlord countersignature.",
+    rationale: "Historical TP corpus: China Dragon x2, Design Nails (guaranty inferred from text but no explicit requirement, reviewer: 'I would let the reviewer decide... document doesn't exactly say a Guaranty exists'); Donato's (Guaranty signed by guarantor, Landlord countersignature blank, reviewer: 'This is considered executed'). Strengthens existing gty008 rule."
+  },
+  {
+    id: 'learning-1778205600010-init070', source: 'tp3-corpus-mining-2026-05-06', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-05-06T18:00:00.000Z',
+    suggestion: "PARTIAL INITIALS ON BODY PAGES ARE NOT EXECUTION DEFECTS: Body-page initial blocks (where each party initials each page of the lease as 'read and accepted') being partially blank — only one party initialed, or initials missing on some pages but present on others — is NOT an execution defect. Do NOT flag missing or partial initials on lease body pages. The only line that determines execution is the By: signature line in the formal signature block at the end of the document. Initials on body pages are courtesy markings.",
+    rationale: "Historical TP corpus: Sweet Frog (Tenant initialed body p.22, Landlord did not, reviewer: 'We don't need initials here')."
+  },
+  {
+    id: 'learning-1778205600011-leg071', source: 'tp3-corpus-mining-2026-05-06', active: true,
+    checkType: 'LEGIBILITY', confidence: 'MEDIUM',
+    createdAt: '2026-05-06T18:00:00.000Z',
+    suggestion: "LEGIBILITY FINDINGS MUST INCLUDE THE SPECIFIC FAILURE REASON: When generating a LEGIBILITY finding (manual review required because a document cannot be analyzed), you MUST include in the finding text the SPECIFIC reason: 'image-only PDF, no extractable text,' 'OCR scan quality too low to read,' '.doc legacy format requires conversion,' 'password-protected PDF,' 'corrupted file,' etc. A finding that just says 'Claude returned an unparseable response — manual review required' without diagnostic detail is unhelpful. The reviewer needs to know WHY they need to look manually. Also: a Word document (.doc/.docx) whose contents is itself a lease abstract summary is NOT a missing-document or legibility issue — it is an internal work product, see oos058 / F31.",
+    rationale: "Historical TP corpus: Pet Supplies, Sally Beauty, Hot Topic, Carter's, Old Navy, J. Crew (5+ sessions) — generic 'unparseable response' legibility flags, reviewer: 'It's correct to note this needs manual review, but it's helpful to see why this can't be reviewed.'"
+  },
+  {
+    id: 'learning-1778205600012-md072', source: 'tp3-corpus-mining-2026-05-06', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-05-06T18:00:00.000Z',
+    suggestion: "LEASE-DATE DISCREPANCIES IN AMENDMENT RECITALS ARE INFORMATIONAL ONLY: When an amendment's recital references the original lease by a date that differs slightly from the lease's actual date (e.g., recital says 'Lease dated June 1, 2018' but lease itself is dated 'May 30, 2018'), this is a scrivener-level inconsistency and is NOT a missing-document finding. Do NOT flag as 'N/A — Lease date discrepancy' or any variant. Recital date mismatches are common drafting artifacts when the lease's signing date differs from the lease's stated effective date. The actual lease document's presence satisfies the requirement.",
+    rationale: "Historical TP corpus: La Rosa Nails ('N/A — Lease date discrepancy' flagged, reviewer: 'This is ok and not considered a missing document'). Strengthens F11 (recital date discrepancy)."
   }
 ]
 
@@ -1223,7 +1309,7 @@ app.post('/api/session/register', express.json({ limit: '1mb' }), (req, res) => 
 
 app.post('/api/hunt/tenant', express.json({ limit: '500mb' }), async (req, res) => {
   try {
-    const { sessionId, tenant, files, juiced, learnings, cheap } = req.body
+    const { sessionId, tenant, files, juiced, tp3, learnings, cheap } = req.body
     if (!tenant || !Array.isArray(files)) {
       return res.status(400).json({ error: 'Missing tenant or files' })
     }
@@ -1237,13 +1323,16 @@ app.post('/api/hunt/tenant', express.json({ limit: '500mb' }), async (req, res) 
     }))
 
     const useJuice     = !!juiced
+    const useTP3       = !!tp3
     const cheapOpts    = { cheapMode: !!cheap }
     const learningsArr = Array.isArray(learnings) ? learnings : []
 
-    console.log(`[hunt/tenant] ${tenant.tenantName}: ${fileObjs.length} file(s), juice=${useJuice}, cheap=${cheapOpts.cheapMode}`)
+    console.log(`[hunt/tenant] ${tenant.tenantName}: ${fileObjs.length} file(s), juice=${useJuice}, tp3=${useTP3}, cheap=${cheapOpts.cheapMode}`)
 
     let result
-    if (useJuice && learningsArr.length > 0) {
+    if (useTP3 && learningsArr.length > 0) {
+      result = await tp3AnalyzeTenant(tenant, fileObjs, () => {}, learningsArr, cheapOpts)
+    } else if (useJuice && learningsArr.length > 0) {
       result = await beefedUpAnalyzeTenant(tenant, fileObjs, () => {}, learningsArr, cheapOpts)
     } else {
       result = await analyzeTenant(tenant, fileObjs, () => {}, cheapOpts)
@@ -1265,14 +1354,15 @@ app.post('/api/hunt/tenant', express.json({ limit: '500mb' }), async (req, res) 
 // ═══════════════════════════════════════════════════════════
 
 app.get('/api/hunt', async (req, res) => {
-  const { sessionId, testTenantId, concurrency, tenantIds, juiced } = req.query
+  const { sessionId, testTenantId, concurrency, tenantIds, juiced, tp3 } = req.query
   const session = sessions.get(sessionId)
 
   if (!session) return res.status(404).json({ error: 'Session not found' })
 
   const useJuice = juiced === '1'
+  const useTP3   = tp3 === '1'  // TP3 implies juice + Opus universal verifier + senior-lawyer review
   // Same learnings file as Gym: includes Dr. Todd "Extract & Save" rules + workout feedback (only l.active === true apply)
-  const learningsForHunt = useJuice ? readLearnings() : []
+  const learningsForHunt = (useJuice || useTP3) ? readLearnings() : []
   const activeLearningCount = learningsForHunt.filter(l => l.active).length
 
   // Use local copy — never mutate session.tenants so the user can re-run
@@ -1318,7 +1408,8 @@ app.get('/api/hunt', async (req, res) => {
     }
     // concurrency=1 → accuracy mode (sequential), concurrency=0 → speed mode (all at once)
     const CONCURRENCY = concurrency === '0' ? Math.min(5, tenantsToProcess.length) : 1
-    console.log(`[hunt] Mode: ${CONCURRENCY === 1 ? 'ACCURACY (sequential)' : 'SPEED (parallel)'}${useJuice ? ` | JUICE (${activeLearningCount} active learnings)` : ''}`)
+    const modeLabel = useTP3 ? 'TP3 (Opus universal verifier + senior-lawyer review)' : useJuice ? `JUICE (${activeLearningCount} active learnings)` : 'PLAIN'
+    console.log(`[hunt] Mode: ${CONCURRENCY === 1 ? 'ACCURACY (sequential)' : 'SPEED (parallel)'} | ${modeLabel}`)
     await runConcurrent(tenantsToProcess, CONCURRENCY, async tenant => {
       if (aborted) return
       // Emit folder-start here so it fires exactly when this tenant begins processing
@@ -1327,7 +1418,8 @@ app.get('/api/hunt', async (req, res) => {
         tenantName: tenant.tenantName,
         folderName: tenant.folderName,
         fileCount:  tenant.fileCount,
-        juiced:     useJuice,
+        juiced:     useJuice || useTP3,
+        tp3:        useTP3,
         activeLearningsApplied: activeLearningCount
       })
       const onProgress = ({ percent, message }) => {
@@ -1335,9 +1427,11 @@ app.get('/api/hunt', async (req, res) => {
       }
       try {
         const cheapOpts = { cheapMode: isCheapMode(req) }
-        const result = useJuice
-          ? await beefedUpAnalyzeTenant(tenant, tenant.files, onProgress, learningsForHunt, cheapOpts)
-          : await analyzeTenant(tenant, tenant.files, onProgress, cheapOpts)
+        const result = useTP3
+          ? await tp3AnalyzeTenant(tenant, tenant.files, onProgress, learningsForHunt, cheapOpts)
+          : useJuice
+            ? await beefedUpAnalyzeTenant(tenant, tenant.files, onProgress, learningsForHunt, cheapOpts)
+            : await analyzeTenant(tenant, tenant.files, onProgress, cheapOpts)
         session.findings.set(tenant.id, result)
         emit('folder-done', {
           tenantId:     tenant.id,

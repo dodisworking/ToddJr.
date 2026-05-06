@@ -2225,6 +2225,10 @@ let cachedActiveLearningCount = null
 let cachedTotalLearnings = null
 
 function juiceQs() {
+  const tp3 = document.getElementById('tp3-toggle')?.checked === true
+  // TP3 implies juice (uses the same learnings library) — emit both flags so
+  // server can branch cleanly without deriving one from the other.
+  if (tp3) return '&juiced=1&tp3=1'
   return juiceToggle?.checked ? '&juiced=1' : ''
 }
 
@@ -3805,7 +3809,8 @@ async function startHuntLocal(testTenantId = null) {
 
   document.getElementById('btn-kill-hunt').classList.remove('hidden')
 
-  const useJuice = !!juiceToggle?.checked
+  const useTP3   = document.getElementById('tp3-toggle')?.checked === true
+  const useJuice = !!juiceToggle?.checked || useTP3   // TP3 implies juice
   const cheap    = isCheapModeActive()
 
   // Fetch active learnings if juice is on
@@ -3899,6 +3904,7 @@ async function runLocalTenantAnalysis(tenant, tenantsToShow, useJuice, learnings
     },
     files,
     juiced:    useJuice,
+    tp3:       useTP3,
     learnings: useJuice ? learnings : [],
     cheap
   })
