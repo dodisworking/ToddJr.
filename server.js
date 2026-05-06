@@ -616,6 +616,64 @@ const LAUREN_REVIEW_SEED = [
     createdAt: '2026-05-05T12:00:00.000Z',
     suggestion: "Many commercial leases use dual numbering systems: Roman numerals (i, ii, iii, iv, v, vi) for front-matter sections (Table of Contents, Basic Lease Terms, Key Provisions Summary) and Arabic numerals (1, 2, 3…) starting at page 1 for the body. The transition from the last Roman-numeral page (e.g., page vi) to body page 1 (e.g., the first page of Section 2, Definitions) creates an apparent page number gap (the scan's page counter may jump from its internal count). This is NOT a missing page — it is a standard legal document formatting convention. Do NOT flag this transition as a missing pages gap. The two-step content check (mp009) must still confirm a genuine content scar before any missing-page finding is generated; the absence of page numbers '1' through '4' in the printed sequence when those pages are actually the Roman-numeral front matter is not a content scar.",
     rationale: "TP2 session 2026-05-05: Stretch Zone 2019 lease — front matter used Roman numerals i–vi, body began at Arabic page 1. Model incorrectly detected a 'jump from page 1 to page 5' as missing pages. Reviewer: 'This does not need to be noted.' The automated page-gap detection misread the Roman numeral front matter as pages 1-4."
+  },
+
+  // ── TP2 session 2026-05-06: 3-batch review of 15 tenants ───────────────────
+  {
+    id: 'learning-1778198400001-ex053', source: 'tp2-review-2026-05-06', active: true,
+    checkType: 'MISSING_EXHIBIT', confidence: 'HIGH',
+    createdAt: '2026-05-06T00:00:00.000Z',
+    suggestion: "MANDATORY EXHIBIT ENUMERATION: When the lease (or most recent governing document) contains a formal exhibit index, Table of Contents, or exhibit schedule, you MUST list and check EVERY single exhibit individually — A, B, C, D, E, F, G, H, plus every Rider, Schedule, and Addendum. Do NOT generate findings for only a subset. After completing your enumeration, output one finding per missing exhibit. If the index lists Exhibits A–G plus Riders 1–2, you must check all 9 items individually and generate a finding for EACH absent one. Do not stop at the first few you notice. Common mistake: model checks 4 exhibits, finds them missing, generates 4 findings, and stops — leaving 4 other missing exhibits unflagged. Triple-check the index against the actual content before finalizing the missing-exhibit list.",
+    rationale: "TP2 session 2026-05-06: Everbowl lease index listed Exhibits A–G plus Rider 1 + Rider 2. Model flagged Exhibits A, B, E and Rider 2 as missing but completely missed Exhibits C, D, G, and Rider 1 — reviewer manually flagged all four. Pattern: model inconsistently enumerates the exhibit list and stops after generating a few findings."
+  },
+  {
+    id: 'learning-1778198400002-ex054', source: 'tp2-review-2026-05-06', active: true,
+    checkType: 'MISSING_EXHIBIT', confidence: 'HIGH',
+    createdAt: '2026-05-06T00:00:00.000Z',
+    suggestion: "PARTIAL EXHIBIT — COVER PAGE ONLY: An exhibit whose cover or heading page IS present but whose substantive content appears absent (e.g., 'Exhibit C' heading exists on page 64 but the next page is 'Exhibit D' instead of Exhibit C content) is NOT a missing-exhibit finding at the initial review. The cover page being present satisfies the initial completeness check. The abstracting reviewer will determine if substantive content is required during their substantive review. Do NOT flag this as missing. Only flag exhibits as missing when the exhibit is COMPLETELY absent from the document — no cover page, no heading, no content of any kind.",
+    rationale: "TP2 session 2026-05-06: Aspire Salon Exhibit C (Sign Criteria) — heading page present on PDF page 64 with no substantive content; next page was Exhibit D. Reviewer: 'For initial missing documents, it's ok that the cover page is there. We wouldn't note this as missing unless the reviewer determines we need it after abstracting.'"
+  },
+  {
+    id: 'learning-1778198400003-ex055', source: 'tp2-review-2026-05-06', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-05-06T00:00:00.000Z',
+    suggestion: "COMMENCEMENT DATE AGREEMENT / ACCEPTANCE OF PREMISES ATTACHED AS RIDER OR EXHIBIT: When a Commencement Date Agreement, Acceptance of Premises, Delivery Date Certificate, or similar post-occupancy form is attached to the main lease as a Rider or Exhibit (rather than as a standalone fully-executed instrument), blank Landlord and/or Tenant signature lines on it are NOT execution findings. These are template forms placed in the lease for later post-occupancy execution. Do NOT flag any of: blank By: line, blank Date: line, blank Commencement Date field, blank Expiration Date field, or blank entity-chain fields on these attached forms. Only flag if the lease specifically requires a separately executed and delivered Commencement Date Agreement AND that document is entirely absent from the folder.",
+    rationale: "TP2 session 2026-05-06: All American Car Wash Rider 1 (Commencement Date Agreement) — Tenant signed, Landlord blank. Aspire Salon Rider 1 (Commencement Date Agreement) — Tenant signed, Landlord blank. Both rejected. Reviewer: 'Sometimes the Commencement Date Agreement can be attached to the lease as an Exhibit or Rider and its just a form document for later. We don't note it as missing when it's attached to the lease like this.'"
+  },
+  {
+    id: 'learning-1778198400004-dup056', source: 'tp2-review-2026-05-06', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-05-06T00:00:00.000Z',
+    suggestion: "DUAL COUNTERPARTS — ONE SIGNED IS DETERMINATIVE: When the folder contains two or more copies of the same document and ONE copy is fully executed while another copy has blank signature lines, the document IS EXECUTED. The signed copy is the operative instrument; the blank copy is a draft, working copy, or unexecuted counterpart. Do NOT generate any execution finding when at least one copy of the document is fully signed. This includes: standalone Guaranty file is executed but the Guaranty appearing as Exhibit D inside a lease PDF is blank → use the standalone, ignore the embedded blank. Pattern is universal: signed counterpart wins over blank counterpart, regardless of which file each appears in.",
+    rationale: "TP2 session 2026-05-06: (1) Ichi Poki Salad Bar — Assignment Second Amendment dated 12/9/2022: folder had two copies, one fully signed by Jian Y. Zhang, the other blank. Model flagged the blank one. Reviewer: 'Document is fully executed.' (2) Mattress Firm — Tweeter Guaranty embedded as Exhibit D was blank, but standalone executed Guaranty file existed in folder. Reviewer: 'Document is fully executed.'"
+  },
+  {
+    id: 'learning-1778198400005-fl057', source: 'tp2-review-2026-05-06', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-05-06T00:00:00.000Z',
+    suggestion: "FOLDER FILE-LIST VERIFICATION: Before flagging any document as missing, you MUST scan the COMPLETE list of filenames in the folder. Look for filename matches by: (a) date — '2002-12-31-' in filename matches a 'December 31, 2002' reference; (b) parties — 'Tweeter-Assignment' matches 'Assignment by Tweeter of California'; (c) document type — 'Amendment-No-3' matches a Third Amendment reference; (d) any combination. If ANY filename in the folder plausibly matches the referenced document, do NOT flag it as missing — even when the formal document title differs from the filename. Filenames are administrative and rarely match formal titles exactly. Match generously: a 60% similarity by date/parties/type is enough to assume the document is present.",
+    rationale: "TP2 session 2026-05-06: Mattress Firm — model flagged 'Executed Assignment and Assumption of Leases dated December 31, 2002 (Tweeter of California → New England Audio)' as missing. The file '2002-12-31-Tweeter-Assignment-PDF.PDF' was present in the folder. Reviewer: 'Copy of executed document is file 2002-12-31-Tweeter-Assignment-PDF.' The model literally acknowledged the file existed but flagged the missing finding anyway."
+  },
+  {
+    id: 'learning-1778198400006-oos058', source: 'tp2-review-2026-05-06', active: true,
+    checkType: 'GENERAL', confidence: 'HIGH',
+    createdAt: '2026-05-06T00:00:00.000Z',
+    suggestion: "OUT-OF-SCOPE OVERRIDE PROHIBITION: When an existing learning rule (any of: oos010, oos046, oos047, oos049, etc.) marks a document type as out of scope, you MUST NEVER override that rule with reasoning like 'but it is the only operative deal document,' 'but it is the only thing in the folder,' 'but it is relevant context,' or 'but it shows the deal terms.' Out of scope is absolute. Even if you find yourself drafting a finding because the OOS document seems to be the only operative document in the folder, DELETE that finding. The correct action when the only document in a folder is out-of-scope is to flag the folder as 'no in-scope lease documents present' — not to flag the OOS document for execution. Confirmed out-of-scope categories: LOIs, counter-offers, term sheets, business plans, marketing materials, tax returns, P&L statements, financial statements, deposit checks, photos of checks, lease abstract Word documents (.doc files that summarize lease terms but are not themselves leases), Owner-Contractor construction agreements, TI construction contracts, sales reports, gross sales certifications, percentage rent statements.",
+    rationale: "TP2 session 2026-05-06: (1) Alaska Crab — model flagged execution issues on a Counter-Offer/LOI dated March 6, 2025. Model literally wrote 'AI notes Learning 40 says LOIs out of scope but flagged anyway since it's the only operative deal document.' Reviewer rejected. (2) Fantastic Sams — model flagged business plan, deposit check photo, P&L docs, tax docs as 'special agreement' findings. Reviewer rejected all. (3) Marshalls — model flagged Owner-Contractor Agreement with Gluck Building Company. Reviewer: 'We do not abstract construction agreements.'"
+  },
+  {
+    id: 'learning-1778198400007-decl059', source: 'tp2-review-2026-05-06', active: true,
+    checkType: 'SPECIAL_AGREEMENT', confidence: 'MEDIUM',
+    createdAt: '2026-05-06T00:00:00.000Z',
+    suggestion: "RECORDED COVENANTS / DECLARATIONS / EASEMENTS / CC&Rs: Recorded covenants, declarations, easements, CC&Rs (Covenants Conditions & Restrictions), REA agreements, and Covenant and Conditions Affecting Real Property are SCOPE QUESTIONS for the abstracting reviewer — not standalone execution or missing-document findings. When you encounter such a recorded instrument, generate ONE concise scope-confirmation note at LOW or MEDIUM severity stating that the document exists and asking the reviewer to confirm whether it is within abstracting scope. Do NOT: (a) generate execution findings for these instruments (they are recorded by the County, not executed bilaterally for this lease); (b) generate the same finding for every tenant in the property — the recorded instrument applies to the property, not to each tenant individually; (c) flag them as missing if absent — they are owned by the property, not the lease folder. One scope note total per property, not per tenant.",
+    rationale: "TP2 session 2026-05-06: (1) Best Buy — model flagged 'Executed Covenant and Conditions Affecting Interests in Real Property' as missing. Reviewer: 'Partial: This is a separate document. We first need to ask if in scope before we ask if it's executed.' (2) User feedback: 'these should be flagged for abstracting scope, but if there's one, it's probably going to be the same one noted in multiple abstracts and I would only need to have it noted 1 times. Otherwise it could get cumbersome to go thru all the lines on the Excel Missing Documents report for the same Easement for every tenant.'"
+  },
+  {
+    id: 'learning-1778198400008-mp060', source: 'tp2-review-2026-05-06', active: true,
+    checkType: 'MISSING_PAGE', confidence: 'HIGH',
+    createdAt: '2026-05-06T00:00:00.000Z',
+    suggestion: "TEXT-EXTRACTION PAGE-NUMBER ARTIFACTS: When you observe printed page numbers that appear to skip wildly (e.g., 5 → 20, 1 → 28, 28 → 4097, or PDF page 50 → page 1 → page 200), this is almost always a TEXT-EXTRACTION ARTIFACT, not missing pages. Causes include: (a) text extraction concatenating page numbers from multiple sub-documents bound into one PDF; (b) header/footer noise being parsed as page numbers; (c) section restart numbering across exhibits; (d) PDF metadata vs printed page mismatches. Before flagging missing pages, verify: does the lease body's TEXT FLOW continuously? Does it END with substantive content followed by a signature page? Are sections complete? If the document reads as a coherent complete lease end-to-end, the apparent page jumps are extraction artifacts — DO NOT flag missing pages. Only flag when the two-step content check (mp009) confirms a real content scar (broken sentence at boundary, TOC entry with no content, or skipped section number).",
+    rationale: "TP2 session 2026-05-06: Fantastic Sams — model flagged 'Lease-pdf.pdf' as 'severely truncated' with page jumps 5→20, 1→28, 28→4097 and concluded 'lease body incomplete; no signature block.' Reviewer: 'Pages are not missing. Lease is present and complete.' The text extraction had concatenated multiple sub-document page numbers, creating phantom gaps."
   }
 ]
 
@@ -952,6 +1010,26 @@ app.post('/api/upload', upload.array('files', 10000), async (req, res) => {
     console.log(`[upload] Grouped ${req.files.length} files into ${tenantMap.size} folder(s)`)
     for (const [name, data] of tenantMap) {
       console.log(`  - ${name}: ${data.files.length} files`)
+    }
+
+    // ── Tenant skip-detection diagnostic ───────────────────────────────
+    // Catches the bug where one tenant's files end up bucketed under another
+    // tenant's folder name, causing the second tenant to be skipped entirely.
+    // Log all unique top-level folder candidates so we can compare what the
+    // user uploaded vs what got grouped.
+    const allTopLevels = new Set(
+      allParsedParts
+        .filter(p => p.length >= 2)
+        .map(p => p[tenantDepth] || p[0])
+    )
+    if (allTopLevels.size !== tenantMap.size) {
+      console.warn(`[upload] ⚠️  TENANT GROUPING MISMATCH: detected ${allTopLevels.size} unique folder names but grouped into ${tenantMap.size} buckets`)
+      console.warn(`[upload]    Detected folder names: ${[...allTopLevels].join(' | ')}`)
+      console.warn(`[upload]    Bucket names:          ${[...tenantMap.keys()].join(' | ')}`)
+      const missing = [...allTopLevels].filter(t => !tenantMap.has(t))
+      if (missing.length > 0) {
+        console.warn(`[upload]    🚨 LIKELY SKIPPED TENANTS: ${missing.join(', ')}`)
+      }
     }
 
     if (tenantMap.size === 0) {
