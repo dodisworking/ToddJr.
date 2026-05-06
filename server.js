@@ -937,10 +937,14 @@ app.post('/api/upload', upload.array('files', 10000), async (req, res) => {
         walkDir(tenantRoot)
         console.log(`[upload] Found ${extractedFiles.length} files under tenant root`)
 
-        // Normalize path separators: "/" → "__SEP__" for consistent grouping
+        // Normalize path separators: "/" → "__SEP__" for consistent grouping.
+        // Also apply Unicode NFC normalization so macOS NFD-encoded filenames
+        // ("Alibertos" with accent stored as decomposed form) don't end up as
+        // a different string from the same name in NFC form. Without this, two
+        // visually-identical folder names can produce two different Map keys.
         req.files = extractedFiles.map(f => ({
           ...f,
-          originalname: f.originalname.replace(/\//g, '__SEP__')
+          originalname: f.originalname.normalize('NFC').replace(/\\/g, '/').replace(/\//g, '__SEP__')
         }))
       } catch (err) {
         console.error('[upload] ZIP extraction failed:', err)
@@ -1077,6 +1081,70 @@ app.post('/api/upload', upload.array('files', 10000), async (req, res) => {
         oversizedFiles
       })
     }
+
+    // ── Dedup + integrity validation ───────────────────────────────────────
+    // ROOT-CAUSE FIX for "AAC ran twice / Alibertos skipped" pattern.
+    //
+    // Two ways tenants can wrongly become duplicates after parsing:
+    //   1. Two folders with names that differ only in Unicode form (NFC vs NFD)
+    //      → already handled at upload by .normalize('NFC').
+    //   2. Two folders that legitimately differ as keys (e.g. "AAC" and "RN 1234 - AAC")
+    //      but parse to identical (property, suite, tenantName) — these ARE
+    //      duplicates and should be merged so we don't run the analysis twice
+    //      on the same tenant.
+    //
+    // Tenants are merged ONLY when all three of (property, suite, tenantName) match.
+    // If any field differs, they're kept separate (legitimate same-name distinct stores).
+    const tenantIdentityKey = (t) =>
+      [t.property, t.suite, t.tenantName]
+        .map(s => String(s ?? '').normalize('NFC').toLowerCase().trim())
+        .join('||')
+
+    const dedupedMap = new Map()
+    const droppedDuplicates = []
+    for (const tenant of tenants) {
+      const key = tenantIdentityKey(tenant)
+      if (dedupedMap.has(key)) {
+        const existing = dedupedMap.get(key)
+        // Merge files (avoid pushing literal duplicates by diskPath)
+        const existingPaths = new Set(existing.files.map(f => f.diskPath))
+        const newFiles = tenant.files.filter(f => !existingPaths.has(f.diskPath))
+        existing.files.push(...newFiles)
+        existing.fileCount = existing.files.length
+        droppedDuplicates.push({
+          mergedInto: existing.folderName,
+          duplicate:  tenant.folderName,
+          filesAdded: newFiles.length
+        })
+        console.warn(`[upload] ⚠️  DUPLICATE TENANT MERGED: "${tenant.folderName}" → "${existing.folderName}" (+${newFiles.length} files)`)
+      } else {
+        dedupedMap.set(key, tenant)
+      }
+    }
+
+    // Filter out tenants that ended up with zero files (silent file loss earlier)
+    const finalTenants = [...dedupedMap.values()].filter(t => {
+      if (!t.files || t.files.length === 0) {
+        console.warn(`[upload] ⚠️  EMPTY TENANT DROPPED: "${t.folderName}" had no files`)
+        return false
+      }
+      return true
+    })
+
+    // Integrity check: total file count across tenants should equal upload count
+    const totalFilesInTenants = finalTenants.reduce((sum, t) => sum + t.files.length, 0)
+    if (totalFilesInTenants !== req.files.length) {
+      console.warn(`[upload] ⚠️  FILE COUNT MISMATCH: uploaded ${req.files.length} files but tenants contain ${totalFilesInTenants} (delta ${req.files.length - totalFilesInTenants})`)
+    }
+
+    console.log(`[upload] ✅ Final tenant count: ${finalTenants.length}${droppedDuplicates.length > 0 ? ` (after merging ${droppedDuplicates.length} duplicate(s))` : ''}`)
+    for (const t of finalTenants) {
+      console.log(`  • ${t.tenantName} (${t.property}/${t.suite}) — ${t.files.length} files [folder: ${t.folderName}]`)
+    }
+
+    // Replace the working list with the deduped, validated list
+    tenants.length = 0
+    tenants.push(...finalTenants)
 
     // Sort by property then suite number
     tenants.sort((a, b) => {
