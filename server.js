@@ -1084,34 +1084,33 @@ app.post('/api/upload', upload.array('files', 10000), async (req, res) => {
 
     // ── Dedup + integrity validation ───────────────────────────────────────
     // ROOT-CAUSE FIX for "AAC ran twice / Alibertos skipped" pattern.
-    //
-    // Two ways tenants can wrongly become duplicates after parsing:
-    //   1. Two folders with names that differ only in Unicode form (NFC vs NFD)
-    //      → already handled at upload by .normalize('NFC').
-    //   2. Two folders that legitimately differ as keys (e.g. "AAC" and "RN 1234 - AAC")
-    //      but parse to identical (property, suite, tenantName) — these ARE
-    //      duplicates and should be merged so we don't run the analysis twice
-    //      on the same tenant.
-    //
-    // Tenants are merged ONLY when all three of (property, suite, tenantName) match.
-    // If any field differs, they're kept separate (legitimate same-name distinct stores).
+    // All issues found here are also written to session.uploadDiagnostics so
+    // they surface in the Target Practice Excel as an "Upload Issues" sheet.
     const tenantIdentityKey = (t) =>
       [t.property, t.suite, t.tenantName]
         .map(s => String(s ?? '').normalize('NFC').toLowerCase().trim())
         .join('||')
 
+    const uploadDiagnostics = {
+      uploadedAt:        new Date().toISOString(),
+      filesUploaded:     req.files.length,
+      foldersDetected:   tenantMap.size,
+      duplicatesMerged:  [],   // [{mergedInto, duplicate, filesAdded}]
+      emptyTenantsDropped: [], // [folderName]
+      fileCountDelta:    0,    // uploaded - in-tenants (positive = files lost)
+      finalTenantList:   []    // [{tenantName, property, suite, fileCount, folderName}]
+    }
+
     const dedupedMap = new Map()
-    const droppedDuplicates = []
     for (const tenant of tenants) {
       const key = tenantIdentityKey(tenant)
       if (dedupedMap.has(key)) {
         const existing = dedupedMap.get(key)
-        // Merge files (avoid pushing literal duplicates by diskPath)
         const existingPaths = new Set(existing.files.map(f => f.diskPath))
         const newFiles = tenant.files.filter(f => !existingPaths.has(f.diskPath))
         existing.files.push(...newFiles)
         existing.fileCount = existing.files.length
-        droppedDuplicates.push({
+        uploadDiagnostics.duplicatesMerged.push({
           mergedInto: existing.folderName,
           duplicate:  tenant.folderName,
           filesAdded: newFiles.length
@@ -1122,27 +1121,33 @@ app.post('/api/upload', upload.array('files', 10000), async (req, res) => {
       }
     }
 
-    // Filter out tenants that ended up with zero files (silent file loss earlier)
     const finalTenants = [...dedupedMap.values()].filter(t => {
       if (!t.files || t.files.length === 0) {
+        uploadDiagnostics.emptyTenantsDropped.push(t.folderName)
         console.warn(`[upload] ⚠️  EMPTY TENANT DROPPED: "${t.folderName}" had no files`)
         return false
       }
       return true
     })
 
-    // Integrity check: total file count across tenants should equal upload count
     const totalFilesInTenants = finalTenants.reduce((sum, t) => sum + t.files.length, 0)
-    if (totalFilesInTenants !== req.files.length) {
-      console.warn(`[upload] ⚠️  FILE COUNT MISMATCH: uploaded ${req.files.length} files but tenants contain ${totalFilesInTenants} (delta ${req.files.length - totalFilesInTenants})`)
+    uploadDiagnostics.fileCountDelta = req.files.length - totalFilesInTenants
+    if (uploadDiagnostics.fileCountDelta !== 0) {
+      console.warn(`[upload] ⚠️  FILE COUNT MISMATCH: uploaded ${req.files.length} files but tenants contain ${totalFilesInTenants} (delta ${uploadDiagnostics.fileCountDelta})`)
     }
 
-    console.log(`[upload] ✅ Final tenant count: ${finalTenants.length}${droppedDuplicates.length > 0 ? ` (after merging ${droppedDuplicates.length} duplicate(s))` : ''}`)
+    console.log(`[upload] ✅ Final tenant count: ${finalTenants.length}${uploadDiagnostics.duplicatesMerged.length > 0 ? ` (after merging ${uploadDiagnostics.duplicatesMerged.length} duplicate(s))` : ''}`)
     for (const t of finalTenants) {
       console.log(`  • ${t.tenantName} (${t.property}/${t.suite}) — ${t.files.length} files [folder: ${t.folderName}]`)
+      uploadDiagnostics.finalTenantList.push({
+        tenantName: t.tenantName,
+        property:   t.property,
+        suite:      t.suite,
+        fileCount:  t.files.length,
+        folderName: t.folderName
+      })
     }
 
-    // Replace the working list with the deduped, validated list
     tenants.length = 0
     tenants.push(...finalTenants)
 
@@ -1157,7 +1162,8 @@ app.post('/api/upload', upload.array('files', 10000), async (req, res) => {
       tenants,
       findings: new Map(),
       uploadDir: path.join(UPLOADS_DIR, sessionId),
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      uploadDiagnostics
     })
 
     res.json({
@@ -2725,9 +2731,15 @@ app.post('/api/target/download-excel', express.json({ limit: '10mb' }), async (r
     const { tenantResults = [], reviewerName = 'Unknown', juiceRules = [], sessionId } = req.body
     const { generateTargetPracticeSessionExcel } = await import('./lib/reporter.js')
 
+    // Pull upload diagnostics off the session if we have one — surface any
+    // duplicate-tenant merges, empty-tenant drops, or file-count gaps in the
+    // Excel so the reviewer sees them without digging through Railway logs.
+    const sessionRec = sessionId ? sessions.get(sessionId) : null
+    const uploadDiagnostics = sessionRec?.uploadDiagnostics || null
+
     // Generate to temp first
     const tmpPath = path.join(UPLOADS_DIR, `tp-session-${Date.now()}.xlsx`)
-    await generateTargetPracticeSessionExcel({ tenantResults, reviewerName, juiceRules }, tmpPath)
+    await generateTargetPracticeSessionExcel({ tenantResults, reviewerName, juiceRules, uploadDiagnostics }, tmpPath)
 
     // Persist a copy to cloud storage
     try {
