@@ -2474,7 +2474,8 @@ app.get('/api/gym/file/:sessionId/:tenantId/:fileIndex', (req, res) => {
 // ═══════════════════════════════════════════════════════════
 
 app.get('/api/gym/analyze', async (req, res) => {
-  const { sessionId, tenantId, keyIndex } = req.query
+  const { sessionId, tenantId, keyIndex, tp3 } = req.query
+  const useTP3 = tp3 === '1'
   const preferredKeyIdx = (keyIndex !== undefined && !isNaN(parseInt(keyIndex, 10))) ? parseInt(keyIndex, 10) : undefined
   const session = sessions.get(sessionId)
   if (!session) return res.status(404).json({ error: 'Session not found' })
@@ -2511,6 +2512,40 @@ app.get('/api/gym/analyze', async (req, res) => {
     const juiceRules       = session.targetJuiceRules || []
     const activeLearnings  = readLearnings().filter(l => l.active)
     const result = await gymAnalyzeTenant(tenant, tenant.files, onProgress, { cheapMode: isCheapMode(req), juiceRules, activeLearnings, preferredKeyIdx })
+
+    // ── TP3 post-processing pipeline ────────────────────────────────────────
+    // When the client invoked this endpoint with &tp3=1, run the Generator's
+    // findings through the full TP3 pipeline before sending them back:
+    //   1. Universal Document Verifier (Opus) — re-checks every finding type
+    //      against the actual PDFs (executes signature checks for EXECUTION,
+    //      folder-manifest matching for MISSING_DOCUMENT, lease-PDF scanning
+    //      for MISSING_EXHIBIT). Drops verified false positives.
+    //   2. Todd Filter (Sonnet, F1–F38 + folder manifest + 96 rules).
+    //   3. Senior Lawyer Self-Review (Opus) — final actionability gate.
+    if (useTP3 && result.findings && result.findings.length > 0) {
+      try {
+        const { tp3VerifyAllFindings, filterFindingsForRelevance, tp3SeniorLawyerReview } = await import('./lib/claude.js')
+        const before = result.findings.length
+
+        if (!aborted) emit('gym-progress', { percent: 92, message: 'TP3 — Universal verifier (Opus)...' })
+        let verified = await tp3VerifyAllFindings(result.findings, tenant.files)
+
+        if (!aborted) emit('gym-progress', { percent: 96, message: 'TP3 — Todd filter...' })
+        let toddFiltered = verified
+        if (activeLearnings.length > 0) {
+          toddFiltered = await filterFindingsForRelevance(verified, activeLearnings, tenant.tenantName, tenant.files)
+        }
+
+        if (!aborted) emit('gym-progress', { percent: 99, message: 'TP3 — Senior lawyer review (Opus)...' })
+        const finalFindings = await tp3SeniorLawyerReview(toddFiltered, tenant.tenantName)
+
+        console.log(`[gym/analyze tp3] ${tenant.tenantName}: ${before} → verified ${verified.length} → Todd ${toddFiltered.length} → lawyer ${finalFindings.length}`)
+        result.findings = finalFindings
+        result.allClear = finalFindings.length === 0
+      } catch (err) {
+        console.warn(`[gym/analyze tp3] post-pipeline failed for ${tenant.tenantName}: ${err.message} — returning raw findings`)
+      }
+    }
 
     // Attach stable IDs to findings for feedback tracking
     const findingsWithIds = (result.findings || []).map((f, i) => ({ ...f, id: `finding-${i}` }))

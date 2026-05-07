@@ -5161,14 +5161,17 @@ function showTargetModePicker() {
 
 /** Entry point — shows mode picker, then routes to classic or rapid */
 /** Entry point — goes directly to TP 2.0 (mode picker removed) */
-async function startTargetPracticeWithPicker() {
-  startTP2()
+async function startTargetPracticeWithPicker(opts = {}) {
+  startTP2(opts)
 }
 
 // ─── TP 2.0 ───────────────────────────────────────────────
 
-async function startTP2() {
+async function startTP2(opts = {}) {
   if (state.tenants.length === 0) { toast('Upload files first', 'error'); return }
+  // TP3 mode: same review UX, but each tenant runs through Universal Verifier
+  // (Opus) + Todd Filter + Senior-Lawyer Self-Review pipeline behind the scenes.
+  tp2Session.mode = opts.tp3 ? 'tp3' : 'tp2'
 
   const setup = await showTargetSetupScreen(true)  // isTP2 = true
   if (!setup) return
@@ -5388,9 +5391,11 @@ function tp2OpenSSE(idx) {
     setTimeout(() => { if (tp2Session.active) tp2OpenSSE(idx) }, delay)
   }
 
-  // TP2 always uses the full model — never append cheapQs() here
+  // TP2 always uses the full model — never append cheapQs() here.
+  // TP3 mode adds the Universal Verifier + Senior-Lawyer pipeline server-side.
+  const tp3Suffix = tp2Session.mode === 'tp3' ? '&tp3=1' : ''
   const url = sameOriginApi(
-    `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenantId)}&keyIndex=${chosenKeyIdx}`
+    `/api/gym/analyze?sessionId=${encodeURIComponent(state.sessionId)}&tenantId=${encodeURIComponent(tenantId)}&keyIndex=${chosenKeyIdx}${tp3Suffix}`
   )
   console.log(`[tp2] tenant ${idx + 1} → key${chosenKeyIdx + 1} (static pos=${idx % 8}) health: ${tp2Session.keyHealth.map((t, i) => t ? `k${i + 1}=${Math.round((Date.now() - t) / 1000)}s` : `k${i + 1}=✓`).join(' ')}`)
   const es = new EventSource(url)
@@ -7493,6 +7498,7 @@ document.getElementById('btn-workout').addEventListener('click', () => {
 })
 
 document.getElementById('btn-target-launch')?.addEventListener('click', () => startTargetPracticeWithPicker())
+document.getElementById('btn-tp3-launch')?.addEventListener('click', () => startTargetPracticeWithPicker({ tp3: true }))
 document.getElementById('btn-juice-library')?.addEventListener('click', () => openJuiceReviewer())
 
 document.getElementById('gym-back').addEventListener('click', () => {
