@@ -288,8 +288,8 @@
           </button>
           <button type="button" class="btn-drtoddhunt" id="btn-drtoddhunt">🔬 Send Dr. Todd to Test</button>
           <button type="button" class="btn-workout" id="btn-workout">🏋️ Todd Gym Teacher</button>
-          <button type="button" class="btn-target-launch" id="btn-target-launch">🎯 TP2 — Todd Jr. Target Practice</button>
-          <button type="button" class="btn-target-launch btn-tp3-launch" id="btn-tp3-launch" style="background: linear-gradient(135deg, #1e3a8a, #6366f1); border-color: #818cf8;">💎 TP3 — Juiced (Opus)</button>
+          <button type="button" class="btn-target-launch" id="btn-target-launch">🎯 Todd Jr. Target Practice</button>
+          <button type="button" class="btn-target-launch btn-tp3-launch hidden" id="btn-tp3-launch" style="background: linear-gradient(135deg, #1e3a8a, #6366f1); border-color: #818cf8;">💎 TP3 — Juiced (Opus)</button>
           <div class="hunt-toggles-panel" aria-label="Hunt options">
             <div class="hunt-toggle-row">
               <div class="hunt-toggle-controls">
@@ -311,11 +311,11 @@
                 <span class="scan-mode-label hunt-tog-r">🪙 DUMB</span>
               </div>
             </div>
-            <div class="hunt-toggle-row">
+            <div class="hunt-toggle-row hidden">
               <div class="hunt-toggle-controls">
                 <span class="scan-mode-label hunt-tog-l">PLAIN</span>
                 <label class="toggle-switch hunt-tog-switch">
-                  <input type="checkbox" id="juice-toggle" />
+                  <input type="checkbox" id="juice-toggle" checked />
                   <span class="toggle-slider"></span>
                 </label>
                 <span class="scan-mode-label hunt-tog-r">🧃 JUICE</span>
@@ -952,7 +952,7 @@
 
         <div class="tsc-actions">
           <button id="tsc-download-btn" class="btn-tsc-download">📥 Download Findings</button>
-          <button id="tsc-save-model-btn" class="btn-tsc-save">💾 Save as Juice Model</button>
+          <button id="tsc-save-model-btn" class="btn-tsc-save hidden">💾 Save as Juice Model</button>
           <button id="tsc-done-btn" class="btn-tsc-done">← Back to Gym</button>
         </div>
       </div>

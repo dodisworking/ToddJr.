@@ -760,6 +760,50 @@ const LAUREN_REVIEW_SEED = [
     createdAt: '2026-05-06T18:00:00.000Z',
     suggestion: "LEASE-DATE DISCREPANCIES IN AMENDMENT RECITALS ARE INFORMATIONAL ONLY: When an amendment's recital references the original lease by a date that differs slightly from the lease's actual date (e.g., recital says 'Lease dated June 1, 2018' but lease itself is dated 'May 30, 2018'), this is a scrivener-level inconsistency and is NOT a missing-document finding. Do NOT flag as 'N/A — Lease date discrepancy' or any variant. Recital date mismatches are common drafting artifacts when the lease's signing date differs from the lease's stated effective date. The actual lease document's presence satisfies the requirement.",
     rationale: "Historical TP corpus: La Rosa Nails ('N/A — Lease date discrepancy' flagged, reviewer: 'This is ok and not considered a missing document'). Strengthens F11 (recital date discrepancy)."
+  },
+
+  // ── TP2 session 2026-05-18: Lauren's tests (Mirage Hair, Pigtails, D&P, etc.) ──
+  {
+    id: 'learning-1778544000001-ex073', source: 'tp2-review-2026-05-18', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-05-18T12:00:00.000Z',
+    suggestion: "COUNTERPART SIGNATURES ACROSS SEPARATE PAGES ARE STANDARD EXECUTION: When a document contains a counterparts clause (e.g., 'This Agreement may be executed in counterparts...' or 'each of which shall be deemed an original') AND the parties' signatures appear on SEPARATE PAGES (one party signs page N, another party signs page N+1, or hybrid wet-ink + DocuSign), the document is FULLY EXECUTED. Do NOT flag a counterpart signature block as 'blank' just because one party's signature is not on the same page as another party's. Before generating any execution finding about a multi-page signature document, check ALL pages of the document. If every required party has signed somewhere — including DocuSign indicators, wet-ink signatures on separate counterpart pages, or signatures on a clean execution page following the body — the document is executed. Specifically applies to multi-party Tri-Party Agreements, Subleases (Sublandlord on one page + Subtenant on next), and any document where the body explicitly states it may be executed in counterparts.",
+    rationale: "TP2 session 2026-05-18 Test #4: 7 of 11 Duff & Phelps rejections were counterpart-execution false positives. Agreement of Lease 2018 (Landlord page 126, Tenant page 127), Sublease 4/5/2024 (Sublandlord page 33 wet ink + Subtenant page 34 DocuSign), Tri-Party Agreement 9/1/2023 (4 signatories on pages 12-14), Second/Third/First Amendments — all counterpart-signed. Reviewer consistently: 'Document is fully executed.'"
+  },
+  {
+    id: 'learning-1778544000002-ex074', source: 'tp2-review-2026-05-18', active: true,
+    checkType: 'EXHIBIT', confidence: 'HIGH',
+    createdAt: '2026-05-18T12:00:00.000Z',
+    suggestion: "STOCKBRIDGE / NORTHWOOD PLAZA LANDLORD TEMPLATE — EXHIBIT LETTER MAP: In leases by 'Stockbridge Myrtle Beach, LLC' or any Northwood Plaza-affiliated landlord, the exhibit-letter to content map is: Exhibit A = Site Plan, Exhibit B = Legal Description, Exhibit C = Work Letter / TI Allowance, Exhibit D = SIGN CRITERIA (not Guaranty), Exhibit E = Rules and Regulations, Exhibit F = GUARANTY OF LEASE, Exhibit G = Authorization Agreement for Preauthorized Payments. Do NOT assume Exhibit D is a Guaranty. Do NOT label Exhibit D as 'Rent Commencement Date Agreement' — that's a separate document, not an exhibit-letter assignment. Read the lease's exhibit index carefully. If the index shows 'Exhibit D: Sign Criteria' and 'Exhibit F: Guaranty of Lease', use those labels in any finding.",
+    rationale: "TP2 session 2026-05-18: 3 rejections from this same mislabeling. Pigtails & Crewcuts (flagged Guaranty as 'Exhibit D' twice — reviewer: 'Guaranty is Exh F and it's executed. Exh D is Sign Criteria and it's present'), Bank of America (flagged 'Exhibit D — Rent Commencement Date Agreement' — reviewer: 'Exhibit D is Sign Criteria and is present')."
+  },
+  {
+    id: 'learning-1778544000003-md075', source: 'tp2-review-2026-05-18', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-05-18T12:00:00.000Z',
+    suggestion: "'CONFIRMED EFFECTIVE DATE' IS NOT A MISSING-DOCUMENT CATEGORY: When an amendment's body has a blank effective date (e.g., 'made as of ____, 2023') but the document is signed and a later amendment confirms the date, or a handwritten date appears on the signature page, the date is established. This is NOT a Missing Document. Do NOT generate findings titled 'Confirmed effective date of X' or 'Missing effective date' or any variant where the deliverable is just confirmation of a date. The reviewer needs concrete missing items (documents, signatures, exhibits) — not requests to confirm dates that are already confirmable from the document itself or from later amendments.",
+    rationale: "TP2 session 2026-05-18 Test #4: Evercore Fourth Amendment had blank effective date in body but handwritten 'April 3' on sig page, plus Fifth Amendment confirmed 'April 3, 2023.' AI flagged 'Confirmed effective date' as Missing Document. Reviewer: 'There isn't anything missing on this document. There is a date and it's fully executed. We don't note anything about confirmed effective date for initial Missing Documents.'"
+  },
+  {
+    id: 'learning-1778544000004-ex076', source: 'tp2-review-2026-05-18', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-05-18T12:00:00.000Z',
+    suggestion: "TWO INDIVIDUALS SIGNING IN ONE 'BY:' BLOCK = FULL EXECUTION: When a tenant signature block has 'By:' followed by multiple handwritten signatures (e.g., two officers of a corporation, two co-owners, a husband-and-wife duo signing as guarantors who are also corporate officers), this is FULL EXECUTION. Do NOT flag because 'Its:' or 'Title:' is blank, or because the relationship between the two signatures is unclear. If signatures are present in the By: area for the required party, the entity is bound. Do NOT speculate about whether the signers had authority — that's outside review scope. Similarly: a GUARANTOR label followed by no separate signature lines, where the named guarantors' signatures appear in the immediately preceding Tenant block, also counts as guaranty execution — the guarantors signed.",
+    rationale: "TP2 session 2026-05-18 Test #1: Mirage Hair Amendment No. 1 flagged twice (because tenant was processed twice — separate bug). Tenant block had two signatures (Kelli Philo and Jeremy Philo) with 'Its:' blank. AI questioned whether two-officer signing was valid. Also flagged Guarantor block label with no separate sig line. Reviewer for both: 'The document is fully executed.'"
+  },
+  {
+    id: 'learning-1778544000005-oos077', source: 'tp2-review-2026-05-18', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-05-18T12:00:00.000Z',
+    suggestion: "MEMORANDUM OF LEASE IS UNCONDITIONALLY OUT OF SCOPE: Memoranda of Lease (whether titled 'Memorandum of Lease', 'Short Form Lease', 'Notice of Lease', or any variant) are NEVER abstracted. Do NOT flag any of the following: (a) Memorandum of Lease missing from folder; (b) Memorandum of Lease unsigned or with blank tenant signature; (c) Memorandum of Lease execution defect of ANY kind; (d) Memorandum of Lease not recorded; (e) discrepancy between an Exhibit-E template version of a Memorandum and the standalone executed Memorandum. This applies even when the lease body explicitly references the Memorandum, even when an Exhibit shows the Memorandum template, even when a standalone executed Memorandum is in the folder. Memoranda are out-of-scope. Strengthens learning-1778205600003-oos063.",
+    rationale: "TP2 session 2026-05-18: Bank of America Memorandum of Lease tenant signature flagged — AI itself said 'Memoranda of Lease are not operative... completely out of scope for execution review... should be suppressed per Learning 53. Flagging for training transparency only.' Reviewer: 'Memorandum Lease is not used in abstracting.' Despite oos063, model still flagged."
+  },
+  {
+    id: 'learning-1778544000006-dup078', source: 'tp2-review-2026-05-18', active: true,
+    checkType: 'GUARANTY', confidence: 'HIGH',
+    createdAt: '2026-05-18T12:00:00.000Z',
+    suggestion: "ONE GAP = ONE FINDING (DEDUPLICATE BEFORE OUTPUT): When the same underlying document gap is detectable through multiple check types, emit ONE consolidated finding — NOT multiple. Specifically: if a missing Guaranty would also satisfy a Missing Exhibit finding (e.g., 'Exhibit F Guaranty of Lease' is missing AND a standalone executed Guaranty is missing — same gap), generate a single GUARANTY finding citing both the exhibit reference and the standalone requirement. Do NOT generate one MISSING_EXHIBIT finding + one GUARANTY finding for the same gap. Before output, scan your own findings: any pair of findings where (a) the missing document is the same instrument and (b) the evidence cites the same lease section → MERGE into the most-specific category (GUARANTY > MISSING_EXHIBIT > MISSING_DOCUMENT).",
+    rationale: "TP2 session 2026-05-18: Pho Tastic had Exhibit F Guaranty missing flagged TWICE — once as Missing Exhibit, once as Guaranty. Reviewer: '◐ Partial: This is missing, but it was already noted. We don't need it noted twice.' Same gap = same finding."
   }
 ]
 
@@ -1281,21 +1325,65 @@ app.post('/api/upload', upload.array('files', 10000), async (req, res) => {
 // (no files uploaded — files live in browser RAM for analysis)
 // ═══════════════════════════════════════════════════════════
 
-app.post('/api/session/register', express.json({ limit: '1mb' }), (req, res) => {
+app.post('/api/session/register', express.json({ limit: '2mb' }), (req, res) => {
   try {
-    const { sessionId, tenants } = req.body
+    const { sessionId, tenants, uploadDiagnostics: clientDiagnostics } = req.body
     if (!sessionId) return res.status(400).json({ error: 'Missing sessionId' })
     if (!Array.isArray(tenants)) return res.status(400).json({ error: 'tenants must be an array' })
 
+    // Server-side dedup safety net — even if frontend forgot, dedup here.
+    // Catches Mirage Hair/Pigtails-twice class of bugs.
+    const tenantIdentityKey = (t) =>
+      [t.property, t.suite, t.tenantName]
+        .map(s => String(s ?? '').normalize('NFC').toLowerCase().trim())
+        .join('||')
+    const seen = new Map()
+    const serverMerges = []
+    for (const t of tenants) {
+      const k = tenantIdentityKey(t)
+      if (seen.has(k)) {
+        serverMerges.push({ duplicate: t.folderName, mergedInto: seen.get(k).folderName, filesAdded: 0 })
+        console.warn(`[session/register] ⚠️  Server-side dedup: dropping duplicate "${t.folderName}" (already have "${seen.get(k).folderName}")`)
+        continue
+      }
+      seen.set(k, t)
+    }
+    const dedupedTenants = [...seen.values()]
+
+    // Build/merge uploadDiagnostics — accept client-provided diagnostics if
+    // present, otherwise reconstruct minimal version from the deduped list.
+    const uploadDiagnostics = clientDiagnostics && typeof clientDiagnostics === 'object'
+      ? {
+          ...clientDiagnostics,
+          // Append server-side merges to whatever the client already noted
+          duplicatesMerged: [...(clientDiagnostics.duplicatesMerged || []), ...serverMerges]
+        }
+      : {
+          uploadedAt:        new Date().toISOString(),
+          filesUploaded:     dedupedTenants.reduce((s, t) => s + (t.fileCount || 0), 0),
+          foldersDetected:   tenants.length,
+          duplicatesMerged:  serverMerges,
+          emptyTenantsDropped: [],
+          fileCountDelta:    0,
+          finalTenantList:   dedupedTenants.map(t => ({
+            tenantName: t.tenantName,
+            property:   t.property,
+            suite:      t.suite,
+            fileCount:  t.fileCount || 0,
+            folderName: t.folderName
+          }))
+        }
+
     sessions.set(sessionId, {
-      tenants:   tenants.map(t => ({ ...t, files: [] })), // no disk files
+      tenants:   dedupedTenants.map(t => ({ ...t, files: [] })), // no disk files
       findings:  new Map(),
       createdAt: Date.now(),
-      isLocal:   true  // flag: files are NOT on disk
+      isLocal:   true,
+      uploadDiagnostics
     })
 
-    console.log(`[session/register] sessionId=${sessionId} tenants=${tenants.length}`)
-    res.json({ ok: true, sessionId, tenantCount: tenants.length })
+    console.log(`[session/register] sessionId=${sessionId} tenants=${dedupedTenants.length}${serverMerges.length > 0 ? ` (after server dedup of ${serverMerges.length})` : ''}`)
+    res.json({ ok: true, sessionId, tenantCount: dedupedTenants.length, mergesApplied: serverMerges.length })
   } catch (err) {
     console.error('[session/register]', err)
     res.status(500).json({ error: err.message })

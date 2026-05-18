@@ -1758,19 +1758,25 @@ async function startLocalExtract(files) {
     }
 
     // ── Build tenant map (mirrors server upload logic) ─────────────────────
-    const allParsedParts = rawEntries.map(e => e.relativePath.split('/'))
+    // CRITICAL: Apply Unicode NFC normalization + trim BEFORE using as Map key.
+    // Without this, "Mirage Hair " (trailing space) and "Mirage Hair" (clean)
+    // become two different buckets → tenant runs twice. Also handles macOS
+    // NFD-encoded paths that look identical but are different strings.
+    const normFolderKey = s => String(s ?? '').normalize('NFC').trim()
+
+    const allParsedParts = rawEntries.map(e => e.relativePath.split('/').map(normFolderKey))
     const pathFiles      = allParsedParts.filter(p => p.length >= 2)
     const uniqueTopLevel = new Set(pathFiles.map(p => p[0]))
     const hasWrapperFolder = uniqueTopLevel.size === 1 && pathFiles.some(p => p.length >= 3)
     const tenantDepth    = hasWrapperFolder ? 1 : 0
 
-    const tenantMap = new Map() // folderName -> { folderName, fileKeys: [] }
+    const tenantMap = new Map() // normalized folderName -> { folderName, fileKeys: [] }
 
     for (let i = 0; i < rawEntries.length; i++) {
       const entry = rawEntries[i]
       const parts = allParsedParts[i]
 
-      // Store in localFiles by relativePath
+      // Store in localFiles by relativePath (original, untrimmed, so we can still read the file)
       state.localFiles.set(entry.relativePath, {
         name:   entry.name,
         buffer: entry.buffer,
@@ -1832,22 +1838,78 @@ async function startLocalExtract(files) {
       }
     }
 
+    // ── DEDUP by tenant identity ─────────────────────────────────────────
+    // ROOT-CAUSE FIX for "Mirage Hair ran twice / Monterey Bay skipped" bug.
+    // After parsing, two folders that produce the same (property, suite,
+    // tenantName) tuple (e.g. "Mirage Hair " with trailing space vs
+    // "Mirage Hair", or NFC vs NFD encodings) are merged into a single tenant.
+    // Without this, both would have their own tenant card AND each would be
+    // analyzed independently, producing duplicate findings.
+    const tenantIdentityKey = (t) =>
+      [t.property, t.suite, t.tenantName]
+        .map(s => String(s ?? '').normalize('NFC').toLowerCase().trim())
+        .join('||')
+    const dedupedMap = new Map()
+    const localDuplicatesMerged = []
+    for (const t of tenants) {
+      const key = tenantIdentityKey(t)
+      if (dedupedMap.has(key)) {
+        const existing = dedupedMap.get(key)
+        const seen = new Set(existing.files.map(f => f.relativePath))
+        const newFiles = t.files.filter(f => !seen.has(f.relativePath))
+        existing.files.push(...newFiles)
+        existing.fileCount = existing.files.length
+        localDuplicatesMerged.push({ mergedInto: existing.folderName, duplicate: t.folderName, filesAdded: newFiles.length })
+        console.warn(`[upload] ⚠️ DUPLICATE TENANT MERGED: "${t.folderName}" → "${existing.folderName}" (+${newFiles.length} files)`)
+      } else {
+        dedupedMap.set(key, t)
+      }
+    }
+    const dedupedTenants = [...dedupedMap.values()].filter(t => t.files && t.files.length > 0)
+
     // Sort by property then suite
-    tenants.sort((a, b) => {
+    dedupedTenants.sort((a, b) => {
       const propCmp = a.property.localeCompare(b.property)
       if (propCmp !== 0) return propCmp
       return String(a.suite).localeCompare(String(b.suite), undefined, { numeric: true })
     })
 
-    state.localTenants = tenants
+    state.localTenants = dedupedTenants
 
     // ── Register metadata with server (no file bytes) ─────────────────────
+    // Also send uploadDiagnostics so the Audit Report tab in the final
+    // Excel can show input/output reconciliation (catches silent skips).
+    const totalFilesInTenants = dedupedTenants.reduce((s, t) => s + (t.files?.length || 0), 0)
+    const uploadDiagnostics = {
+      uploadedAt:        new Date().toISOString(),
+      filesUploaded:     rawEntries.length,
+      foldersDetected:   tenantMap.size,
+      duplicatesMerged:  localDuplicatesMerged,
+      emptyTenantsDropped: tenants.filter(t => !t.files || t.files.length === 0).map(t => t.folderName),
+      fileCountDelta:    rawEntries.length - totalFilesInTenants,
+      finalTenantList:   dedupedTenants.map(t => ({
+        tenantName: t.tenantName,
+        property:   t.property,
+        suite:      t.suite,
+        fileCount:  t.files?.length || 0,
+        folderName: t.folderName
+      }))
+    }
+    if (localDuplicatesMerged.length > 0 || uploadDiagnostics.fileCountDelta !== 0) {
+      console.log(`[upload] Final tenant count: ${dedupedTenants.length} (after merging ${localDuplicatesMerged.length} duplicate(s))`)
+    }
+    // From here on, use dedupedTenants instead of tenants
+    const tenantsToSend = dedupedTenants
     setProgress(70, 'Registering session...')
 
     const regRes = await fetch(sameOriginApi('/api/session/register'), {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ sessionId: state.sessionId, tenants: tenants.map(t => ({ id: t.id, folderName: t.folderName, property: t.property, suite: t.suite, tenantName: t.tenantName, fileCount: t.fileCount })) })
+      body:    JSON.stringify({
+        sessionId: state.sessionId,
+        tenants: tenantsToSend.map(t => ({ id: t.id, folderName: t.folderName, property: t.property, suite: t.suite, tenantName: t.tenantName, fileCount: t.fileCount })),
+        uploadDiagnostics
+      })
     })
     if (!regRes.ok) {
       const err = await regRes.json().catch(() => ({}))
@@ -1856,15 +1918,15 @@ async function startLocalExtract(files) {
 
     // ── Show tenant cards (instant, no upload wait) ───────────────────────
     setProgress(100, '')
-    state.tenants = tenants
-    renderTenantCards(tenants)
-    showOversizeWarnings(tenants)
+    state.tenants = tenantsToSend
+    renderTenantCards(tenantsToSend)
+    showOversizeWarnings(tenantsToSend)
     sfxReady()
     showHuntCta()
 
-    if (state.singleTenantMode && tenants.length > 0) {
+    if (state.singleTenantMode && tenantsToSend.length > 0) {
       state.singleTenantMode = false
-      setTimeout(() => startHunt(tenants[0].id), 400)
+      setTimeout(() => startHunt(tenantsToSend[0].id), 400)
     }
 
   } catch (err) {
