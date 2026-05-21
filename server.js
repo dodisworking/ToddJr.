@@ -804,6 +804,36 @@ const LAUREN_REVIEW_SEED = [
     createdAt: '2026-05-18T12:00:00.000Z',
     suggestion: "ONE GAP = ONE FINDING (DEDUPLICATE BEFORE OUTPUT): When the same underlying document gap is detectable through multiple check types, emit ONE consolidated finding — NOT multiple. Specifically: if a missing Guaranty would also satisfy a Missing Exhibit finding (e.g., 'Exhibit F Guaranty of Lease' is missing AND a standalone executed Guaranty is missing — same gap), generate a single GUARANTY finding citing both the exhibit reference and the standalone requirement. Do NOT generate one MISSING_EXHIBIT finding + one GUARANTY finding for the same gap. Before output, scan your own findings: any pair of findings where (a) the missing document is the same instrument and (b) the evidence cites the same lease section → MERGE into the most-specific category (GUARANTY > MISSING_EXHIBIT > MISSING_DOCUMENT).",
     rationale: "TP2 session 2026-05-18: Pho Tastic had Exhibit F Guaranty missing flagged TWICE — once as Missing Exhibit, once as Guaranty. Reviewer: '◐ Partial: This is missing, but it was already noted. We don't need it noted twice.' Same gap = same finding."
+  },
+
+  // ── TP2 session 2026-05-19: Lauren's 32-rejection regression review ──
+  {
+    id: 'learning-1778803200001-ex079', source: 'tp2-review-2026-05-19', active: true,
+    checkType: 'EXHIBIT', confidence: 'HIGH',
+    createdAt: '2026-05-19T12:00:00.000Z',
+    suggestion: "EXHIBIT HEADING PAGE PRESENT = SUFFICIENT FOR INITIAL REVIEW: When an exhibit has a heading page in the document (e.g., a page with 'EXHIBIT F-1 — SIGNAGE' as the title, or 'EXHIBIT A — EXPANSION SPACE'), even if the page contains only the heading + a brief description (no full diagram, no detailed text body), that is SUFFICIENT for Missing Documents review purposes. Do NOT flag it as 'Exhibit X — incomplete' or 'heading present but content missing.' For initial Missing Documents review, the test is: does the exhibit APPEAR in the document? If yes (a heading page exists), it is present. The reviewer is checking that the deal package is complete, not that every exhibit's body content is verbose. Substantive diagram-level completeness is a downstream review step, not Missing Documents scope.",
+    rationale: "TP2 session 2026-05-19: 5 rejections across 4 tenants (MedStar Exhibit F-1 Signage, StudyPro Exhibit A Expansion Space x2, McLean Neuropsychiatric Exhibit A, Norton Scott Exhibit G Janitorial). Reviewer consistently: 'We have a page for Exhibit X. Based off the language in the document that's sufficient.' AI was inferring missing content from text-body references when a heading page existed."
+  },
+  {
+    id: 'learning-1778803200002-ex080', source: 'tp2-review-2026-05-19', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-05-19T12:00:00.000Z',
+    suggestion: "DO NOT ANALYZE SIGNATURE SHAPE OR HANDWRITING — ONLY WHETHER A MARK IS PRESENT: When a signature block has a visible mark in the 'By:' line — whether it's a normal handwritten signature, initials, a stylized scrawl, an 'X-pattern' mark, a printed name with handwriting overlay, a DocuSign indicator, or any visible ink — the document IS executed. Do NOT question the SHAPE of the mark. Do NOT speculate whether 'this looking/crossing pattern could be a stylized signature or could be a cancellation mark.' Do NOT request 'human verification of signature legitimacy.' The reviewer rule is: 'Just make sure it's present. The document is fully executed.' Signature authenticity / handwriting analysis is outside review scope. If a By: line has any visible mark, generate NO execution finding for that party.",
+    rationale: "TP2 session 2026-05-19: 3 rejections — LabCorp (DocuSign with blank Name + entity-name typo), Georgetown Psychology ('X-pattern' Landlord mark), Luxe Sculpt (stylized Landlord mark). Reviewer: 'We don't really need to analyze the signature. Just make sure it's present.'"
+  },
+  {
+    id: 'learning-1778803200003-curr081', source: 'tp2-review-2026-05-19', active: true,
+    checkType: 'CURRENCY', confidence: 'HIGH',
+    createdAt: '2026-05-19T12:00:00.000Z',
+    suggestion: "CHECK ALL AMENDMENTS AND SUPPLEMENTS FOR TERM EXTENSIONS BEFORE FLAGGING EXPIRED LEASE: Before generating any 'Document extending Term beyond [date]' / 'lease expired' finding, scan EVERY amendment AND every supplement (Lease Supplement, Amendment, Renewal, Extension, Option Exercise) in the folder for a controlling expiration date. The most recent supplemental document with an expiration date is authoritative — NOT the original lease's expiration. If a Lease Supplement or any amendment in the folder establishes a new expiration date that is in the future, the lease is CURRENT and no finding should be generated. Specifically: do NOT flag a lease as expired based on the original lease's expiration when a Supplement, Amendment, or Option Exercise letter in the folder establishes a later expiration.",
+    rationale: "TP2 session 2026-05-19: Evexia flagged 'Document extending Term beyond June 30, 2025' — reviewer: 'Lease Commencement document has expiration date of 11/30/2032.' AND 'Leases' tenant flagged term ending 12/31/2024 — reviewer: 'The Lease Supplement says the Term ends on 6/30/2039.' Model only checked the original lease, missed the supplement/commencement extension."
+  },
+  {
+    id: 'learning-1778803200004-md082', source: 'tp2-review-2026-05-19', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-05-19T12:00:00.000Z',
+    suggestion: "DO NOT CHECK SUITE NUMBERS INSIDE EXHIBIT DIAGRAMS: Exhibit floor plans, site plans, and architectural drawings often display a Suite number that differs from the Suite Number in the lease's Basic Lease Terms (e.g., diagram labeled 'SUITE 100' but lease says 'Suite 130'). This is NOT a discrepancy worth flagging. Diagrams are pulled from the landlord's master plan files and may show neighboring suites or pre-renovation numbering. Do NOT generate findings about Suite-number mismatches between exhibit diagrams and the lease body. We do not check Suite numbers in Exhibits for Missing Documents review.",
+    rationale: "TP2 session 2026-05-19: LabCorp Exhibit A floor plan labeled 'SUITE 100' but lease body says 'Suite 130'. Reviewer: 'This is ok. We are not checking the Suite numbers in Exhibits for missing docs.'"
   }
 ]
 
@@ -2634,6 +2664,30 @@ app.get('/api/gym/analyze', async (req, res) => {
         console.warn(`[gym/analyze tp3] post-pipeline failed for ${tenant.tenantName}: ${err.message} — returning raw findings`)
       }
     }
+
+    // ── Finding-level deduplication ──────────────────────────────────────
+    // Fixes the StudyPro-2× / MedStar-2× duplicate-rows bug. Even after tenant
+    // dedup, the model occasionally emits two byte-identical finding rows for
+    // the same defect (e.g., Tenant signature and Landlord signature treated
+    // as separate findings for the same already-signed counterpart). Dedup on
+    // (checkType, missingDoc[:200], severity) before assigning IDs.
+    const findingDedupKey = (f) => [
+      f.checkType || '',
+      (f.missingDocument || '').substring(0, 200),
+      f.severity || ''
+    ].join('||').toLowerCase().replace(/\s+/g, ' ').trim()
+    const seenFindingKeys = new Set()
+    const dedupedFindings = []
+    for (const f of (result.findings || [])) {
+      const k = findingDedupKey(f)
+      if (seenFindingKeys.has(k)) {
+        console.log(`[gym/analyze] Dropped duplicate finding for ${tenant.tenantName}: ${(f.missingDocument || '').substring(0, 80)}`)
+        continue
+      }
+      seenFindingKeys.add(k)
+      dedupedFindings.push(f)
+    }
+    result.findings = dedupedFindings
 
     // Attach stable IDs to findings for feedback tracking
     const findingsWithIds = (result.findings || []).map((f, i) => ({ ...f, id: `finding-${i}` }))
