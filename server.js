@@ -2747,6 +2747,25 @@ app.get('/api/gym/analyze', async (req, res) => {
       }
     }
 
+    // ── Always-on self-suppression + bad-date-math filters ──────────────
+    // Runs BEFORE finding-level dedup. Catches the lawyer-reported pattern
+    // where the model writes "SUPPRESSED" / "FALSE POSITIVE" / "fully executed"
+    // inside its own finding text but emits it anyway. Also catches the
+    // "expiring within 90 days" claim when the math doesn't add up.
+    if (Array.isArray(result.findings) && result.findings.length > 0) {
+      try {
+        const { dropSelfSuppressedFindings, dropBadDateMathFindings } = await import('./lib/claude.js')
+        const before = result.findings.length
+        result.findings = dropSelfSuppressedFindings(result.findings, { tenantName: tenant.tenantName, source: useTP3 ? 'tp3' : 'tp2' })
+        result.findings = dropBadDateMathFindings(result.findings, { tenantName: tenant.tenantName })
+        if (result.findings.length !== before) {
+          console.log(`[gym/analyze] ${tenant.tenantName}: pre-dedup filters ${before} → ${result.findings.length}`)
+        }
+      } catch (err) {
+        console.warn(`[gym/analyze] self-suppress/date-math filter failed: ${err.message} — keeping findings as-is`)
+      }
+    }
+
     // ── Finding-level deduplication ──────────────────────────────────────
     // Fixes the StudyPro-2× / MedStar-2× duplicate-rows bug. Even after tenant
     // dedup, the model occasionally emits two byte-identical finding rows for
