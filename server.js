@@ -834,6 +834,88 @@ const LAUREN_REVIEW_SEED = [
     createdAt: '2026-05-19T12:00:00.000Z',
     suggestion: "DO NOT CHECK SUITE NUMBERS INSIDE EXHIBIT DIAGRAMS: Exhibit floor plans, site plans, and architectural drawings often display a Suite number that differs from the Suite Number in the lease's Basic Lease Terms (e.g., diagram labeled 'SUITE 100' but lease says 'Suite 130'). This is NOT a discrepancy worth flagging. Diagrams are pulled from the landlord's master plan files and may show neighboring suites or pre-renovation numbering. Do NOT generate findings about Suite-number mismatches between exhibit diagrams and the lease body. We do not check Suite numbers in Exhibits for Missing Documents review.",
     rationale: "TP2 session 2026-05-19: LabCorp Exhibit A floor plan labeled 'SUITE 100' but lease body says 'Suite 130'. Reviewer: 'This is ok. We are not checking the Suite numbers in Exhibits for missing docs.'"
+  },
+  // ════════════════════════════════════════════════════════════════════════
+  // Blind self-learner loop rules (2026-06-16) — added after 21-tenant
+  // double-blind test with iterative playbook patching. Each rule traces
+  // to a specific blind-loop miss; rationale cites the failing tenant.
+  // ════════════════════════════════════════════════════════════════════════
+  {
+    id: 'learning-1782000000001-blind08', source: 'blind-loop-2026-06-16', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-06-16T12:00:00.000Z',
+    suggestion: "PARTIAL EXHIBIT SUB-PAGE CHECK: When an exhibit spans multiple sub-pages (e.g., E-1, E-2, E-3 or F-1, F-2, F-3), explicitly verify each sub-page is present by reading bottom-right page labels in order. If E-2 appears but no E-1 exists in the file, OR F-3 (signature page) appears but no F-1/F-2 (body), generate a MISSING_DOCUMENT finding EVEN THOUGH the exhibit letter technically appears in the file. Match reviewer wording: 'First page of Exh [Letter] to Lease dated [date]' for a missing first page, or 'Full copy of [Exhibit Name] to Lease dated [date]' when only the signature page remains. When walking exhibit pages, list the sub-page labels you observe in order — any gap in the sub-numbering is a finding.",
+    rationale: "Blind-loop test 2026-06-16: Pho Tastic emitted 1 finding (Exh F missing) when 2 expected. PDF jumped from D-3 to E-2 directly, skipping E-1. Sol Palms similarly required this rule to catch 'only signature page received' for partial Guaranty."
+  },
+  {
+    id: 'learning-1782000000002-blind09', source: 'blind-loop-2026-06-16', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-06-16T12:00:00.000Z',
+    suggestion: "PRESUME ORIGINAL-LEASE EXECUTION FOR OPERATING TENANTS: When the rent roll's Begin date corresponds to the lease's term commencement (tenant is actively paying rent and operating), the original main lease's LANDLORD or TENANT signature on the main body signature page is PRESUMED — do not flag a blank By: line as an EXECUTION finding for an old original lease where the tenant has been in possession for years. The signature is assumed to exist via a separately-stored counterpart held in a different file. EXCEPTION (always check): Guaranty / Letter Agreement / Amendment / Rent Commencement Date Agreement / Substitute Guaranty / Release of Guaranty execution is ALWAYS checked. This rule applies ONLY to the original main-lease Landlord/Tenant signature blocks on a lease whose Term has already commenced per the rent roll.",
+    rationale: "Blind-loop test 2026-06-16: Pigtails & Crewcuts FP — agent flagged original 2018 Lease Landlord By: line blank on p40, but tenant has been operating since 2018-01-16 per rent roll. Reviewer doesn't flag old original-lease Landlord signature on operating tenants; counterpart sig presumed elsewhere."
+  },
+  {
+    id: 'learning-1782000000003-blind10', source: 'blind-loop-2026-06-16', active: true,
+    checkType: 'LEASE_CURRENCY', confidence: 'HIGH',
+    createdAt: '2026-06-16T12:00:00.000Z',
+    suggestion: "CHAIN GAP, NOT JUST CHAIN-END MISMATCH: When checking LEASE_CURRENCY, walk the amendment chain CHRONOLOGICALLY and flag INTERNAL gaps, not only the chain-endpoint vs rent-roll-end. If Document N expires on date X but Document N+1 commences on date Y > X, the period [X, Y] is uncovered. Flag as 'Document extending Term from original End Date (calculated as [X]) to [Y]' using the reviewer's wording pattern. This is a separate finding even when the LAST document's end date matches the rent roll end. Specifically: when the folder contains Original Lease + Amendment N (skipping intermediate amendments) and Amendment N's 'commencing' date is materially after the Original Lease's computed expiration, flag the gap.",
+    rationale: "Blind-loop test 2026-06-16: Mirage Hair FN — agent saw Amendment 1's end (10/31/2028) matched rent roll end and called it clean, missing the 3-year-9-month gap between Original Lease's computed end (1/31/2020) and Amendment 1's start (11/1/2023). Reviewer wording: 'Document extending Term from original End Date (calculated as 1/31/20) to 10/31/23'."
+  },
+  {
+    id: 'learning-1782000000004-blind11', source: 'blind-loop-2026-06-16', active: true,
+    checkType: 'LEASE_CURRENCY', confidence: 'HIGH',
+    createdAt: '2026-06-16T12:00:00.000Z',
+    suggestion: "DO NOT DOUBLE-COUNT — EXECUTION FINDING ON UNSIGNED AMENDMENT CAPTURES THE GAP: When EXECUTION findings on unsigned numbered amendments capture the chain-bridging defect (e.g., 'Amendment No. 3 dated [date] is not executed'), do NOT additionally add a LEASE_CURRENCY finding for the same period. The EXECUTION finding IS the gap-bridging issue — adding LEASE_CURRENCY is double-counting at a different abstraction level. Similarly, do NOT add LEASE_CURRENCY when the chain-end gap is less than 6 months from the rent-roll End — this is typically holdover or extension-in-progress. Use LEASE_CURRENCY ONLY when (a) no later amendment exists at all, OR (b) chain endpoint is materially short (>6 months) of the rent roll End AND no EXECUTION finding on a candidate bridging amendment is already present.",
+    rationale: "Blind-loop test 2026-06-16: Monterey Bay Homes FP — agent flagged 2 EXECUTION (Amendment 3 + Amendment 4 unsigned) AND added a 3rd LEASE_CURRENCY for chain ending 12/31/2026 vs rent roll 3/31/2027 (3-month gap). Reviewer only tracks the 2 EXECUTION findings; the unsigned amendments ARE the gap-bridging defect."
+  },
+  {
+    id: 'learning-1782000000005-blind12', source: 'blind-loop-2026-06-16', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-06-16T12:00:00.000Z',
+    suggestion: "MULTI-PARTY AGREEMENTS BELONG IN THIRD PARTY'S FOLDER: When a tenant's lease references a multi-party / tri-party agreement involving a THIRD party beyond Landlord and Tenant (e.g., Consent to Sublease among LL/Tenant/Subtenant, Tri-Party Letter Agreement among LL/Tenant/another Landlord, Sub-Sublease Consent), the document PRIMARILY belongs in the THIRD party's file system, NOT the primary tenant's review folder. Do NOT flag as MISSING when (a) the primary tenant is not the obligated party most likely to retain it, AND (b) the agreement does not directly modify the primary tenant's substantive rights/obligations under the lease. EXCEPTION: if the agreement directly modifies/limits the primary tenant's own rights (e.g., a Consent imposing new tenant obligations like profit-sharing or additional rent), DO flag it.",
+    rationale: "Blind-loop test 2026-06-16: General Atlantic FP (Consent for Duff sublease belongs in Duff folder, not GA); Morgan Stanley FP (Tri-Party with 49E52 Landlord belongs in that landlord's folder). Duff & Phelps's Consent IS flagged because Third Amendment Article 4 imposes 50% Sublease Profit on Tenant — exception applies."
+  },
+  {
+    id: 'learning-1782000000006-blind13', source: 'blind-loop-2026-06-16', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-06-16T12:00:00.000Z',
+    suggestion: "COUNTERPART SIGNATURE PAGES — SEARCH NEIGHBORING PAGES BEFORE FLAGGING: When a signature page shows ONE party signed (Landlord or Tenant) and the OTHER party's By: line is blank, this is OFTEN counterpart execution: each party signs their own page. BEFORE flagging an EXECUTION finding, search the ±3 PDF pages around the signature page for another `IN WITNESS WHEREOF` page bearing the OPPOSITE party's signature. Two complementary counterpart pages together = full execution. Sophisticated NYC commercial leases (Park Avenue Plaza, Stockbridge, Brixmor portfolios) commonly use back-to-back counterpart pages — one with Landlord signature only, one with Tenant signature only. Only flag EXECUTION when, after searching both directions, you can confirm NO counterpart signature page exists anywhere in the document.",
+    rationale: "Blind-loop test 2026-06-16: Evercore Fifth Supplemental FP — agent flagged Tenant block blank on p14, but p13 had the Tenant + Guarantor counterpart signature page (Elizabeth Stevenson signed for Evercore Partners + Evercore L.P.). Standard NYC counterpart execution pattern."
+  },
+  {
+    id: 'learning-1782000000007-blind14', source: 'blind-loop-2026-06-16', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-06-16T12:00:00.000Z',
+    suggestion: "SUB-SUBLEASE ARRANGEMENTS ARE OUT OF SCOPE FOR PRIMARY LEASE REVIEW: When a tenant's amendments reference an underlying sub-sublease, sub-sublease consent, or sub-sub-related agreement involving a different sub-sublessee, these are OUT OF SCOPE for the primary lease review. Do NOT flag them as MISSING_DOCUMENT even if substantively referenced in a recital. The reviewer's scope is the primary lease + its amendments + its Guaranty — not downstream sub-sub-leasing arrangements.",
+    rationale: "Blind-loop test 2026-06-16: Evercore FP — agent flagged Court Square Sub-Sublease Consent and underlying Court Square Sub-Sublease. Both involve a different sub-sublessee (Court Square Capital Management) for a different floor. Reviewer doesn't track sub-sublease relationships in the primary lease folder."
+  },
+  {
+    id: 'learning-1782000000008-blind15', source: 'blind-loop-2026-06-16', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-06-16T12:00:00.000Z',
+    suggestion: "ASSIGNMENT OF LEASE CHANGING TENANT IDENTITY IS NOT A FINDING: When a lease has been assigned to a successor entity (e.g., parent → subsidiary, original tenant → assignee), this Assignment of Lease is operationally tracked but is NOT a missing-document finding. Treat the current tenant on the rent roll as the operating party regardless of prior assignment. Do NOT flag an 'Assignment of Lease' or 'Assignment and Assumption of Lease' as missing unless specifically required by the cheat sheet pattern.",
+    rationale: "Blind-loop test 2026-06-16: Morgan Stanley FP — agent flagged the 2009 Assignment from MSCO to Morgan Stanley Smith Barney Financing LLC as missing. Reviewer doesn't track tenant-identity assignments — the current rent-roll tenant is the operating party."
+  },
+  {
+    id: 'learning-1782000000009-blind16', source: 'blind-loop-2026-06-16', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-06-16T12:00:00.000Z',
+    suggestion: "PREMISES-DESCRIPTION MISMATCH WITH RENT ROLL SUITE IS A FINDING: When the rent roll's Suite designation includes a premises identifier NOT described in any document in the folder (e.g., rent roll says 'BSMT/1600-1700' implying basement + floors 16-17, but lease documents only describe 16th and 17th floors with no basement reference anywhere), this IS a finding. Frame as 'Document reflecting Premises of [missing portion], as reflected on Rent Roll' — MISSING_DOCUMENT severity HIGH. The rent roll is authoritative; if documents don't describe everything the rent roll lists, a document is missing.",
+    rationale: "Blind-loop test 2026-06-16: Duff & Phelps required this rule — rent roll suite 'BSMT/1600-1700' implies basement premises, but no lease document describes any basement portion. Reviewer flagged 'Document reflecting Premises of Part Basement, as reflected on Rent Roll'."
+  },
+  {
+    id: 'learning-1782000000010-blindsnda', source: 'blind-loop-2026-06-16', active: true,
+    checkType: 'SPECIAL_AGREEMENT', confidence: 'HIGH',
+    createdAt: '2026-06-16T12:00:00.000Z',
+    suggestion: "STRICT NO-EXCEPTIONS FOR SNDA / NON-DISTURBANCE CLASS DOCUMENTS (extends Learning 9): SNDA, Subordination Agreement, Non-Disturbance Agreement (NDA), Landlord's Non-Disturbance Agreement, Recognition Agreement, Subordination Non-Disturbance and Attornment Agreement, Tri-Party Non-Disturbance, or anything similarly named are NEVER findings — missing, present, executed, unexecuted, all fine. This applies EVEN WHEN the agreement is explicitly referenced by name in a recital or section of another document as 'that certain [X] dated [date]'. If the document name contains 'non-disturbance' / 'subordination' / 'attornment' / 'SNDA' / 'recognition', drop the finding on sight. Learning 9 only covered pure 'SNDA' label — this strengthens it to all variant names.",
+    rationale: "Blind-loop test 2026-06-16: Duff & Phelps FP — agent flagged the Landlord's Non-Disturbance Agreement among LL/Tenant/GA referenced in Third Amendment Section 4.2 as MISSING_DOCUMENT. Existing Learning 9 (sn009) was insufficiently explicit for Non-Disturbance variants beyond pure SNDA wording."
+  },
+  {
+    id: 'learning-1782000000011-blindoos', source: 'blind-loop-2026-06-16', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-06-16T12:00:00.000Z',
+    suggestion: "EXTENDED OUT-OF-SCOPE LIST (extends Learning 10): In addition to COIs, HVAC contracts, pest control, business licenses, building permits, and broker commission agreements, the following are also NEVER findings: Authorization Agreement for Preauthorized Payments / ACH Authorization / payment-method authorization form (often appearing as Exhibit G on Stockbridge Northwood Plaza shopping center leases), Tenant Trade Name Confirmation, W-9 forms, COI insurance certificates exhibit attachments. These are administrative payment-setup / informational forms, not substantive lease documents. Drop on sight even when listed in the TOC and the page is absent from the file.",
+    rationale: "Blind-loop test 2026-06-16: Sol Palms MedSpa FP — agent flagged Exhibit G (Authorization Agreement for Preauthorized Payments) as MISSING_EXHIBIT. Existing Learning 10 (oos010) listed standard out-of-scope docs but not payment-authorization forms; this rule patches that gap."
   }
 ]
 
