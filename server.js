@@ -2754,15 +2754,16 @@ app.get('/api/gym/analyze', async (req, res) => {
     // "expiring within 90 days" claim when the math doesn't add up.
     if (Array.isArray(result.findings) && result.findings.length > 0) {
       try {
-        const { dropSelfSuppressedFindings, dropBadDateMathFindings } = await import('./lib/claude.js')
+        const { dropSelfSuppressedFindings, dropBadDateMathFindings, dropFindingsInFolderManifest } = await import('./lib/claude.js')
         const before = result.findings.length
         result.findings = dropSelfSuppressedFindings(result.findings, { tenantName: tenant.tenantName, source: useTP3 ? 'tp3' : 'tp2' })
         result.findings = dropBadDateMathFindings(result.findings, { tenantName: tenant.tenantName })
+        result.findings = dropFindingsInFolderManifest(result.findings, tenant.files, { tenantName: tenant.tenantName })
         if (result.findings.length !== before) {
           console.log(`[gym/analyze] ${tenant.tenantName}: pre-dedup filters ${before} → ${result.findings.length}`)
         }
       } catch (err) {
-        console.warn(`[gym/analyze] self-suppress/date-math filter failed: ${err.message} — keeping findings as-is`)
+        console.warn(`[gym/analyze] self-suppress/date-math/manifest filter failed: ${err.message} — keeping findings as-is`)
       }
     }
 
