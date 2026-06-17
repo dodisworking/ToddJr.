@@ -15,6 +15,7 @@ import { synthesizeActiveLearning, synthesizeDeepLearning, compareToCheatSheet, 
 import { openaiAnalyzeTenant, isOpenAiKeyConfigured, getServerOpenAiKeyHint } from './lib/openai.js'
 import { generateReport } from './lib/reporter.js'
 import { mountIsaacRoutes } from './lib/isaac-routes.js'
+import { mountTelemetry, logEvent } from './lib/telemetry.js'
 import { parseRRFile } from './lib/rr-parser.js'
 import { analyzeRentRolls } from './lib/rr-claude.js'
 import { generateRRReport } from './lib/rr-reporter.js'
@@ -989,6 +990,7 @@ if (CORS_ORIGIN_FIXED || LOCAL_DEV_CORS) {
 
 // Isaac / Teacher Excel — registered immediately after body parser (must not depend on later server.js code)
 mountIsaacRoutes(app, { outputsDir: OUTPUTS_DIR, parseFolderName, sessions })
+mountTelemetry(app, { outputsDir: OUTPUTS_DIR })
 
 app.get('/api/health', (_req, res) => {
   res.json({
@@ -1358,6 +1360,7 @@ app.post('/api/upload', upload.array('files', 10000), async (req, res) => {
           filesAdded: newFiles.length
         })
         console.warn(`[upload] ⚠️  DUPLICATE TENANT MERGED: "${tenant.folderName}" → "${existing.folderName}" (+${newFiles.length} files)`)
+        logEvent('upload.duplicate_merged', { sessionId, mergedInto: existing.folderName, duplicate: tenant.folderName, filesAdded: newFiles.length })
       } else {
         dedupedMap.set(key, tenant)
       }
@@ -1367,6 +1370,7 @@ app.post('/api/upload', upload.array('files', 10000), async (req, res) => {
       if (!t.files || t.files.length === 0) {
         uploadDiagnostics.emptyTenantsDropped.push(t.folderName)
         console.warn(`[upload] ⚠️  EMPTY TENANT DROPPED: "${t.folderName}" had no files`)
+        logEvent('upload.empty_dropped', { sessionId, folderName: t.folderName })
         return false
       }
       return true
@@ -1376,7 +1380,31 @@ app.post('/api/upload', upload.array('files', 10000), async (req, res) => {
     uploadDiagnostics.fileCountDelta = req.files.length - totalFilesInTenants
     if (uploadDiagnostics.fileCountDelta !== 0) {
       console.warn(`[upload] ⚠️  FILE COUNT MISMATCH: uploaded ${req.files.length} files but tenants contain ${totalFilesInTenants} (delta ${uploadDiagnostics.fileCountDelta})`)
+      logEvent('upload.file_count_mismatch', { sessionId, uploadedFiles: req.files.length, inTenants: totalFilesInTenants, delta: uploadDiagnostics.fileCountDelta })
     }
+    // Log every detected tenant + a summary event for the whole upload
+    for (const t of finalTenants) {
+      let totalBytes = 0
+      try { totalBytes = t.files.reduce((s, f) => s + (fs.statSync(f.diskPath).size || 0), 0) } catch {}
+      logEvent('upload.tenant_detected', {
+        sessionId,
+        tenantId: t.id,
+        tenantName: t.tenantName,
+        folderName: t.folderName,
+        property: t.property,
+        suite: t.suite,
+        fileCount: t.files.length,
+        totalBytes,
+        oversizedCount: Array.isArray(t.oversizedFiles) ? t.oversizedFiles.length : 0,
+      })
+    }
+    logEvent('upload.complete', {
+      sessionId,
+      finalTenantCount: finalTenants.length,
+      filesUploaded: req.files.length,
+      duplicatesMerged: uploadDiagnostics.duplicatesMerged.length,
+      emptyDropped: uploadDiagnostics.emptyTenantsDropped.length,
+    })
 
     console.log(`[upload] ✅ Final tenant count: ${finalTenants.length}${uploadDiagnostics.duplicatesMerged.length > 0 ? ` (after merging ${uploadDiagnostics.duplicatesMerged.length} duplicate(s))` : ''}`)
     for (const t of finalTenants) {
@@ -2701,6 +2729,16 @@ app.get('/api/gym/analyze', async (req, res) => {
   let aborted = false
   req.on('close', () => { aborted = true; clearInterval(heartbeat) })
 
+  const analyzeStartedAt = Date.now()
+  logEvent('analyze.start', {
+    sessionId,
+    tenantId: tenant.id,
+    tenantName: tenant.tenantName,
+    folderName: tenant.folderName,
+    fileCount: (tenant.files || []).length,
+    tp3: !!useTP3,
+  })
+
   try {
     emit('gym-start', { tenantName: tenant.tenantName, folderName: tenant.folderName })
     const onProgress = ({ percent, message }) => {
@@ -2756,11 +2794,16 @@ app.get('/api/gym/analyze', async (req, res) => {
       try {
         const { dropSelfSuppressedFindings, dropBadDateMathFindings, dropFindingsInFolderManifest } = await import('./lib/claude.js')
         const before = result.findings.length
-        result.findings = dropSelfSuppressedFindings(result.findings, { tenantName: tenant.tenantName, source: useTP3 ? 'tp3' : 'tp2' })
-        result.findings = dropBadDateMathFindings(result.findings, { tenantName: tenant.tenantName })
-        result.findings = dropFindingsInFolderManifest(result.findings, tenant.files, { tenantName: tenant.tenantName })
+        const droppedBy = []
+        const onDrop = (filter) => (f, reason) => droppedBy.push({ filter, reason, missingDoc: (f.missingDocument || '').slice(0, 120), checkType: f.checkType })
+        result.findings = dropSelfSuppressedFindings(result.findings, { tenantName: tenant.tenantName, source: useTP3 ? 'tp3' : 'tp2', onDrop: onDrop('self_suppression') })
+        result.findings = dropBadDateMathFindings(result.findings,    { tenantName: tenant.tenantName, onDrop: onDrop('bad_date_math') })
+        result.findings = dropFindingsInFolderManifest(result.findings, tenant.files, { tenantName: tenant.tenantName, onDrop: onDrop('folder_manifest') })
         if (result.findings.length !== before) {
           console.log(`[gym/analyze] ${tenant.tenantName}: pre-dedup filters ${before} → ${result.findings.length}`)
+        }
+        for (const d of droppedBy) {
+          logEvent('analyze.filter_drop', { sessionId, tenantId: tenant.id, tenantName: tenant.tenantName, ...d })
         }
       } catch (err) {
         console.warn(`[gym/analyze] self-suppress/date-math/manifest filter failed: ${err.message} — keeping findings as-is`)
@@ -2814,8 +2857,28 @@ app.get('/api/gym/analyze', async (req, res) => {
         tokenUsage: result._tokenUsage || null
       })
     }
+    logEvent('analyze.complete', {
+      sessionId,
+      tenantId: tenant.id,
+      tenantName: tenant.tenantName,
+      folderName: tenant.folderName,
+      findingsCount: findingsWithIds.length,
+      allClear: !!result.allClear,
+      ms: Date.now() - analyzeStartedAt,
+      tp3: !!useTP3,
+      findingTypes: findingsWithIds.map(f => f.checkType).filter(Boolean),
+      tokenUsage: result._tokenUsage || null,
+    })
   } catch (err) {
     console.error('[gym/analyze]', err)
+    logEvent('analyze.error', {
+      sessionId,
+      tenantId: tenant.id,
+      tenantName: tenant.tenantName,
+      error: err.message,
+      failedKeyIdx: getLastGymKeyIdx(),
+      ms: Date.now() - analyzeStartedAt,
+    })
     // Include failedKeyIdx so the client can mark that key as rate-limited and rotate on retry
     if (!aborted) emit('gym-error', { error: err.message, failedKeyIdx: getLastGymKeyIdx() })
   } finally {
@@ -3207,6 +3270,29 @@ app.post('/api/gym/workout-feedback', async (req, res) => {
     const tenant = session?.tenants.find(t => t.id === tenantId)
       || { tenantName: 'Unknown', folderName: 'Unknown' }
 
+    // Telemetry: log reviewer confirm/reject decisions
+    try {
+      for (const fb of (feedbacks || [])) {
+        const verdict = (fb.verdict || fb.decision || '').toLowerCase()
+        if (verdict === 'confirm' || verdict === 'accept' || verdict === 'keep' || fb.confirmed === true) {
+          logEvent('feedback.confirm', {
+            sessionId, tenantId, tenantName: tenant.tenantName,
+            findingId: fb.id || fb.findingId,
+            checkType: fb.checkType,
+            missingDoc: (fb.missingDocument || '').slice(0, 120),
+          })
+        } else if (verdict === 'reject' || verdict === 'wrong' || verdict === 'drop' || fb.confirmed === false) {
+          logEvent('feedback.reject', {
+            sessionId, tenantId, tenantName: tenant.tenantName,
+            findingId: fb.id || fb.findingId,
+            checkType: fb.checkType,
+            missingDoc: (fb.missingDocument || '').slice(0, 120),
+            reason: (fb.reason || fb.note || fb.reviewerNote || '').slice(0, 240),
+          })
+        }
+      }
+    } catch {}
+
     const { compileWorkoutFeedback } = await import('./lib/gym-trainer.js')
     const result = await compileWorkoutFeedback({
       tenant,
@@ -3228,6 +3314,14 @@ app.post('/api/gym/workout-feedback', async (req, res) => {
     }))
 
     writeLearnings([...readLearnings(), ...newLearnings])
+
+    if (newLearnings.length > 0) {
+      logEvent('learning.created', {
+        sessionId, tenantId, tenantName: tenant.tenantName, batchId,
+        count: newLearnings.length,
+        types: [...new Set(newLearnings.map(l => l.checkType).filter(Boolean))],
+      })
+    }
 
     res.json({ learnings: newLearnings, summary: result.summary || '' })
   } catch (err) {
