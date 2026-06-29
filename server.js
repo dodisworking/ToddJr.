@@ -917,6 +917,24 @@ const LAUREN_REVIEW_SEED = [
     createdAt: '2026-06-16T12:00:00.000Z',
     suggestion: "EXTENDED OUT-OF-SCOPE LIST (extends Learning 10): In addition to COIs, HVAC contracts, pest control, business licenses, building permits, and broker commission agreements, the following are also NEVER findings: Authorization Agreement for Preauthorized Payments / ACH Authorization / payment-method authorization form (often appearing as Exhibit G on Stockbridge Northwood Plaza shopping center leases), Tenant Trade Name Confirmation, W-9 forms, COI insurance certificates exhibit attachments. These are administrative payment-setup / informational forms, not substantive lease documents. Drop on sight even when listed in the TOC and the page is absent from the file.",
     rationale: "Blind-loop test 2026-06-16: Sol Palms MedSpa FP — agent flagged Exhibit G (Authorization Agreement for Preauthorized Payments) as MISSING_EXHIBIT. Existing Learning 10 (oos010) listed standard out-of-scope docs but not payment-authorization forms; this rule patches that gap."
+  },
+  // ════════════════════════════════════════════════════════════════════════
+  // Blind self-learner loop RUN 2 (2026-06-17) — re-ran the same dataset
+  // and surfaced two edge cases the round-1 playbook didn't cover.
+  // ════════════════════════════════════════════════════════════════════════
+  {
+    id: 'learning-1782086400001-blind08refined', source: 'blind-loop-2026-06-17', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-06-17T12:00:00.000Z',
+    suggestion: "PARTIAL EXHIBIT SUB-PAGE CHECK — REFINED (extends Learning blind08): When checking whether an exhibit is partially missing by sub-page number, distinguish two cases. (a) REAL DEFECT — flag: the lowest-numbered sub-page present is a SIGNATURE PAGE ONLY (no exhibit title header, no body recitals, no operative paragraphs — just 'IN WITNESS WHEREOF' + signature blocks). The body of the exhibit is genuinely missing. Frame as 'Full copy of [Exhibit Name] to Lease dated [date]'. (b) TEMPLATE QUIRK — do NOT flag: the lowest-numbered sub-page present contains the exhibit's TITLE HEADER plus substantive BODY CONTENT (recitals, definitions, operative paragraphs). Different Stockbridge/Brixmor/Park Avenue Plaza templates use different sub-numbering schemes — some Guaranty exhibits literally start at F-3 with the full title page + body. Do NOT flag F-1/F-2 missing in this case. Decision rule: look at the FIRST page of the exhibit you find. Title heading + body content present? → template quirk, do not flag. Only signatures, no header/body? → body is missing, flag.",
+    rationale: "Blind-loop run-2 2026-06-17: Thai E-San FP — agent flagged 'F-1 and F-2 of Guaranty missing' but the Guaranty's first content page is genuinely F-3 (template quirk) with full title + recitals + paragraphs 1-2 + signature on F-6. Reviewer treats this as complete. Patches the original blind08 rule which was too aggressive on numerical gap alone."
+  },
+  {
+    id: 'learning-1782086400002-blind17', source: 'blind-loop-2026-06-17', active: true,
+    checkType: 'MISSING_EXHIBIT', confidence: 'HIGH',
+    createdAt: '2026-06-17T12:00:00.000Z',
+    suggestion: "AMENDMENT SUB-EXHIBITS DESCRIBING DIAGRAMS / DEPICTIONS — DO NOT flag: When an amendment's body section references a sub-exhibit that is a diagram, depiction, or floor-plan-style visual (e.g., 'Exhibit A attached hereto depicting the additional parking spaces', 'Exhibit B showing the new floor plan'), and that diagram is not physically attached to the amendment's PDF, do NOT generate a MISSING_EXHIBIT finding. Diagrammatic / depiction sub-exhibits to amendments are routinely tracked operationally rather than as missing documents. EXCEPTIONS: (a) the sub-exhibit is a Guaranty form (still flag per F-NONSIG-EXHIBITS / Learning 15), or (b) the diagram contains the only description of premises the rent roll requires — in that case L16 fires for the underlying premises description, not for the diagram itself.",
+    rationale: "Blind-loop run-2 2026-06-17: Liberty Steakhouse FP — agent flagged 'Exhibit A to Second Amendment missing' (parking-space diagram referenced but not attached). Reviewer doesn't track amendment diagrams as missing documents."
   }
 ]
 
