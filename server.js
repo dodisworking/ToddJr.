@@ -935,6 +935,46 @@ const LAUREN_REVIEW_SEED = [
     createdAt: '2026-06-17T12:00:00.000Z',
     suggestion: "AMENDMENT SUB-EXHIBITS DESCRIBING DIAGRAMS / DEPICTIONS — DO NOT flag: When an amendment's body section references a sub-exhibit that is a diagram, depiction, or floor-plan-style visual (e.g., 'Exhibit A attached hereto depicting the additional parking spaces', 'Exhibit B showing the new floor plan'), and that diagram is not physically attached to the amendment's PDF, do NOT generate a MISSING_EXHIBIT finding. Diagrammatic / depiction sub-exhibits to amendments are routinely tracked operationally rather than as missing documents. EXCEPTIONS: (a) the sub-exhibit is a Guaranty form (still flag per F-NONSIG-EXHIBITS / Learning 15), or (b) the diagram contains the only description of premises the rent roll requires — in that case L16 fires for the underlying premises description, not for the diagram itself.",
     rationale: "Blind-loop run-2 2026-06-17: Liberty Steakhouse FP — agent flagged 'Exhibit A to Second Amendment missing' (parking-space diagram referenced but not attached). Reviewer doesn't track amendment diagrams as missing documents."
+  },
+  // ════════════════════════════════════════════════════════════════════════
+  // Village West + Project Dijon lawyer-test rules (2026-07-21)
+  // Extracted from lawyer's actual target-practice sessions on
+  // Village West.zip (Test 7.20) and Project Dijon.zip (Test 7.21).
+  // ════════════════════════════════════════════════════════════════════════
+  {
+    id: 'learning-1782950400001-blind18', source: 'lawyer-test-2026-07-21', active: true,
+    checkType: 'EXECUTION', confidence: 'HIGH',
+    createdAt: '2026-07-21T12:00:00.000Z',
+    suggestion: "SCHEDULE / RATIFICATION / REAFFIRMATION / ATTACHMENT TO AMENDMENTS — MANDATORY COUNTERPART SEARCH BEFORE FLAGGING: When a Schedule, Ratification and Reaffirmation of Guarantee, Consent, or Attachment inside an Amendment PDF appears unsigned, you MUST apply the same ±3-page counterpart-page search from Learning 13 BEFORE emitting an EXECUTION finding. Ratifications and Schedules are commonly signed on the page IMMEDIATELY AFTER the schedule form, on a separate counterpart page, or by the Guarantor whose signature appears a few pages later in the same PDF. Scan every page of the entire Amendment PDF for the party's signature before concluding it's missing. Common pattern: a Ratification signature by the Guarantor appears on the same PDF but on a page labeled differently (e.g., 'Guarantor Ratification page' vs 'Schedule 1'). If ANY page in the same Amendment PDF has the required party's counterpart signature, do NOT flag EXECUTION.",
+    rationale: "Lawyer test 2026-07-20 Village West: Check into Cash — model flagged 'Ratification and Reaffirmation of Guarantee (Schedule 1 to Sixth Amendment) not executed' as HIGH, AND same finding for Seventh Amendment. Reviewer: 'Document is fully executed'. Same pattern for Jack in the Box's Consent to Assignment (May 2021). Learning 13 wasn't strong enough for schedule/ratification attachments to amendments."
+  },
+  {
+    id: 'learning-1782950400002-blind19', source: 'lawyer-test-2026-07-21', active: true,
+    checkType: 'MISSING_EXHIBIT', confidence: 'HIGH',
+    createdAt: '2026-07-21T12:00:00.000Z',
+    suggestion: "VERIFY WHAT AN EXHIBIT ACTUALLY IS BEFORE FLAGGING IT MISSING: Do NOT rely on lease conventions or TOC labels alone to conclude that a specific exhibit 'is a Guaranty' or 'is missing.' Before generating any MISSING_EXHIBIT / MISSING_DOCUMENT finding about a specific exhibit (e.g., 'Exhibit F Guaranty'), READ the actual pages under that exhibit letter and match the CONTENT to the finding's asserted document type. If Exhibit F is actually 'Tenant's Initial Signs' or 'Sign Criteria' or any other operational exhibit (not a Guaranty), the finding 'Exhibit F (Guaranty) is missing' is a MISIDENTIFICATION — do NOT emit it. If the TOC and actual content disagree, note the discrepancy and do NOT emit as a missing-document finding.",
+    rationale: "Lawyer test 2026-07-20 Village West: America's Best FP — model flagged 'Exhibit F (Guaranty of Lease) to Lease dated July 24, 2023' as missing. Reviewer: 'Exhibit F is Tenant's Initial Signs. I don't see anything about a Guaranty. It's [something else].' Model assumed Exhibit F = Guaranty per convention without reading the actual exhibit content."
+  },
+  {
+    id: 'learning-1782950400003-blind20', source: 'lawyer-test-2026-07-21', active: true,
+    checkType: 'SPECIAL_AGREEMENT', confidence: 'HIGH',
+    createdAt: '2026-07-21T12:00:00.000Z',
+    suggestion: "SIGNAGE PACKAGES / SIGN CRITERIA PACKAGES ARE OPERATIONAL — NEVER flag as Special Agreement or missing: Standalone documents titled 'Signage Package', 'Sign Criteria Package', 'Signage Guidelines', 'Sign Rules', 'Signage Guidelines and Standards' attached to a lease or in a tenant folder are operational reference materials — NOT Special Agreements, NOT missing findings. They are akin to Rules and Regulations exhibits and administrative in nature. Do NOT flag their presence as a Special Agreement finding of any severity. Do NOT flag their absence as a missing document. If the reviewer needs sign-related documents flagged, they'll want a 'Sign Agreement' (a formal signed agreement about signage) — not the operational signage package.",
+    rationale: "Lawyer test 2026-07-20 Village West: America's Best FP — model flagged standalone 'Signage Package.pdf' as a LOW-severity Special Agreement finding. Reviewer: 'A Signage Package wouldn't be a special agreement. It would either be a Sign Agreement.' Model over-classified an operational document."
+  },
+  {
+    id: 'learning-1782950400004-blind21', source: 'lawyer-test-2026-07-21', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-07-21T12:00:00.000Z',
+    suggestion: "VERIFY AMENDMENT / REFERENCED-DOCUMENT DATES AGAINST FILENAMES AND INTERNAL CONTENT: When later amendments' recitals identify a prior amendment / letter agreement BY DATE (e.g., 'as amended by First Amendment dated 3/3/2010'), verify that the date in the recital matches the actual date of the file named as that document. If a file exists named '1st Amendment' but its internal date is 4/30/2013 (different from the 3/3/2010 recital date), the file in the folder is a DIFFERENT document — the referenced-by-date prior amendment IS STILL MISSING. Flag as MISSING_DOCUMENT with the reviewer's wording: 'First Amendment dated [recital date]'. The date on the recital is authoritative; the date on the filename is not.",
+    rationale: "Lawyer test 2026-07-20 Village West: iTan — reviewer flagged 'We are missing the First Amendment dated 3/3/2010'. Later amendments referenced that date but the '1st Amendment' file in the folder was internally dated 4/30/2013 (a different amendment). Model didn't catch the date-mismatch and didn't flag the referenced amendment as missing."
+  },
+  {
+    id: 'learning-1782950400005-blind22', source: 'lawyer-test-2026-07-21', active: true,
+    checkType: 'GENERAL', confidence: 'HIGH',
+    createdAt: '2026-07-21T12:00:00.000Z',
+    suggestion: "WRAPPER SUBFOLDERS LIKE 'Prior Lease' / 'Abstracts' / 'Archive' — INCLUDE their files as tenant material, do NOT treat as sub-tenants: When walking a tenant folder that contains subfolders labeled 'Prior Lease', 'Abstracts', 'Archive', 'Old', 'Historical', 'Superseded', or similar historical/reference designations, INCLUDE the files inside those subfolders as part of the tenant's file inventory. These subfolders contain reference or historical material relevant to the current lease analysis. Do NOT treat them as separate sub-tenants. Do NOT trigger the '_single_tenant_' upload fallback because a subfolder is present. The main operative lease is typically at the top level of the folder; the subfolder provides historical context (like the immediately-prior expired lease, terminated lease notice, or lease abstract).",
+    rationale: "Lawyer test 2026-07-20 Village West: America's Best has a 'Prior Lease' subfolder containing the terminated January 2018 lease + First Amendment + Termination Notice — reference material for the current July 2023 lease. Also matches the Amazon (400 River) 'Abstracts' subfolder pattern that caused upload mis-bucketing earlier. Model should treat these subfolder files as tenant material without triggering wrapper detection."
   }
 ]
 
