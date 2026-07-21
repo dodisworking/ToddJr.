@@ -1423,7 +1423,20 @@ function readAllDirEntries(dirEntry) {
 }
 
 function fileEntryToFile(fileEntry) {
-  return new Promise((resolve, reject) => fileEntry.file(resolve, reject))
+  return new Promise((resolve, reject) => {
+    // 15s hard timeout — some browsers hang forever on very large or
+    // corrupted image files (Cig Zone-style JPG-under-tenant-folder issue)
+    // instead of rejecting. Without this the entire tenant folder's walk
+    // silently stalls, which manifests as "tenant skipped".
+    const timeout = setTimeout(
+      () => reject(new Error(`fileEntryToFile timeout after 15s: ${fileEntry.fullPath || fileEntry.name}`)),
+      15000
+    )
+    fileEntry.file(
+      f => { clearTimeout(timeout); resolve(f) },
+      err => { clearTimeout(timeout); reject(err) }
+    )
+  })
 }
 
 /**
@@ -1449,15 +1462,33 @@ async function collectFilesFromDirEntry(dirEntry, { forceTenant = false } = {}) 
 
   const fileMap = new Map()
 
+  // Track per-folder errors so a single unreadable file doesn't drop the whole
+  // tenant. Root cause of the "Cig Zone skipped" bug: browser's .file()
+  // hanging or throwing on a specific file (e.g. JPG) meant the walk aborted
+  // silently and the tenant produced zero files → later grouping code fell
+  // through to the _single_tenant_ path, causing a different tenant to be
+  // "duplicated" as the label attached to those orphaned files.
+  const walkErrors = []
   async function walk(entry, pathPrefix) {
-    const entries = await readAllDirEntries(entry)
+    let entries
+    try {
+      entries = await readAllDirEntries(entry)
+    } catch (err) {
+      walkErrors.push({ path: entry.fullPath || entry.name, error: err.message, phase: 'readEntries' })
+      return
+    }
     for (const e of entries) {
       if (e.name.startsWith('.')) continue
       const childPath = pathPrefix ? `${pathPrefix}/${e.name}` : e.name
       if (e.isFile) {
-        const file = await fileEntryToFile(e)
-        file.relativePath = childPath
-        fileMap.set(childPath, file)
+        try {
+          const file = await fileEntryToFile(e)
+          file.relativePath = childPath
+          fileMap.set(childPath, file)
+        } catch (err) {
+          walkErrors.push({ path: childPath, error: err.message, phase: 'readFile' })
+          console.warn(`[folder walk] SKIPPED FILE — ${childPath}: ${err.message}`)
+        }
       } else if (e.isDirectory) {
         await walk(e, childPath)
       }
@@ -1467,7 +1498,7 @@ async function collectFilesFromDirEntry(dirEntry, { forceTenant = false } = {}) 
   if (isSingleTenant) await walk(dirEntry, name)
   else                await walk(dirEntry, '')
 
-  return { files: Array.from(fileMap.values()), isSingleTenant }
+  return { files: Array.from(fileMap.values()), isSingleTenant, walkErrors }
 }
 
 async function uploadFolderFromEntry(dirEntry) {
@@ -1483,13 +1514,43 @@ async function uploadFolderFromEntry(dirEntry) {
 /** Several folders dropped at once (e.g. multiple tenant folders from Finder) */
 async function uploadMultipleFolderEntries(dirEntries) {
   const all = []
+  const perTenantReport = [] // used to surface skip/duplicate bugs before analysis
+  const seenNames = new Set()
+  const duplicates = []
   for (const de of dirEntries) {
     // Each entry IS a tenant folder by definition — force single-tenant mode so
     // the heuristic can't misfire on sub-folders with " - " in their names.
-    const { files } = await collectFilesFromDirEntry(de, { forceTenant: true })
+    const before = all.length
+    let files, walkErrors
+    try {
+      ({ files, walkErrors = [] } = await collectFilesFromDirEntry(de, { forceTenant: true }))
+    } catch (err) {
+      console.error(`[uploadMultipleFolderEntries] FOLDER FAILED to walk: "${de.name}" — ${err.message}`)
+      perTenantReport.push({ tenant: de.name, files: 0, error: err.message })
+      continue
+    }
     all.push(...files)
+    perTenantReport.push({ tenant: de.name, files: files.length, walkErrors: walkErrors.length })
+    // Client-side duplicate detection — flag before submitting so the user
+    // sees "duplicate tenant" ambiguity rather than getting mystery
+    // double-processing on the server side.
+    const nameKey = de.name.normalize('NFC').toLowerCase().trim()
+    if (seenNames.has(nameKey)) duplicates.push(de.name)
+    else seenNames.add(nameKey)
+    console.log(`[uploadMultipleFolderEntries] "${de.name}" → ${files.length} files${walkErrors && walkErrors.length ? ` (${walkErrors.length} walk errors)` : ''}`)
   }
   console.log('[uploadMultipleFolderEntries]', dirEntries.length, 'roots →', all.length, 'files')
+  console.table(perTenantReport)
+
+  // Surface any tenants with 0 files — this is the exact "skipped tenant" signal
+  const zeroFileTenants = perTenantReport.filter(r => r.files === 0)
+  if (zeroFileTenants.length > 0) {
+    toast(`⚠ ${zeroFileTenants.length} tenant folder(s) produced 0 files — will be skipped. Check console for details.`, 'warning', 10000)
+    console.warn('[uploadMultipleFolderEntries] TENANTS WITH ZERO FILES:', zeroFileTenants.map(r => r.tenant))
+  }
+  if (duplicates.length > 0) {
+    toast(`⚠ Duplicate tenant folder name(s) dropped: ${duplicates.join(', ')}`, 'warning', 10000)
+  }
   if (all.length === 0) {
     toast('No files found in those folders.', 'error')
     return
