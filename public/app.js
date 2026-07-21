@@ -1342,39 +1342,72 @@ dropZone.addEventListener('drop', async e => {
 
   const dtFiles = Array.from(e.dataTransfer.files || [])
 
-  // Every dropped *folder* as a DirectoryEntry (Chrome/Safari — supports multiple)
+  // Collect items via BOTH APIs. FileSystemDirectoryHandle (modern) is
+  // preferred — its async-iterator entries() is orders of magnitude more
+  // reliable than the deprecated FileSystemDirectoryEntry API. We fall
+  // back to the old API only when the browser doesn't support handles.
+  //
+  // This split is the real fix for the "Cig Zone skipped / Check into
+  // Cash duplicated" bug: the legacy Entry API can hang or silently drop
+  // files on certain inputs (large JPGs, permission edge cases), and
+  // when a walk aborts mid-tenant, that tenant's slot gets ambiguously
+  // absorbed by later ones in the pipeline.
+  const dirHandles = []
   const dirEntries = []
   if (e.dataTransfer.items) {
     for (const item of e.dataTransfer.items) {
       if (item.kind !== 'file') continue
+      // Modern path — File System Access API (Chrome/Edge 86+, Safari 15.2+)
+      if (typeof item.getAsFileSystemHandle === 'function') {
+        try {
+          const handle = await item.getAsFileSystemHandle()
+          if (handle && handle.kind === 'directory') { dirHandles.push(handle); continue }
+          if (handle && handle.kind === 'file') { /* handled via dtFiles */ continue }
+        } catch (err) {
+          console.warn('[drop] getAsFileSystemHandle failed for one item, falling back to Entry API:', err.message)
+        }
+      }
+      // Legacy path — FileSystemDirectoryEntry (deprecated but universal)
       const entry = item.webkitGetAsEntry?.()
       if (entry?.isDirectory) dirEntries.push(entry)
     }
   }
 
   const zipFiles = dtFiles.filter(f => f.name.toLowerCase().endsWith('.zip'))
+  const anyFolderDrop = dirHandles.length + dirEntries.length > 0
 
   if (zipFiles.length > 1) {
     toast('Please drop one ZIP at a time.', 'error')
     return
   }
 
-  if (zipFiles.length === 1 && dirEntries.length > 0) {
+  if (zipFiles.length === 1 && anyFolderDrop) {
     toast('Drop either a ZIP or folder(s), not both.', 'error')
     return
   }
 
-  if (zipFiles.length === 1 && dirEntries.length === 0) {
+  if (zipFiles.length === 1) {
     console.log('[drop] ZIP only')
     startLocalExtract(zipFiles)
     return
   }
 
-  if (dirEntries.length > 0) {
-    console.log('[drop]', dirEntries.length, 'folder(s):', dirEntries.map(d => d.name).join(', '))
+  if (anyFolderDrop) {
+    console.log('[drop]', dirHandles.length, 'handle(s) +', dirEntries.length, 'legacy entry(s):',
+      [...dirHandles.map(h => h.name + '(handle)'), ...dirEntries.map(d => d.name + '(entry)')].join(', '))
     try {
-      if (dirEntries.length === 1) await uploadFolderFromEntry(dirEntries[0])
-      else await uploadMultipleFolderEntries(dirEntries)
+      // Prefer handles when we got any — handles + entries is fine, we just walk both
+      if (dirHandles.length > 0 && dirEntries.length === 0) {
+        if (dirHandles.length === 1) await uploadSingleFolderHandle(dirHandles[0])
+        else await uploadMultipleFolderHandles(dirHandles)
+      } else if (dirEntries.length > 0 && dirHandles.length === 0) {
+        if (dirEntries.length === 1) await uploadFolderFromEntry(dirEntries[0])
+        else await uploadMultipleFolderEntries(dirEntries)
+      } else {
+        // Mixed — some items resolved as handles, others as entries. Walk both,
+        // stitch the file lists, and hand off as a single startLocalExtract.
+        await uploadMixedHandlesAndEntries(dirHandles, dirEntries)
+      }
     } catch (err) {
       console.error('[drop] Folder walk failed:', err)
       toast('Could not read folder(s) — try a ZIP or Choose folder.', 'error')
@@ -1386,6 +1419,134 @@ dropZone.addEventListener('drop', async e => {
 
   if (dtFiles.length > 0) startLocalExtract(dtFiles)
 })
+
+/**
+ * Modern-API walk of a single FileSystemDirectoryHandle. Uses the async
+ * iterator entries() which is dramatically more reliable than the legacy
+ * DirectoryEntry.createReader().readEntries() chunked pattern.
+ *
+ * Errors on individual files are logged and skipped rather than aborting
+ * the whole walk (same rationale as fileEntryToFile timeout).
+ */
+async function collectFilesFromHandle(dirHandle, { pathPrefix = '' } = {}) {
+  const files = []
+  const walkErrors = []
+  async function walk(handle, prefix) {
+    for await (const [name, child] of handle.entries()) {
+      if (name.startsWith('.')) continue
+      const childPath = prefix ? `${prefix}/${name}` : name
+      if (child.kind === 'file') {
+        try {
+          const file = await child.getFile()
+          file.relativePath = childPath
+          files.push(file)
+        } catch (err) {
+          walkErrors.push({ path: childPath, error: err.message })
+          console.warn(`[handle walk] SKIPPED FILE — ${childPath}: ${err.message}`)
+        }
+      } else if (child.kind === 'directory') {
+        try {
+          await walk(child, childPath)
+        } catch (err) {
+          walkErrors.push({ path: childPath, error: err.message, phase: 'subdir' })
+          console.warn(`[handle walk] SKIPPED SUBDIR — ${childPath}: ${err.message}`)
+        }
+      }
+    }
+  }
+  await walk(dirHandle, pathPrefix || dirHandle.name)
+  return { files, walkErrors }
+}
+
+/** Modern-API upload for a single dropped folder. */
+async function uploadSingleFolderHandle(handle) {
+  const { files, walkErrors } = await collectFilesFromHandle(handle)
+  console.log(`[uploadSingleFolderHandle] "${handle.name}" → ${files.length} files (${walkErrors.length} walk errors)`)
+  if (files.length === 0) {
+    toast(`No files found in folder "${handle.name}".`, 'error')
+    return
+  }
+  if (walkErrors.length > 0) {
+    toast(`⚠ ${walkErrors.length} file(s) were skipped due to read errors — see console.`, 'warning', 8000)
+  }
+  startLocalExtract(files)
+}
+
+/**
+ * Modern-API upload for multiple dropped folders. This is the code path
+ * that replaces the flaky Entry-based uploadMultipleFolderEntries and
+ * fixes the "Cig Zone skipped / Check into Cash duplicated" bug for any
+ * browser that supports the File System Access API.
+ */
+async function uploadMultipleFolderHandles(handles) {
+  const all = []
+  const perTenantReport = []
+  const seenNames = new Set()
+  const duplicates = []
+  for (const h of handles) {
+    let files = [], walkErrors = []
+    try {
+      ({ files, walkErrors } = await collectFilesFromHandle(h))
+    } catch (err) {
+      console.error(`[uploadMultipleFolderHandles] FOLDER FAILED to walk: "${h.name}" — ${err.message}`)
+      perTenantReport.push({ tenant: h.name, files: 0, walkErrors: 0, error: err.message })
+      continue
+    }
+    all.push(...files)
+    perTenantReport.push({ tenant: h.name, files: files.length, walkErrors: walkErrors.length })
+    const nameKey = h.name.normalize('NFC').toLowerCase().trim()
+    if (seenNames.has(nameKey)) duplicates.push(h.name)
+    else seenNames.add(nameKey)
+    console.log(`[uploadMultipleFolderHandles] "${h.name}" → ${files.length} files (${walkErrors.length} walk errors)`)
+  }
+  console.log('[uploadMultipleFolderHandles]', handles.length, 'handles →', all.length, 'files')
+  console.table(perTenantReport)
+  const zeroFileTenants = perTenantReport.filter(r => r.files === 0)
+  if (zeroFileTenants.length > 0) {
+    toast(`⚠ ${zeroFileTenants.length} tenant folder(s) produced 0 files — will be skipped. Check console for details.`, 'warning', 10000)
+    console.warn('[uploadMultipleFolderHandles] TENANTS WITH ZERO FILES:', zeroFileTenants.map(r => r.tenant))
+  }
+  if (duplicates.length > 0) {
+    toast(`⚠ Duplicate tenant folder name(s) dropped: ${duplicates.join(', ')}`, 'warning', 10000)
+  }
+  if (all.length === 0) {
+    toast('No files found in those folders.', 'error')
+    return
+  }
+  startLocalExtract(all)
+}
+
+/** Mixed drop: some items resolved as handles, others as entries. Walk both. */
+async function uploadMixedHandlesAndEntries(handles, entries) {
+  const all = []
+  const perTenantReport = []
+  for (const h of handles) {
+    try {
+      const { files, walkErrors } = await collectFilesFromHandle(h)
+      all.push(...files)
+      perTenantReport.push({ tenant: h.name + ' (handle)', files: files.length, walkErrors: walkErrors.length })
+    } catch (err) {
+      perTenantReport.push({ tenant: h.name + ' (handle)', files: 0, error: err.message })
+    }
+  }
+  for (const de of entries) {
+    try {
+      const { files, walkErrors = [] } = await collectFilesFromDirEntry(de, { forceTenant: true })
+      all.push(...files)
+      perTenantReport.push({ tenant: de.name + ' (entry)', files: files.length, walkErrors: walkErrors.length })
+    } catch (err) {
+      perTenantReport.push({ tenant: de.name + ' (entry)', files: 0, error: err.message })
+    }
+  }
+  console.log('[uploadMixedHandlesAndEntries] combined:', all.length, 'files')
+  console.table(perTenantReport)
+  const zero = perTenantReport.filter(r => r.files === 0)
+  if (zero.length > 0) {
+    toast(`⚠ ${zero.length} tenant folder(s) produced 0 files — will be skipped.`, 'warning', 10000)
+  }
+  if (all.length === 0) { toast('No files found in those folders.', 'error'); return }
+  startLocalExtract(all)
+}
 
 /** When browsers expose files with webkitRelativePath but no DirectoryEntry */
 function tryStartUploadWithWebkitPaths(dtFiles) {
