@@ -6174,7 +6174,14 @@ async function tp2AutoSaveJuice() {
       tenantResults: tp2Session.allTenantResults,
       reviewerName:  tp2Session.reviewerName,
       juiceRules:    [],
-      sessionId:     tp2Session.sessionId
+      sessionId:     tp2Session.sessionId,
+      // The REVIEW session id ('tp2-…') is not the UPLOAD session id — upload
+      // diagnostics are stored on the server under state.sessionId by
+      // /api/session/register. Sending only the review id made the server's
+      // sessions.get() miss every time, so the Audit tab always rendered
+      // "Files Uploaded: —" and "No upload diagnostics available", which is
+      // why the file-count reconciliation never caught the skip bug.
+      uploadSessionId: state.sessionId
     })
   }).catch(() => {})  // non-blocking
 
@@ -6319,7 +6326,8 @@ async function tp2DownloadFindings() {
         tenantResults: tp2Session.allTenantResults,
         reviewerName:  tp2Session.reviewerName,
         juiceRules:    tp2Session.deepJuiceRules || [],
-        sessionId:     tp2Session.sessionId
+        sessionId:     tp2Session.sessionId,
+        uploadSessionId: state.sessionId   // see note at the other download-excel call
       })
     })
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Download failed')
@@ -7667,7 +7675,8 @@ async function targetDownloadFindings() {
         tenantResults: targetSession.allTenantResults,
         reviewerName:  targetSession.reviewerName,
         juiceRules:    targetSession.juiceRules,
-        sessionId:     targetSession.sessionId
+        sessionId:     targetSession.sessionId,
+        uploadSessionId: state.sessionId   // see note at the TP2 download-excel call
       })
     })
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Download failed')

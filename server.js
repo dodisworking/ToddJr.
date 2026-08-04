@@ -975,6 +975,48 @@ const LAUREN_REVIEW_SEED = [
     createdAt: '2026-07-21T12:00:00.000Z',
     suggestion: "WRAPPER SUBFOLDERS LIKE 'Prior Lease' / 'Abstracts' / 'Archive' — INCLUDE their files as tenant material, do NOT treat as sub-tenants: When walking a tenant folder that contains subfolders labeled 'Prior Lease', 'Abstracts', 'Archive', 'Old', 'Historical', 'Superseded', or similar historical/reference designations, INCLUDE the files inside those subfolders as part of the tenant's file inventory. These subfolders contain reference or historical material relevant to the current lease analysis. Do NOT treat them as separate sub-tenants. Do NOT trigger the '_single_tenant_' upload fallback because a subfolder is present. The main operative lease is typically at the top level of the folder; the subfolder provides historical context (like the immediately-prior expired lease, terminated lease notice, or lease abstract).",
     rationale: "Lawyer test 2026-07-20 Village West: America's Best has a 'Prior Lease' subfolder containing the terminated January 2018 lease + First Amendment + Termination Notice — reference material for the current July 2023 lease. Also matches the Amazon (400 River) 'Abstracts' subfolder pattern that caused upload mis-bucketing earlier. Model should treat these subfolder files as tenant material without triggering wrapper detection."
+  },
+  {
+    id: 'learning-1785801600001-blind23', source: 'lawyer-test-2026-08-03', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-08-04T12:00:00.000Z',
+    suggestion: "A SUBLEASE NAMED BY AN IN-FOLDER CONSENT TO SUBLEASE IS A REQUIRED FINDING WHEN ABSENT: The multi-party-agreement suppression rule (a Consent to Sublease / Consent to Assignment belongs in the third party's file) stops at the CONSENT itself. The underlying Sublease is a TWO-PARTY document (Tenant as sublessor and Subtenant) and the Landlord affirmatively holds a copy, because Consent agreements almost always make Landlord's receipt of a fully-executed Sublease a condition precedent. RULE: whenever a Consent to Sublease or Consent to Assignment is physically present in the folder, the Sublease / Assignment it consents to MUST also be present. If absent, flag MISSING_DOCUMENT. Recover the Sublease date from anywhere it is stated — the Consent's recitals, a later lease's recitals, or an amendment — even when the Consent itself leaves it undated; if no date is recoverable anywhere, still flag it and write the date as 'dated xx/xx/xx'. DO NOT suppress on any of these grounds, all of which are wrong: that the document is 'subtenant-side'; that the Consent states it does not amend the Lease; that there is no profit-sharing obligation; or that the folder's tenant is the sublessor rather than the sublessee. The direction of the sublease is irrelevant. COROLLARY: a Consent that is itself referenced by date but absent is ALSO a valid finding — the suppression rule only means you should not hunt for a multi-party agreement that nothing in the folder references.",
+    rationale: "Lawyer test 2026-08-03: reviewer's own Missing.xlsx requires the Sublease for US Live, for Mayer (Blue Tide) ('Sublease Agreement dated 9/30/22'), and for Amberjack ('Sublease Agreement dated 12/6/24' AND 'Consent to Sublease dated 12/20/24'). In blind loop 1 the Mayer and Amberjack agents caught the Sublease but the US Live agent dropped it citing the multi-party rule — same fact pattern, inconsistent outcome. Production's 8/3 run also caught Amberjack's Consent but missed the Sublease itself."
+  },
+  {
+    id: 'learning-1785801600002-blind24', source: 'lawyer-test-2026-08-03', active: true,
+    checkType: 'LEASE_CURRENCY', confidence: 'HIGH',
+    createdAt: '2026-08-04T12:00:00.000Z',
+    suggestion: "A LONG UNCOVERED GAP IN THE TERM CHAIN IS ITS OWN FINDING, EVEN ALONGSIDE MISSING-DOCUMENT FINDINGS: The anti-double-counting rule (do not add LEASE_CURRENCY when an EXECUTION defect on an unsigned amendment already IS the gap) is narrow and does NOT apply when the chain has a genuine multi-year hole covered by no document of any kind. RULE: walk the chain chronologically; if Document N's term ends on X and the next document's term begins on Y, and the period [X, Y] exceeds 6 months, emit a LEASE_CURRENCY finding worded 'Document extending Term from [X] to [Y minus 1 day]' IN ADDITION TO any MISSING_DOCUMENT findings naming the specific instruments believed to belong in that hole. The reviewer wants both: the missing-instrument findings name what can be identified, and the chain-gap finding states the period that is unaccounted for. Naming a missing First Amendment does NOT discharge the obligation to report the uncovered period.",
+    rationale: "Lawyer test 2026-08-03 Amberjack: the Prime Lease runs to ~4/30/2024 and the Short Term Lease begins 6/1/2026, a 762-day hole. The reviewer's list contains 'Document extending Term from 5/1/24-5/31/26' as a separate confirmed finding sitting alongside the missing First Amendment and the missing Sublease. In blind loop 1 the agent explicitly folded the gap into those two findings and dropped it — a recall miss."
+  },
+  {
+    id: 'learning-1785801600003-blind25', source: 'lawyer-test-2026-08-03', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-08-04T12:00:00.000Z',
+    suggestion: "A REFERENCED DOCUMENT THAT THE REFERENCING TEXT SAYS HAS TERMINATED OR EXPIRED IS NEVER MISSING: Before flagging any referenced instrument as a missing document, read the sentence that references it. Lease and amendment recitals routinely name prior agreements for the express purpose of RETIRING them. If the referencing text states the instrument terminates, expires, is superseded, is of no further force and effect, or has been replaced, then its absence from the folder is intentional and correct — DO NOT flag it. Trigger phrases to check for in the referencing sentence: 'terminates pursuant to its terms', 'shall be of no further force or effect', 'is hereby terminated', 'expired by its terms', 'is superseded and replaced by', 'shall automatically terminate upon'. This is the reference-side companion to the superseded-documents filter: that filter drops superseded documents after the fact, this rule stops the finding from ever being drafted.",
+    rationale: "Blind loop 1 regression 2026-08-04, Bank of Houston: the agent flagged 'Temporary Lease Agreement dated 5/9/2018' as MISSING_DOCUMENT. Rider No. 4 Section E of the lease reads '...the term of that certain Temporary Lease Agreement dated May 9, 2018 between Landlord and Tenant ... terminates pursuant to its terms as of the commencement of Tenant's lease of the Temporary Premises.' The document is named and dated, which makes it look like a textbook referenced-document hit, but the clause exists to extinguish it. This was the only new false positive introduced in loop 1."
+  },
+  {
+    id: 'learning-1785801600004-blind26', source: 'lawyer-test-2026-08-03', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-08-04T12:00:00.000Z',
+    suggestion: "PAST-TENSE TEST — A DOCUMENT THE LEASE MERELY CONTEMPLATES IS NOT MISSING; ONLY DOCUMENTS RECITED AS ALREADY EXISTING ARE. Before drafting any missing-document finding, ask one question about the referencing sentence: does the text say this instrument ALREADY EXISTS, or that it WILL BE CREATED if and when some future event occurs? ALREADY EXISTS = past tense, a specific date, or a definite article ('that certain Sublease dated 12/6/24', 'the First Amendment entered into as of 1/28/21', 'has been executed by Tenant and Subtenant') — these ARE findings. CONTEMPLATED ONLY = future/conditional ('Landlord shall prepare and deliver', 'in the form attached as Exhibit C', 'Tenant shall execute upon request', 'within 10 days after the Commencement Date') — these are NOT findings, because the document may never have been created and its absence is not a defect. A BLANK FORM EXHIBIT BOUND INTO THE LEASE IS THE CLEAREST CASE OF 'CONTEMPLATED ONLY' AND IS NEVER A FINDING UNDER ANY CHECK TYPE. Exhibits titled Commencement Letter, Commencement Date Agreement/Certificate, Delivery Certificate, Estoppel Certificate, SNDA form, Form of Letter of Credit, Form of Guaranty and Notice forms are TEMPLATES — their blankness is their normal state. Do not flag them as MISSING_DOCUMENT ('the completed X is absent'), as EXECUTION ('both By: lines are blank'), as MISSING_EXHIBIT ('the executed Exhibit C is missing'), or as LEASE_CURRENCY ('without the commencement letter the expiration cannot be confirmed'). RELABELING THE SAME OBSERVATION UNDER A DIFFERENT CHECK TYPE DOES NOT MAKE IT A VALID FINDING. The only exhibit whose execution is ever checked is a GUARANTY. Corollary for term math: if a blank Commencement Letter means you can only compute an OUTER BOUND on the expiration date, that is fine — compute the bound and move on. Inability to pin the exact date is not itself a finding.",
+    rationale: "Reviewer rejection FP83-19, Financial Synergies, lawyer test 2026-08-03: 'The only exhibit that should be executed are guaranties. Many exhibits are just forms.' The rule was re-verified in blind loop 2 on 2026-08-04, where it REGRESSED — the agent re-emitted the identical blank Exhibit C commencement letter observation, merely relabeled from LEASE_CURRENCY to MISSING_DOCUMENT, reasoning that Section 3.A obligates Landlord to 'prepare and deliver' the letter. Three other tenants in the same loop (Avison Young, Century Oaks, Mayer) present the identical blank Exhibit C and correctly dropped it, which makes this an inconsistency rather than a systematic failure. Same root cause as FP83-14 (Eagle LNG), where the reviewer wrote 'There isn't any Exhibit F listed or noted anywhere. No exhibits are missing.'"
+  },
+  {
+    id: 'learning-1785801600005-blind27', source: 'lawyer-test-2026-08-03', active: true,
+    checkType: 'MISSING_DOCUMENT', confidence: 'HIGH',
+    createdAt: '2026-08-04T12:00:00.000Z',
+    suggestion: "CORPORATE-LEVEL TRANSACTION DOCUMENTS ARE OUT OF SCOPE, EVEN WHEN A LEASE DOCUMENT NAMES AND DATES ONE. The file being abstracted is a LEASE file. Instruments that govern the ENTITY rather than the TENANCY do not belong in it and are never missing documents. Out of scope regardless of how specifically they are referenced: merger agreements, bank merger agreements, agreements and plans of merger, certificates of merger or conversion, plans of reorganization, stock/asset/equity purchase agreements, membership-interest and partnership-interest transfer agreements, corporate resolutions authorizing a transaction, and financing/loan/credit/security agreements between the tenant and its own lenders. This holds even when (a) the referencing document names the agreement and gives its effective date, and (b) a lease clause requires the tenant to deliver 'all applicable documentation' of a transfer to Landlord — a general delivery covenant is NOT evidence that a specific corporate instrument is part of the landlord's lease file. What IS in scope when a tenant changes identity is the LEASE-SIDE instrument that documents the change: the Assignment and Assumption, Acknowledgement Agreement, Consent to Assignment, or amendment naming the successor. If that document is present in the folder, the succession is fully documented and there is nothing to flag — and note it is also not a SPECIAL_AGREEMENT, it is an ordinary link in the lease chain.",
+    rationale: "Blind loop 2 regression 2026-08-04, Bank of Houston: the agent flagged 'Bank Merger Agreement effective December 1, 2025' as a missing document because Acknowledgement Section 1.6 names and dates it and lease Section 11.G(8) requires Tenant to deliver 'all applicable documentation'. The folder already contained the executed Acknowledgement and Assumption Agreement recording the same Bank of Houston to City Bank merger, so the succession was fully documented. A bank merger agreement is a bank-regulatory corporate instrument, not a lease document. The reviewer had already rejected the adjacent finding on the Acknowledgement itself (FP83-13) with 'This is not considered a separate agreement.'"
+  },
+  {
+    id: 'learning-1785801600006-blind28', source: 'lawyer-test-2026-08-03', active: true,
+    checkType: 'LEASE_CURRENCY', confidence: 'HIGH',
+    createdAt: '2026-08-04T12:00:00.000Z',
+    suggestion: "LEASE CURRENCY IS A RECONCILIATION CHECK, NEVER A FORECAST. Its purpose is to catch a file whose documents fail to support occupancy that is ALREADY ESTABLISHED. It is not an early-warning alarm for leases that happen to expire soon. Before writing any LEASE_CURRENCY finding you must be able to point to an EVIDENCED SHORTFALL — something in the record showing occupancy or obligation extending PAST the chain's end date X. Exactly one of these must hold: (1) X IS ALREADY IN THE PAST — the documents demonstrably lag reality; this is self-proving and needs no other evidence. (2) The finding is an INTERNAL GAP phrased as a range 'from A to B' between two in-folder documents. (3) A RENT ROLL End column is later than X. (4) A DOCUMENT IN THE FOLDER EVIDENCES OCCUPANCY PAST X — a holdover, an option or renewal that was EXERCISED without a documenting amendment, a sublease running longer than the prime term, or a recital that Tenant remains in possession. IF NONE OF THE FOUR HOLDS — X is in the future and nothing contradicts it — OUTPUT NOTHING. The instrument that would extend the term may not have been negotiated yet; a lease simply approaching its end date is a current, complete file, and asking an abstractor to chase a document that does not yet exist is a false positive. PROXIMITY IS NOT EVIDENCE: this is true at 89 days out just as at 890. The former 'within 90 days of today' fallback trigger is WITHDRAWN. Signals confirming the end date is an INTENDED HARD STOP rather than a documentation hole: a termination letter or notice closing the tenancy; a short-term or bridge lease that EXPRESSLY EXCLUDES the extension machinery (Option to Extend, Right of First Refusal, renewal riders); or a recital that such rights 'shall not apply.'",
+    rationale: "Blind loop 3, 2026-08-04. Two independent blind runs over the IDENTICAL Mayer (Blue Tide) folder computed the identical arithmetic — chain end 10/31/2026, 89 days from today — and reached OPPOSITE conclusions, each logging it as its single closest call. The folder's newest instrument is a two-month direct lease signed four months earlier whose term has not yet commenced, with Rider No. 1 (Option to Extend) and Rider No. 2 (ROFR) expressly excluded by its Section 2.2; the file is fully current and no document is missing. The old rule made the answer depend on which side of an arbitrary 90-day cutoff the arithmetic landed. Verified safe against every confirmed LEASE_CURRENCY true positive in the reviewer set — Amberjack 'Document extending Term from 5/1/24-5/31/26' (internal gap, both dates past), LOGIX 'beyond 4/30/22' (past), Century Oaks 'beyond October 31, 2021' (past) — none of which rests on a future expiration date."
   }
 ]
 
@@ -2850,13 +2892,35 @@ app.get('/api/gym/analyze', async (req, res) => {
     // "expiring within 90 days" claim when the math doesn't add up.
     if (Array.isArray(result.findings) && result.findings.length > 0) {
       try {
-        const { dropSelfSuppressedFindings, dropBadDateMathFindings, dropFindingsInFolderManifest } = await import('./lib/claude.js')
+        const {
+          dropSelfSuppressedFindings, dropBadDateMathFindings, dropFindingsInFolderManifest,
+          dropFolderLabelNameMismatch, dropTerminatedReferencedDocs,
+          dropContemplatedFormDocs, dropCorporateTransactionDocs,
+          dropUnevidencedForwardCurrency
+        } = await import('./lib/claude.js')
         const before = result.findings.length
         const droppedBy = []
         const onDrop = (filter) => (f, reason) => droppedBy.push({ filter, reason, missingDoc: (f.missingDocument || '').slice(0, 120), checkType: f.checkType })
         result.findings = dropSelfSuppressedFindings(result.findings, { tenantName: tenant.tenantName, source: useTP3 ? 'tp3' : 'tp2', onDrop: onDrop('self_suppression') })
         result.findings = dropBadDateMathFindings(result.findings,    { tenantName: tenant.tenantName, onDrop: onDrop('bad_date_math') })
         result.findings = dropFindingsInFolderManifest(result.findings, tenant.files, { tenantName: tenant.tenantName, onDrop: onDrop('folder_manifest') })
+        // Lawyer test 2026-08-03 regressions: FP83-16 (folder label vs entity
+        // name, a prompt rule the model ignored) and the Bank of Houston
+        // terminated-document FP surfaced in blind loop 1.
+        result.findings = dropFolderLabelNameMismatch(result.findings, { tenantName: tenant.tenantName, folderName: tenant.folderName, onDrop: onDrop('folder_label_name') })
+        result.findings = dropTerminatedReferencedDocs(result.findings, { tenantName: tenant.tenantName, onDrop: onDrop('terminated_reference') })
+        // Blind loop 2 regressions: FP83-19 (blank Exhibit C commencement letter
+        // re-emerged relabeled as MISSING_DOCUMENT) and the Bank of Houston
+        // "Bank Merger Agreement" corporate-document FP.
+        result.findings = dropContemplatedFormDocs(result.findings,    { tenantName: tenant.tenantName, onDrop: onDrop('contemplated_form_doc') })
+        result.findings = dropCorporateTransactionDocs(result.findings, { tenantName: tenant.tenantName, onDrop: onDrop('corporate_transaction_doc') })
+        // Blind loop 3: LEASE_CURRENCY is a reconciliation check, not a forecast.
+        // No rent roll reaches this path (that lives in the rr-* modules), so the
+        // model falls back to "chain end within 90 days of today" — which fired on
+        // Mayer at 89 days for a file whose newest lease was signed four months
+        // ago and has not yet commenced. Two blind runs on identical facts split
+        // on it. Drops forward-looking findings with no evidenced shortfall.
+        result.findings = dropUnevidencedForwardCurrency(result.findings, { tenantName: tenant.tenantName, onDrop: onDrop('forward_looking_currency') })
         if (result.findings.length !== before) {
           console.log(`[gym/analyze] ${tenant.tenantName}: pre-dedup filters ${before} → ${result.findings.length}`)
         }
@@ -3222,14 +3286,28 @@ app.post('/api/target/straight-excel', express.json({ limit: '10mb' }), async (r
 // POST /api/target/download-excel — generate, persist, and stream session Excel
 app.post('/api/target/download-excel', express.json({ limit: '10mb' }), async (req, res) => {
   try {
-    const { tenantResults = [], reviewerName = 'Unknown', juiceRules = [], sessionId } = req.body
+    const { tenantResults = [], reviewerName = 'Unknown', juiceRules = [], sessionId, uploadSessionId } = req.body
     const { generateTargetPracticeSessionExcel } = await import('./lib/reporter.js')
 
     // Pull upload diagnostics off the session if we have one — surface any
     // duplicate-tenant merges, empty-tenant drops, or file-count gaps in the
     // Excel so the reviewer sees them without digging through Railway logs.
-    const sessionRec = sessionId ? sessions.get(sessionId) : null
+    //
+    // IMPORTANT: `sessionId` here is the REVIEW session ('tp2-…' / 'target-…'),
+    // which is minted client-side and is NOT the key that
+    // /api/session/register stored the diagnostics under. That key is the
+    // UPLOAD session id. Prefer uploadSessionId; fall back to sessionId for
+    // older clients that don't send it.
+    // Regression this guards: lawyer test 2026-08-03 — every audit report read
+    // "Files Uploaded: —" / "No upload diagnostics available", so the
+    // file-count reconciliation that exists specifically to catch silently
+    // skipped tenants had never actually run in production.
+    const sessionRec = (uploadSessionId ? sessions.get(uploadSessionId) : null)
+                    || (sessionId       ? sessions.get(sessionId)       : null)
     const uploadDiagnostics = sessionRec?.uploadDiagnostics || null
+    if (!uploadDiagnostics) {
+      console.warn(`[download-excel] no upload diagnostics found (uploadSessionId=${uploadSessionId || 'none'} sessionId=${sessionId || 'none'}) — Audit tab will show the "older session" placeholder`)
+    }
 
     // Generate to temp first
     const tmpPath = path.join(UPLOADS_DIR, `tp-session-${Date.now()}.xlsx`)
